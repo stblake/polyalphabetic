@@ -1,5 +1,5 @@
 //
-//	Quagmire III cipher solver
+//	Quagmire III cipher solver - stochastic shotgun-restarted hill climber 
 //
 
 // Written by Sam Blake, started 14 July 2023
@@ -20,16 +20,18 @@
 		-maxkeywordlen /max length of the keyword/ \
 		-maxcyclewordlen /max length of the cycleword/ \
 		-nsigmathreshold /n sigma threshold for candidate keyword length/ \
+		-nlocal /number of local searches to find an improved score/ \
+		-nhillclimbs /number of hillclimbing steps/ \
 		-nrestarts /number of restarts/ \
 		-verbose
 
 
 	Notes: 
 
-	/ciphertext file/ -- may contain multiple ciphers, with one per line.
+		/ciphertext file/ -- may contain multiple ciphers, with one per line.
 
-	/crib file/ -- uses "_" for unknown chars. Just a single line of the same length
-	as the ciphers contained in the cipher file. For K4 it should contain
+		/crib file/ -- uses "_" for unknown chars. Just a single line of the same length
+			as the ciphers contained in the cipher file. For Kryptos K4 cipher it should contain
 
 		_____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
 	
@@ -38,14 +40,15 @@
 #define ALPHABET_SIZE 26
 
 #define MAX_CIPHER_LENGTH 1000
-#define MAX_FILENAME_LEN 64
-
+#define MAX_FILENAME_LEN 100
+#define MAX_CYCLEWORD_LEN 30
 
 
 int main(int argc, char **argv) {
 
-	int i, cipher_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, n_cycleword_lengths, 
-		n_cribs, cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
+	int i, cipher_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+		n_local = 1, n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, 
+		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
 		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH]; 
 	double n_sigma_threshold = 1., *ngram_table;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
@@ -80,6 +83,12 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-nsigmathreshold") == 0) {
 			n_sigma_threshold = atof(argv[++i]);
 			printf("\n-nsigmathreshold %.2f", n_sigma_threshold);
+		} else if (strcmp(argv[i], "-nlocal") == 0) {
+			n_local = atoi(argv[++i]);
+			printf("\n-nlocal %d", n_local);	
+		} else if (strcmp(argv[i], "-nhillclimbs") == 0) {
+			n_hill_climbs = atoi(argv[++i]);
+			printf("\n-nhillclimbs %d", n_hill_climbs);			
 		} else if (strcmp(argv[i], "-nrestarts") == 0) {
 			n_restarts = atoi(argv[++i]);
 			printf("\n-nrestarts %d", n_restarts);
@@ -202,11 +211,36 @@ int main(int argc, char **argv) {
 			cipher_len, 
 			crib_indices, 
 			crib_positions, 
-			n_cribs,
+			n_cribs, 
+			cycleword_lengths[i],
+			n_local, 
+			n_hill_climbs, 
 			n_restarts, 
 			verbose);
 	}
 
+	//debugging
+
+	//	void quagmire3_decrypt(char decrypted[], int cipher_indices[], int cipher_len, 
+	//	int keyword_indices[], int cycleword_indices[], int cycleword_len)
+
+	char decrypted[MAX_CIPHER_LENGTH];
+	char example_keyword[] = "KRYPTOSABCDEFGHIJLMNQUVWXZ";
+	char example_cycleword[] = "KOMITET";
+	int example_keyword_indices[MAX_CIPHER_LENGTH];
+	int example_cycleword_indices[MAX_CIPHER_LENGTH];
+
+	ord(example_keyword, example_keyword_indices);
+	ord(example_cycleword, example_cycleword_indices);
+
+	vec_print(example_keyword_indices, strlen(example_keyword));
+	vec_print(example_cycleword_indices, strlen(example_cycleword));
+
+	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
+		example_keyword_indices, 
+		example_cycleword_indices, 7);
+
+	printf("\n%s\n", decrypted);
 
 #if 0
 	// Read crib file. 
@@ -251,15 +285,154 @@ int main(int argc, char **argv) {
 
 
 
-// 'shotgun' hill climber for Quagmire 3 cipher
+// stochastic shotgun restarted hill climber for Quagmire 3 cipher
 
 void quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
-	int n_restarts, bool verbose) {
+	int cycleword_len, 
+	int n_local, int n_hill_climbs, int n_restarts, bool verbose) {
+
+	int i, j, n, best_keyword_state[ALPHABET_SIZE], cycleword_indices[MAX_CYCLEWORD_LEN],
+		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE];
+	double best_score = 0., local_score, current_score;
+	char decrypted[MAX_CIPHER_LENGTH];
+
+
+	for (n = 0; n < n_restarts; n++) {
+
+		// Initialise random solution.
+		random_keyword(current_keyword_state, ALPHABET_SIZE);
+		best_score = state_score(cipher_indices, cipher_len, 
+			crib_indices, crib_positions, n_cribs, 
+			current_keyword_state, ALPHABET_SIZE, decrypted);
+
+		for (i = 0; i < n_hill_climbs; i++) {
+
+			// Local search for improved state. 
+			for (j = 0; j < n_local; j++) {
+
+				// Pertubate solution.
+				vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
+				pertubate_keyword(local_keyword_state, ALPHABET_SIZE);
+
+				// Compute score. 
+				local_score = state_score(cipher_indices, cipher_len, 
+					crib_indices, crib_positions, n_cribs, 
+					local_keyword_state, ALPHABET_SIZE, decrypted);
+
+				if (local_score > current_score) {
+					current_score = local_score;
+					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
+					break ;
+				}
+			}
+
+			if (current_score > best_score) {
+				best_score = current_score;
+				vec_copy(current_keyword_state, best_keyword_state, ALPHABET_SIZE);
+				if (verbose) {
+					printf("\n\t%d\t%d\t%.2f\n", n, i, best_score);
+					print_text(best_keyword_state, ALPHABET_SIZE);
+					printf("\n");
+
+					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
+						best_keyword_state, cycleword_indices, cycleword_len);
+					printf("%s\n", decrypted);
+				}
+			}
+
+		}
+
+	}
+
+	return ;
+}
 
 
 
+// Score candidate cipher solution. 
+
+double state_score(int cipher_indices[], int cipher_len, 
+			int crib_indices[], int crib_positions[], int n_cribs, 
+			int keyword_state[], int len, char decrypted[]) {
+
+	double score = 0.; 
+
+	// Decrypt cipher using the candidate keyword and cycleword. 
+
+
+	// score = (w1*(mean column IOC) + w2*(number of crib matches))/(w1 + w2)
+
+	return score;
+}
+
+
+// Given a ciphertext, keyword and cycleword (all in index form), compute the 
+// Quagmire 3 decryption.  
+
+void quagmire3_decrypt(char decrypted[], int cipher_indices[], int cipher_len, 
+	int keyword_indices[], int cycleword_indices[], int cycleword_len) {
+	
+	int i, j, posn_keyword, posn_cycleword, indx;
+
+	for (i = 0; i < cipher_len; i++) {
+		// Find position of ciphertext char in keyword. 
+		for (j = 0; j < ALPHABET_SIZE; j++) {
+			if (cipher_indices[i] == keyword_indices[j]) {
+				posn_keyword = j;
+				break ;
+			}
+		}
+		// Find the position of cycleword char in keyword. 
+		for (j = 0; j < ALPHABET_SIZE; j++) {
+			if (cycleword_indices[i%cycleword_len] == keyword_indices[j]) {
+				posn_cycleword = j; 
+				break ;
+			}
+		}
+
+		indx = posn_keyword - posn_cycleword;
+		indx = indx%ALPHABET_SIZE;
+		if (indx < 0) indx += ALPHABET_SIZE;
+		decrypted[i] = keyword_indices[indx] + 'A';
+	}
+
+	return ;
+}
+
+
+
+// This is a naive keyword pertubation routine. TODO: improve me! 
+
+void pertubate_keyword(int state[], int len) {
+
+	int i, j, temp;
+
+	i = rand_int(0, len);
+	j = rand_int(0, len);
+
+	temp = state[i];
+	state[i] = state[j];
+	state[j] = temp;
+	return ;
+}
+
+
+// This is a naive random keyword initialisation routine. TODO: improve me!
+
+void random_keyword(int keyword[], int len) {
+	for (int i = 0; i < len; i++) {
+		keyword[i] = i;
+	}
+	shuffle(keyword, len);
+	return ;
+}
+
+
+
+int rand_int(int min, int max) {
+   return min + rand() % (max - min); // result in [min, max)
 }
 
 
@@ -400,6 +573,13 @@ double vec_stddev(double vec[], int len) {
 }
 
 
+void vec_print(int vec[], int len) {
+	for (int i = 0; i < len; i++) {
+		printf("%d ", vec[i]);
+	}
+	printf("\n");
+}
+
 
 // Print plaintext from indices. 
 
@@ -477,4 +657,26 @@ bool file_exists(const char *filename) {
 
 
 
+// Shuffle array -- ref: https://stackoverflow.com/questions/6127503/shuffle-array-in-c
+
+void shuffle(int *array, size_t n) 
+{
+    if (n > 1) 
+    {
+        size_t i;
+        for (i = 0; i < n - 1; i++) 
+        {
+          size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          int t = array[j];
+          array[j] = array[i];
+          array[i] = t;
+        }
+    }
+}
+
+
+
+void vec_copy(int src[], int dest[], int len) {
+	for (int i = 0; i < len; i++) dest[i] = src[i]; 
+}
 

@@ -9,13 +9,33 @@
 #include <time.h>
 
 
+
+void quagmire3_shotgun_hill_climber(
+	int cipher_indices[], int cipher_len, 
+	int crib_indices[], int crib_positions[], int n_cribs, int cycleword_len, 
+	int n_local, int n_hill_climbs, int n_restarts, bool verbose);
+double state_score(int cipher_indices[], int cipher_len, 
+			int crib_indices[], int crib_positions[], int n_cribs, 
+			int keyword_state[], int len, char decrypted[]);
+
+void quagmire3_decrypt(char decrypted[], int cipher_indices[], int cipher_len, 
+	int keyword_indices[], int cycleword_indices[], int cycleword_len);
+
+void pertubate_keyword(int state[], int len);
+void random_keyword(int keyword[], int len);
+int rand_int(int min, int max);
+
+
 double mean_ioc(int text[], int len, int len_cycleword, int *caesar_column);
 void estimate_cycleword_lengths(int text[], int len, int max_cycleword_len, double n_sigma_threshold,
 	int *n_cycleword_lengths, int cycleword_lengths[], bool verbose);
 double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
+void vec_print(int vec[], int len);
 void print_text(int indices[], int len);
 void ord(char *text, int indices[]);
 float index_of_coincidence(int plaintext[], int len);
 void tally(int plaintext[], int len, int frequencies[], int n_frequencies);
 bool file_exists(const char * filename);
+void shuffle(int *array, size_t n);
+void vec_copy(int src[], int dest[], int len);
