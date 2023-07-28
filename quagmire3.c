@@ -37,22 +37,16 @@
 	
 */
 
-#define ALPHABET_SIZE 26
-
-#define MAX_CIPHER_LENGTH 1000
-#define MAX_FILENAME_LEN 100
-#define MAX_KEYWORD_LEN 30
-#define MAX_CYCLEWORD_LEN 30
-#define MAX_NGRAM_SIZE 8
-
-
 int main(int argc, char **argv) {
 
 	int i, j, cipher_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
-		n_local = 1, n_cycleword_lengths, n_hill_climbs = 1000, n_cribs,
+		n_local = 1, n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length, best_keyword_length,
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
-		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH]; 
-	double n_sigma_threshold = 1.;
+		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH],
+		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
+		keyword[ALPHABET_SIZE], cycleword[ALPHABET_SIZE],
+		best_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
+	double n_sigma_threshold = 1., score, best_score;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
@@ -220,6 +214,8 @@ int main(int argc, char **argv) {
 
 	// For each cycleword length, run the 'shotgun' hill climber. 
 
+	best_score = 0.;
+
 	for (i = 0; i < n_cycleword_lengths; i++) {
 		for (j = 1; j < max_keyword_len; j++) {
 
@@ -229,7 +225,7 @@ int main(int argc, char **argv) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
 			}
 
-			quagmire3_shotgun_hill_climber(
+			score = quagmire3_shotgun_hill_climber(
 				cipher_indices, 
 				cipher_len, 
 				crib_indices, 
@@ -242,10 +238,30 @@ int main(int argc, char **argv) {
 				n_restarts, 
 				ngram_data, 
 				ngram_size,
+				decrypted, 
+				keyword,
+				cycleword, 
 				verbose);
+
+			if (score > best_score) {
+				best_score = score;
+				best_cycleword_length = cycleword_lengths[i];
+				best_keyword_length = j;
+				vec_copy(decrypted, best_decrypted, cipher_len);
+				vec_copy(keyword, best_keyword, ALPHABET_SIZE);
+				vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
+			}
 		}
 	}
 
+	printf("\n\n%.2f\n", best_score);
+	print_text(cipher_indices, cipher_len);
+	printf("\n");
+	print_text(best_keyword, ALPHABET_SIZE);
+	printf("\n");
+	print_text(best_cycleword, best_cycleword_length);
+	printf("\n");
+	print_text(best_decrypted, cipher_len);
 	printf("\n\n");
 
 	//debugging
@@ -328,16 +344,18 @@ int main(int argc, char **argv) {
 
 // stochastic shotgun restarted hill climber for Quagmire 3 cipher
 
-void quagmire3_shotgun_hill_climber(
+double quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
 	int cycleword_len, int keyword_len, 
 	int n_local, int n_hill_climbs, int n_restarts,
-	float *ngram_data, int ngram_size, bool verbose) {
+	float *ngram_data, int ngram_size,
+	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
+	bool verbose) {
 
-	int i, j, n, n_iterations, best_keyword_state[ALPHABET_SIZE],
-		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE],
-		cycleword_state[MAX_CYCLEWORD_LEN], decrypted[MAX_CIPHER_LENGTH];
+	int i, j, n, n_iterations, 
+		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE], best_keyword_state[ALPHABET_SIZE],
+		cycleword_state[MAX_CYCLEWORD_LEN]; //, best_cycleword_state[MAX_CYCLEWORD_LEN];
 	double start_time, elapsed, n_iter_per_sec, best_score = 0., local_score, current_score;
 
 	n_iterations = 0;
@@ -348,8 +366,8 @@ void quagmire3_shotgun_hill_climber(
 		cycleword_state[i] = 0;
 	}
 
-char example_cycleword[] = "KOMITET";
-ord(example_cycleword, cycleword_state);
+	char example_cycleword[] = "KOMITET"; // temp hack - fixme
+	ord(example_cycleword, cycleword_state);
 
 
 	for (n = 0; n < n_restarts; n++) {
@@ -402,8 +420,9 @@ ord(example_cycleword, cycleword_state);
 					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
 					n_iter_per_sec = ((double) n_iterations)/elapsed;
 
-					printf("\n%.0fK\t%d\t%d\t%.6f\n", 1.e-3*n_iter_per_sec, n, i, best_score);
+					printf("\n%.0fK\t%d\t%d\t%.2f\n", 1.e-3*n_iter_per_sec, n, i, best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
+					// display cycleword state
 					printf("\n");
 
 					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -416,7 +435,13 @@ ord(example_cycleword, cycleword_state);
 
 	}
 
-	return ;
+	vec_copy(best_keyword_state, keyword, ALPHABET_SIZE);
+	vec_copy(cycleword_state, cycleword, ALPHABET_SIZE); // temp - fixme
+
+	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
+						best_keyword_state, cycleword_state, cycleword_len);
+
+	return best_score;
 }
 
 
@@ -565,17 +590,12 @@ void pertubate_keyword(int state[], int len, int keyword_len) {
 
 
 
-// This is a naive random keyword initialisation routine. TODO: improve me!
+// Random keyword initialisation routine. 
 
 void random_keyword(int keyword[], int len, int keyword_len) {
 
 	int i, j, candidate, indx, n_chars;
 	bool distinct, present;
-
-	// Initialise. 
-	for (i = 0; i < len; i++) {
-		keyword[i] = -1;
-	}
 
 	// Get keyword_len distinct letters in [0 - ALPHABET_SIZE). 
 
@@ -681,8 +701,9 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
 
 
 // Returns the index of an n-gram. For example, the index of 'TH' would be 
-// 19 + 7*26 = 201. 
-
+// 19 + 7*26 = 201, as 'T' and 'H' and the 19th and 7th letters of the alphabet 
+// respectively. 
+ 
 int ngram_index_str(char *ngram, int ngram_size) {
 
 	int c, index = 0;
@@ -704,12 +725,6 @@ int ngram_index_int(int *ngram, int ngram_size) {
 	}
 
 	return index;
-}
-
-
-
-int rand_int(int min, int max) {
-   return min + rand() % (max - min); // result in [min, max)
 }
 
 
@@ -971,3 +986,12 @@ int int_pow(int base, int exp)
     }
     return result;
 }
+
+
+
+// Returns a random int in [min, max). 
+
+int rand_int(int min, int max) {
+   return min + rand() % (max - min); // result in [min, max)
+}
+

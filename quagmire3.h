@@ -9,13 +9,23 @@
 #include <time.h>
 
 
+#define ALPHABET_SIZE 26
+#define MAX_CIPHER_LENGTH 1000
+#define MAX_FILENAME_LEN 100
+#define MAX_KEYWORD_LEN 30
+#define MAX_CYCLEWORD_LEN 30
+#define MAX_NGRAM_SIZE 8
 
-void quagmire3_shotgun_hill_climber(
+
+
+double quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
 	int cycleword_len, int keyword_len,
 	int n_local, int n_hill_climbs, int n_restarts,
-	float *ngram_data, int ngram_size, bool verbose);
+	float *ngram_data, int ngram_size, 
+	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
+	bool verbose);
 
 void quagmire3_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int keyword_indices[], int cycleword_indices[], int cycleword_len);
