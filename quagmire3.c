@@ -335,10 +335,13 @@ void quagmire3_shotgun_hill_climber(
 	int n_local, int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size, bool verbose) {
 
-	int i, j, n, best_keyword_state[ALPHABET_SIZE],
+	int i, j, n, n_iterations, best_keyword_state[ALPHABET_SIZE],
 		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE],
 		cycleword_state[MAX_CYCLEWORD_LEN], decrypted[MAX_CIPHER_LENGTH];
-	double best_score = 0., local_score, current_score;
+	double start_time, elapsed, n_iter_per_sec, best_score = 0., local_score, current_score;
+
+	n_iterations = 0;
+	start_time = clock();
 
 	// Initialise cycleword state. 
 	for (i = 0; i < MAX_CYCLEWORD_LEN; i++) {
@@ -369,6 +372,7 @@ ord(example_cycleword, cycleword_state);
 				pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
 
 				// Compute score. 
+				n_iterations += 1;
 				local_score = state_score(cipher_indices, cipher_len, 
 					crib_indices, crib_positions, n_cribs, 
 					local_keyword_state, cycleword_state, cycleword_len,
@@ -390,14 +394,15 @@ ord(example_cycleword, cycleword_state);
 				}
 			}
 
-			// current_score = local_score;
-			// vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
-
 			if (current_score > best_score) {
 				best_score = current_score;
 				vec_copy(current_keyword_state, best_keyword_state, ALPHABET_SIZE);
 				if (verbose) {
-					printf("\n\t%d\t%d\t%.6f\n", n, i, best_score);
+
+					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
+					n_iter_per_sec = ((double) n_iterations)/elapsed;
+
+					printf("\n%.0fK\t%d\t%d\t%.6f\n", 1.e-3*n_iter_per_sec, n, i, best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
 					printf("\n");
 
