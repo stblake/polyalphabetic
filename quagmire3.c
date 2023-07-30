@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
 			verbose = true;
 			printf("\n-verbose ");
 		} else {
-			printf("\n\nERROR: unknown arg '%s'", argv[i]);
+			printf("\n\nERROR: unknown arg '%s'\n\n", argv[i]);
 			return 0;
 		}
 	}
@@ -225,7 +225,7 @@ int main(int argc, char **argv) {
 	for (i = 0; i < n_cycleword_lengths; i++) {
 		for (j = 1; j < max_keyword_len; j++) {
 
-			if (cycleword_lengths[i] != 10 || j != 7) continue;
+			if (cycleword_lengths[i] != 7 || j != 7) continue;
 
 			if (verbose) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
 
 
 
-// stochastic shotgun restarted hill climber for Quagmire 3 cipher
+// slippery stochastic shotgun restarted hill climber for Quagmire 3 cipher
 
 double quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
@@ -359,7 +359,7 @@ double quagmire3_shotgun_hill_climber(
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	bool verbose) {
 
-	int i, j, n, n_iterations, n_backtracks,
+	int i, j, n, n_iterations, n_backtracks, n_explore, 
 		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE], 
 		best_keyword_state[ALPHABET_SIZE],
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
@@ -368,6 +368,7 @@ double quagmire3_shotgun_hill_climber(
 
 	n_iterations = 0;
 	n_backtracks = 0;
+	n_explore = 0;
 	start_time = clock();
 
 	// TODO: remove local search (does nothing in this context.)
@@ -376,15 +377,13 @@ double quagmire3_shotgun_hill_climber(
 
 	for (n = 0; n < n_restarts; n++) {
 
-		if (best_score > 0. && frand() < 0.1) {
-			// Backtrack. 
-			printf("\nbacktracking...\n");
+		if (best_score > 0. && frand() < 0.05) {
 			n_backtracks += 1;
 			current_score = best_score;
 			vec_copy(best_keyword_state, current_keyword_state, ALPHABET_SIZE);
-			vec_copy(best_cycleword_state, current_cycleword_state, keyword_len);
+			vec_copy(best_cycleword_state, current_cycleword_state, cycleword_len);
 		} else {
-			// Initialise random solution.
+			// Initialise random state.
 			random_keyword(current_keyword_state, ALPHABET_SIZE, keyword_len);
 			random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 
@@ -399,11 +398,11 @@ double quagmire3_shotgun_hill_climber(
 			// Local search for improved state. 
 			for (j = 0; j < n_local; j++) {
 
-				// Pertubate solution.
+				// Pertubate.
 				vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
 				vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
-				if (frand() < 0.9) {
+				if (frand() < 0.01) {
 					pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
 				} else {
 					pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
@@ -432,6 +431,13 @@ double quagmire3_shotgun_hill_climber(
 					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
 					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
 					break ;
+				} else if (frand() < 0.01) {
+					// printf("exploring...\n");
+					n_explore += 1;
+					current_score = local_score;
+					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
+					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
+					break ;
 				}
 			}
 
@@ -444,7 +450,13 @@ double quagmire3_shotgun_hill_climber(
 					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
 					n_iter_per_sec = ((double) n_iterations)/elapsed;
 
-					printf("\n%.0fK\t%d\t%d\t%d\t%.2f\n", 1.e-3*n_iter_per_sec, n, n_backtracks, i, best_score);
+					printf("\n%.2f\t[sec]\n", elapsed);
+					printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+					printf("%d\t[backtracks]\n", n_backtracks);
+					printf("%d\t[slips]\n", n_explore);
+					printf("%d\t[restarts]\n", n);
+					printf("%d\t[iterations]\n", i);
+					printf("%.2f\t[merit score]\n", best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
 					printf("\n");
 					print_text(best_cycleword_state, cycleword_len);
@@ -453,6 +465,8 @@ double quagmire3_shotgun_hill_climber(
 					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
 						best_keyword_state, best_cycleword_state, cycleword_len);
 					print_text(decrypted, cipher_len);
+					printf("\n");
+					fflush(stdout);
 				}
 			}
 
@@ -479,27 +493,48 @@ double state_score(int cipher_indices[], int cipher_len,
 			int decrypted[], 
 			float *ngram_data, int ngram_size) {
 
-	double score = 0., decrypted_ngram_score, decrypted_crib_score, weight_ngram, weight_crib; 
+	double score = 0., decrypted_ngram_score, decrypted_crib_score, 
+	weight_ngram, weight_crib; 
 
 	// TODO: these should be command line args. 
 	weight_ngram = 1.;
-	weight_crib  = 0.;
+	weight_crib  = 3.;
 
 	// Decrypt cipher using the candidate keyword and cycleword. 
 	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
 		keyword_state, cycleword_state, cycleword_len);
 
-	// score = (weight_1*(ngram score) + weight_2*(number of crib matches))/(weight_1 + weight_2)
+	// n-gram score. 
 
 	decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
 
-	// decrypted_crib_score = crib_score();
-	decrypted_crib_score = 0.;
+	// crib score. 
+
+	decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
 
 	score = weight_ngram*decrypted_ngram_score + weight_crib*decrypted_crib_score;
 	score /= weight_ngram + weight_crib;
 
 	return score;
+}
+
+
+
+// Score for known plaintext. (Naive - not using symmetry of the vigenere encryption.)
+
+double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs) {
+
+	if (n_cribs == 0) return 0.;
+
+	int n_matches = 0;
+
+	for (int i = 0; i < n_cribs; i++) {
+		if (text[crib_positions[i]] == crib_indices[i]) {
+			n_matches += 1;
+		}
+	}
+
+	return ((double) n_matches)/((double) n_cribs);
 }
 
 
@@ -569,6 +604,14 @@ void pertubate_cycleword(int state[], int max, int len) {
 	int i; 
 	i = rand_int(0, len);
 	state[i] = rand_int(0, max);
+
+#if 0
+	if (frand() < 0.5 && state[i] < ALPHABET_SIZE - 1) {
+		state[i] += 1;
+	} else if (state[i] > 0) {
+		state[i] -= 1;
+	}
+#endif
 }
 
 
