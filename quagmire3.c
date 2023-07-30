@@ -140,42 +140,48 @@ int main(int argc, char **argv) {
 
 	// Read crib. 
 
-	fp = fopen(crib_file, "r");
-	fscanf(fp, "%s", cribtext);
-	fclose(fp);
+	if (file_exists(crib_file)) {
 
-	if (verbose) {
-		printf("cribtext = \n\'%s\'\n\n", cribtext);
-	}
+		fp = fopen(crib_file, "r");
+		fscanf(fp, "%s", cribtext);
+		fclose(fp);
 
-	// Check ciphertext and cribtext are of the same length. 
+		if (verbose) {
+			printf("cribtext = \n\'%s\'\n\n", cribtext);
+		}
 
-	if (cipher_len != strlen(cribtext)) {
-		printf("\n\nERROR: strlen(ciphertext) = %d, strlen(cribtext) = %lu.\n\n", 
-			cipher_len, strlen(cribtext));
-		return 0; 
-	}
+		// Check ciphertext and cribtext are of the same length. 
 
-	// Extract crib positions and corresponding plaintext. 
+		if (cipher_len != strlen(cribtext)) {
+			printf("\n\nERROR: strlen(ciphertext) = %d, strlen(cribtext) = %lu.\n\n", 
+				cipher_len, strlen(cribtext));
+			return 0; 
+		}
 
-	if (verbose) {
-		printf("\ncrib indices = \n\n");
-	}
+		// Extract crib positions and corresponding plaintext. 
 
-	n_cribs = 0;
-	for (i = 0; i < cipher_len; i++) {
-		if (cribtext[i] != '_') {
-			crib_positions[n_cribs] = i;
-			crib_indices[n_cribs] = cribtext[i] - 'A';
-			n_cribs++;
-			if (verbose) {
-				printf("%d, %c, %d\n", i, cribtext[i], cribtext[i] - 'A');
+		if (verbose) {
+			printf("\ncrib indices = \n\n");
+		}
+
+		n_cribs = 0;
+		for (i = 0; i < cipher_len; i++) {
+			if (cribtext[i] != '_') {
+				crib_positions[n_cribs] = i;
+				crib_indices[n_cribs] = cribtext[i] - 'A';
+				n_cribs++;
+				if (verbose) {
+					printf("%d, %c, %d\n", i, cribtext[i], cribtext[i] - 'A');
+				}
 			}
 		}
-	}
 
-	if (verbose) {
-		printf("\n");
+		if (verbose) {
+			printf("\n");
+		}
+	} else {
+		// No cribs present. 
+		n_cribs = 0;
 	}
 
 #if 0
@@ -219,7 +225,7 @@ int main(int argc, char **argv) {
 	for (i = 0; i < n_cycleword_lengths; i++) {
 		for (j = 1; j < max_keyword_len; j++) {
 
-			if (cycleword_lengths[i] != 7 || j != 7) continue;
+			if (cycleword_lengths[i] != 10 || j != 7) continue;
 
 			if (verbose) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
@@ -353,32 +359,40 @@ double quagmire3_shotgun_hill_climber(
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	bool verbose) {
 
-	int i, j, n, n_iterations, 
-		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE], best_keyword_state[ALPHABET_SIZE],
-		cycleword_state[MAX_CYCLEWORD_LEN]; //, best_cycleword_state[MAX_CYCLEWORD_LEN];
-	double start_time, elapsed, n_iter_per_sec, best_score = 0., local_score, current_score;
+	int i, j, n, n_iterations, n_backtracks,
+		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE], 
+		best_keyword_state[ALPHABET_SIZE],
+		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
+		best_cycleword_state[MAX_CYCLEWORD_LEN];
+	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
 
 	n_iterations = 0;
+	n_backtracks = 0;
 	start_time = clock();
 
-	// Initialise cycleword state. 
-	for (i = 0; i < MAX_CYCLEWORD_LEN; i++) {
-		cycleword_state[i] = 0;
-	}
+	// TODO: remove local search (does nothing in this context.)
 
-	char example_cycleword[] = "KOMITET"; // temp hack - fixme
-	ord(example_cycleword, cycleword_state);
-
+	best_score = 0.;
 
 	for (n = 0; n < n_restarts; n++) {
 
-		// Initialise random solution.
-		random_keyword(current_keyword_state, ALPHABET_SIZE, keyword_len);
+		if (best_score > 0. && frand() < 0.1) {
+			// Backtrack. 
+			printf("\nbacktracking...\n");
+			n_backtracks += 1;
+			current_score = best_score;
+			vec_copy(best_keyword_state, current_keyword_state, ALPHABET_SIZE);
+			vec_copy(best_cycleword_state, current_cycleword_state, keyword_len);
+		} else {
+			// Initialise random solution.
+			random_keyword(current_keyword_state, ALPHABET_SIZE, keyword_len);
+			random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 
-		current_score = state_score(cipher_indices, cipher_len, 
-			crib_indices, crib_positions, n_cribs, 
-			current_keyword_state, cycleword_state, cycleword_len,
-			decrypted, ngram_data, ngram_size);
+			current_score = state_score(cipher_indices, cipher_len, 
+				crib_indices, crib_positions, n_cribs, 
+				current_keyword_state, current_cycleword_state, cycleword_len,
+				decrypted, ngram_data, ngram_size);
+		}
 
 		for (i = 0; i < n_hill_climbs; i++) {
 
@@ -387,13 +401,19 @@ double quagmire3_shotgun_hill_climber(
 
 				// Pertubate solution.
 				vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
-				pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
+				vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
+
+				if (frand() < 0.9) {
+					pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
+				} else {
+					pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+				}
 
 				// Compute score. 
 				n_iterations += 1;
 				local_score = state_score(cipher_indices, cipher_len, 
 					crib_indices, crib_positions, n_cribs, 
-					local_keyword_state, cycleword_state, cycleword_len,
+					local_keyword_state, local_cycleword_state, cycleword_len,
 					decrypted, ngram_data, ngram_size);
 
 #if 0
@@ -402,12 +422,15 @@ double quagmire3_shotgun_hill_climber(
 				printf("\n");
 				print_text(local_keyword_state, ALPHABET_SIZE);
 				printf("\n");
+				print_text(local_cycleword_state, cycleword_len);
+				printf("\n");
 #endif
 
 				if (local_score > current_score) {
 					// printf("improvement\n");
 					current_score = local_score;
 					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
+					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
 					break ;
 				}
 			}
@@ -415,18 +438,20 @@ double quagmire3_shotgun_hill_climber(
 			if (current_score > best_score) {
 				best_score = current_score;
 				vec_copy(current_keyword_state, best_keyword_state, ALPHABET_SIZE);
+				vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
 				if (verbose) {
 
 					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
 					n_iter_per_sec = ((double) n_iterations)/elapsed;
 
-					printf("\n%.0fK\t%d\t%d\t%.2f\n", 1.e-3*n_iter_per_sec, n, i, best_score);
+					printf("\n%.0fK\t%d\t%d\t%d\t%.2f\n", 1.e-3*n_iter_per_sec, n, n_backtracks, i, best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
-					// display cycleword state
+					printf("\n");
+					print_text(best_cycleword_state, cycleword_len);
 					printf("\n");
 
 					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
-						best_keyword_state, cycleword_state, cycleword_len);
+						best_keyword_state, best_cycleword_state, cycleword_len);
 					print_text(decrypted, cipher_len);
 				}
 			}
@@ -436,10 +461,10 @@ double quagmire3_shotgun_hill_climber(
 	}
 
 	vec_copy(best_keyword_state, keyword, ALPHABET_SIZE);
-	vec_copy(cycleword_state, cycleword, ALPHABET_SIZE); // temp - fixme
+	vec_copy(best_cycleword_state, cycleword, cycleword_len);
 
 	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
-						best_keyword_state, cycleword_state, cycleword_len);
+						best_keyword_state, best_cycleword_state, cycleword_len);
 
 	return best_score;
 }
@@ -537,13 +562,24 @@ void quagmire3_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 
 
 
+// Pertubate a cycleword. 
+
+void pertubate_cycleword(int state[], int max, int len) {
+
+	int i; 
+	i = rand_int(0, len);
+	state[i] = rand_int(0, max);
+}
+
+
+
 // Pertubate a key - Ref: http://www.mountainvistasoft.com/cryptoden/articles/Q3%20Keyspace.pdf
 
 void pertubate_keyword(int state[], int len, int keyword_len) {
 
 	int i, j, k, l, temp;
 
-	if (rand() < 0.2) {
+	if (frand() < 0.2) {
 		// Once in 5, swap two letters within the keyspace.  
 		i = rand_int(0, keyword_len);
 		j = rand_int(0, keyword_len);
@@ -639,6 +675,16 @@ void random_keyword(int keyword[], int len, int keyword_len) {
 	return ;
 }
 
+
+
+void random_cycleword(int cycleword[], int max, int keyword_len) {
+
+	for (int i = 0; i < keyword_len; i++) {
+		cycleword[i] = rand_int(0, max);
+	}
+
+	return ;
+}
 
 
 // Load n-gram data from file. 
@@ -994,4 +1040,10 @@ int int_pow(int base, int exp)
 int rand_int(int min, int max) {
    return min + rand() % (max - min); // result in [min, max)
 }
+
+
+double frand() {
+  return ((double) rand())/((double) RAND_MAX); // result in [0, 1]
+}
+
 

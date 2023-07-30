@@ -10,7 +10,7 @@
 
 
 #define ALPHABET_SIZE 26
-#define MAX_CIPHER_LENGTH 1000
+#define MAX_CIPHER_LENGTH 10000
 #define MAX_FILENAME_LEN 100
 #define MAX_KEYWORD_LEN 30
 #define MAX_CYCLEWORD_LEN 30
@@ -44,6 +44,10 @@ int ngram_index_str(char *ngram, int ngram_size);
 
 void pertubate_keyword(int state[], int len, int keyword_len);
 void random_keyword(int keyword[], int len, int keyword_len);
+
+void random_cycleword(int cycleword[], int max, int keyword_len);
+void pertubate_cycleword(int state[], int max, int len);
+
 int rand_int(int min, int max);
 
 
@@ -61,3 +65,5 @@ bool file_exists(const char * filename);
 void shuffle(int *array, size_t n);
 void vec_copy(int src[], int dest[], int len);
 int int_pow(int base, int exp);
+double frand();
+
