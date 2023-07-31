@@ -22,6 +22,9 @@
 		-nsigmathreshold /n sigma threshold for candidate keyword length/ \
 		-nlocal /number of local searches to find an improved score/ \
 		-nhillclimbs /number of hillclimbing steps/ \
+		-backtrackprob /probability of backtracking to the best 
+			solution instead of a random initial solution/ \
+		-keywordpermprob /probability of permuting the keyword instead of the cycleword/
 		-nrestarts /number of restarts/ \
 		-verbose
 
@@ -39,18 +42,20 @@
 
 int main(int argc, char **argv) {
 
-	int i, j, cipher_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+	int i, j, cipher_len, keyword_len, cycleword_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
 		n_local = 1, n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length, best_keyword_length,
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
 		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH],
 		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
 		keyword[ALPHABET_SIZE], cycleword[ALPHABET_SIZE],
 		best_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
-	double n_sigma_threshold = 1., score, best_score;
+	double n_sigma_threshold = 1., backtracking_probability = 0.01, keyword_permutation_probability = 0.01, 
+		slip_probability = 0.01, score, best_score;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
-	bool verbose = false, cipher_present = false, crib_present = false;
+	bool verbose = false, cipher_present = false, crib_present = false, keyword_len_present = false, 
+		cycleword_len_present = false;
 	FILE *fp;
 	float *ngram_data;
 
@@ -74,9 +79,17 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-maxkeywordlen") == 0) {
 			max_keyword_len = atoi(argv[++i]);
 			printf("\n-maxkeywordlen %d", max_keyword_len);
+		} else if (strcmp(argv[i], "-keywordlen") == 0) {
+			keyword_len_present = true;
+			keyword_len = atoi(argv[++i]);
+			printf("\n-keywordlen %d", keyword_len);
 		} else if (strcmp(argv[i], "-maxcyclewordlen") == 0) {
 			max_cycleword_len = atoi(argv[++i]);
 			printf("\n-maxcyclewordlen %d", max_cycleword_len);
+		} else if (strcmp(argv[i], "-cyclewordlen") == 0) {
+			cycleword_len_present = true;
+			cycleword_len = atoi(argv[++i]);
+			printf("\n-cyclewordlen %d", cycleword_len);
 		} else if (strcmp(argv[i], "-nsigmathreshold") == 0) {
 			n_sigma_threshold = atof(argv[++i]);
 			printf("\n-nsigmathreshold %.2f", n_sigma_threshold);
@@ -89,6 +102,15 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-nrestarts") == 0) {
 			n_restarts = atoi(argv[++i]);
 			printf("\n-nrestarts %d", n_restarts);
+		} else if (strcmp(argv[i], "-backtrackprob") == 0) {
+			backtracking_probability = atof(argv[++i]);
+			printf("\n-backtrackprob %.4f", backtracking_probability);
+		} else if (strcmp(argv[i], "-keywordpermprob") == 0) {
+			backtracking_probability = atof(argv[++i]);
+			printf("\n-keywordpermprob %.4f", keyword_permutation_probability);
+		} else if (strcmp(argv[i], "-slipprob") == 0) {
+			slip_probability = atof(argv[++i]);
+			printf("\n-slipprob %.4f", slip_probability);
 		} else if (strcmp(argv[i], "-verbose") == 0) {
 			verbose = true;
 			printf("\n-verbose ");
@@ -184,18 +206,7 @@ int main(int argc, char **argv) {
 		n_cribs = 0;
 	}
 
-#if 0
-	srand(time(NULL));
-	int example_state[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25};
-	for (i = 0; i < 1000; i++){
-	pertubate_keyword(example_state, 26, 7);
-	vec_print(example_state, 26);
-}
-	return 1;
-#endif
-
 	// Load n-gram file. 
-	// float* load_ngrams(char *ngram_file, int ngram_size, bool verbose)
 
 	ngram_data = load_ngrams(ngram_file, ngram_size, verbose);
 
@@ -223,9 +234,11 @@ int main(int argc, char **argv) {
 	best_score = 0.;
 
 	for (i = 0; i < n_cycleword_lengths; i++) {
-		for (j = 1; j < max_keyword_len; j++) {
+		for (j = 3; j < max_keyword_len; j++) {
 
-			if (cycleword_lengths[i] != 7 || j != 7) continue;
+			if (keyword_len_present && j != keyword_len) continue;
+
+			if (cycleword_len_present && cycleword_lengths[i] != cycleword_len) continue;
 
 			if (verbose) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
@@ -247,6 +260,9 @@ int main(int argc, char **argv) {
 				decrypted, 
 				keyword,
 				cycleword, 
+				backtracking_probability,
+				keyword_permutation_probability,
+				slip_probability, 
 				verbose);
 
 			if (score > best_score) {
@@ -270,75 +286,6 @@ int main(int argc, char **argv) {
 	print_text(best_decrypted, cipher_len);
 	printf("\n\n");
 
-	//debugging
-
-	//	void quagmire3_decrypt(char decrypted[], int cipher_indices[], int cipher_len, 
-	//	int keyword_indices[], int cycleword_indices[], int cycleword_len)
-#if 0
-	int decrypted[MAX_CIPHER_LENGTH];
-	char example_keyword[] = "KRYPTOSABCDEFGHIJLMNQUVWXZ";
-	char example_cycleword[] = "KOMITET";
-	int example_keyword_indices[MAX_CIPHER_LENGTH];
-	int example_cycleword_indices[MAX_CIPHER_LENGTH];
-	double score;
-
-	ord(example_keyword, example_keyword_indices);
-	ord(example_cycleword, example_cycleword_indices);
-
-	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
-		example_keyword_indices, 
-		example_cycleword_indices, 7);
-
-	printf("\n\n");
-	print_text(decrypted, cipher_len);
-	printf("\n\n");
-
-	score = state_score(cipher_indices, cipher_len, 
-			crib_indices, crib_positions, n_cribs, 
-			example_keyword_indices, example_cycleword_indices, 7, 
-			decrypted, ngram_data, ngram_size);
-
-	printf("%.4f\n\n", score);
-#endif
-
-#if 0
-	// Read crib file. 
-
-
-	// Read n-gram file. 
-	read_ngram_file(ngram_size, ngram_file, ngram_table);
-
-	fp = fopen(ciphertext_file, "r");
-
-	while ( ! feof(fp) ) {
-
-		// Read ciphertext from file. 
-		fscanf(fp, "%s", ciphertext);
-		printf("\n%s\n", ciphertext);
-
-		cipher_len = strlen(ciphertext);
-
-
-		// Estimate cycleword length. 
-
-		// Check for collision against crib. 
-
-
-		// Call the optimisation routine. 
-
-		solve_quagmire3_simulated_annealing( // TODO: add n_restarts
-				ciphertext, cribtext, 
-				ngram_size, ngram_table, 
-				init_temp, cooling_rate, verbose_level,
-				&score, keyword, cycleword, plaintext);
-
-		printf("%.2f\t%s\t%s\t%s\n", score, keyword, cycleword, plaintext);
-
-	}
-
-	fclose(fp);
-#endif
-
 	free(ngram_data);
 
 	return 1;
@@ -357,6 +304,7 @@ double quagmire3_shotgun_hill_climber(
 	int n_local, int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size,
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
+	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	bool verbose) {
 
 	int i, j, n, n_iterations, n_backtracks, n_explore, 
@@ -377,7 +325,8 @@ double quagmire3_shotgun_hill_climber(
 
 	for (n = 0; n < n_restarts; n++) {
 
-		if (best_score > 0. && frand() < 0.05) {
+		if (best_score > 0. && frand() < backtracking_probability) {
+			// Backtrack to best state. 
 			n_backtracks += 1;
 			current_score = best_score;
 			vec_copy(best_keyword_state, current_keyword_state, ALPHABET_SIZE);
@@ -397,19 +346,20 @@ double quagmire3_shotgun_hill_climber(
 
 			// Local search for improved state. 
 			for (j = 0; j < n_local; j++) {
+				
+				n_iterations += 1;
 
 				// Pertubate.
 				vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
 				vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
-				if (frand() < 0.01) {
+				if (frand() < keyword_permutation_probability) {
 					pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
 				} else {
 					pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
 				}
 
 				// Compute score. 
-				n_iterations += 1;
 				local_score = state_score(cipher_indices, cipher_len, 
 					crib_indices, crib_positions, n_cribs, 
 					local_keyword_state, local_cycleword_state, cycleword_len,
@@ -431,8 +381,8 @@ double quagmire3_shotgun_hill_climber(
 					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
 					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
 					break ;
-				} else if (frand() < 0.01) {
-					// printf("exploring...\n");
+				} else if (frand() < slip_probability) {
+					// printf("exploring\n");
 					n_explore += 1;
 					current_score = local_score;
 					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
@@ -453,10 +403,10 @@ double quagmire3_shotgun_hill_climber(
 					printf("\n%.2f\t[sec]\n", elapsed);
 					printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
 					printf("%d\t[backtracks]\n", n_backtracks);
-					printf("%d\t[slips]\n", n_explore);
 					printf("%d\t[restarts]\n", n);
 					printf("%d\t[iterations]\n", i);
-					printf("%.2f\t[merit score]\n", best_score);
+					printf("%d\t[slips]\n", n_explore);
+					printf("%.2f\t[score]\n", best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
 					printf("\n");
 					print_text(best_cycleword_state, cycleword_len);
@@ -518,6 +468,20 @@ double state_score(int cipher_indices[], int cipher_len,
 	return score;
 }
 
+
+
+// Entropy. 
+
+double entropy(int text[], int len) {
+
+	int frequencies[ALPHABET_SIZE];
+	double entropy = 0.;
+
+	// Count frequencies of each plaintext letter. 
+	tally(text, len, frequencies, ALPHABET_SIZE);
+
+	return entropy; 
+}
 
 
 // Score for known plaintext. (Naive - not using symmetry of the vigenere encryption.)
@@ -604,14 +568,6 @@ void pertubate_cycleword(int state[], int max, int len) {
 	int i; 
 	i = rand_int(0, len);
 	state[i] = rand_int(0, max);
-
-#if 0
-	if (frand() < 0.5 && state[i] < ALPHABET_SIZE - 1) {
-		state[i] += 1;
-	} else if (state[i] > 0) {
-		state[i] -= 1;
-	}
-#endif
 }
 
 
@@ -856,20 +812,21 @@ void estimate_cycleword_lengths(
 
 	// Select only those above n_sigma_threshold and sort by mean IOC. 
 
-	// TODO: the sorting by max IOC makes this code is fucking ugly - rewrite! 
+	// TODO: the sorting by max IOC makes this code fucking ugly - rewrite! 
 
 	*n_cycleword_lengths = 0;
-	max_ioc = 1.e6;
+	current_ioc = 1.e6;
 	for (i = 0; i < max_cycleword_len; i++) {
 		threshold = false;
+		max_ioc = 0.;
 		for (j = 0; j < max_cycleword_len; j++) {
-			if (mu_ioc_normalised[j] > n_sigma_threshold && mu_ioc_normalised[j] < max_ioc) {
+			if (mu_ioc_normalised[j] > n_sigma_threshold && mu_ioc_normalised[j] > max_ioc && mu_ioc_normalised[j] < current_ioc) {
 				threshold = true;
-				current_ioc = mu_ioc_normalised[j];
+				max_ioc = mu_ioc_normalised[j];
 				cycleword_lengths[i] = j + 1;
 			}
 		}
-		max_ioc = current_ioc;
+		current_ioc = max_ioc;
 		if (threshold) {
 			(*n_cycleword_lengths)++;
 		}

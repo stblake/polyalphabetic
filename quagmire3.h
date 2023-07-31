@@ -25,6 +25,7 @@ double quagmire3_shotgun_hill_climber(
 	int n_local, int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size, 
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
+	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	bool verbose);
 
 void quagmire3_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
@@ -39,6 +40,8 @@ double state_score(int cipher_indices[], int cipher_len,
 double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size);
 
 double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs);
+
+double entropy(int text[], int len);
 
 float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);
 int ngram_index_int(int *ngram, int ngram_size);
