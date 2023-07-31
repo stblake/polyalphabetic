@@ -19,6 +19,8 @@
 		-ngramfile /n-gram statistics file/ \
 		-maxkeywordlen /max length of the keyword/ \
 		-maxcyclewordlen /max length of the cycleword/ \
+		-keywordlen /user defined length of the keyword/ \
+		-cyclewordlen /user defined length of the cycleword/ \
 		-nsigmathreshold /n sigma threshold for candidate keyword length/ \
 		-nlocal /number of local searches to find an improved score/ \
 		-nhillclimbs /number of hillclimbing steps/ \
@@ -479,6 +481,8 @@ double entropy(int text[], int len) {
 
 	// Count frequencies of each plaintext letter. 
 	tally(text, len, frequencies, ALPHABET_SIZE);
+
+	// TODO: under construction...
 
 	return entropy; 
 }
