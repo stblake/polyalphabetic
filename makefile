@@ -7,8 +7,8 @@ CC=gcc -Wall -O3
 # CC=gcc -Wall -lm -g -O0 
 
 all:
-	$(CC) quagmire3.c -o quagmire3
+	$(CC) quagmire.c -o quagmire
 
 clean:
-	rm quagmire3 *.o
+	rm quagmire *.o
 
