@@ -16,16 +16,25 @@
 #define MAX_CYCLEWORD_LEN 30
 #define MAX_NGRAM_SIZE 8
 
+#define INACTIVE -9999
 
 
 double quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
 	int cycleword_len, int keyword_len,
-	int n_local, int n_hill_climbs, int n_restarts,
+	int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size, 
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
+	bool verbose);
+
+bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
+	int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
+
+bool constrain_cycleword(int cipher_indices[], int cipher_len, 
+	int crib_indices[], int crib_positions[], int n_cribs, 
+	int keyword_indices[], int cycleword_indices[], int cycleword_len, 
 	bool verbose);
 
 void quagmire3_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
@@ -42,6 +51,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
 double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs);
 
 double entropy(int text[], int len);
+double chi_squared(int plaintext[], int len);
 
 float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);
 int ngram_index_int(int *ngram, int ngram_size);
@@ -71,4 +81,3 @@ void shuffle(int *array, size_t n);
 void vec_copy(int src[], int dest[], int len);
 int int_pow(int base, int exp);
 double frand();
-

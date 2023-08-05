@@ -5,6 +5,8 @@
 // Written by Sam Blake, started 14 July 2023
 
 
+// Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
+
 #include "quagmire.h"
 
 
@@ -45,14 +47,14 @@
 int main(int argc, char **argv) {
 
 	int i, j, cipher_len, keyword_len, cycleword_len, ngram_size = 0, max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
-		n_local = 1, n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length, best_keyword_length,
+		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length, best_keyword_length,
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
 		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH],
 		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
 		keyword[ALPHABET_SIZE], cycleword[ALPHABET_SIZE],
 		best_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
 	double n_sigma_threshold = 1., backtracking_probability = 0.01, keyword_permutation_probability = 0.01, 
-		slip_probability = 0.01, score, best_score;
+		slip_probability = 0.0005, score, best_score;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
@@ -96,8 +98,7 @@ int main(int argc, char **argv) {
 			n_sigma_threshold = atof(argv[++i]);
 			printf("\n-nsigmathreshold %.2f", n_sigma_threshold);
 		} else if (strcmp(argv[i], "-nlocal") == 0) {
-			n_local = atoi(argv[++i]);
-			printf("\n-nlocal %d", n_local);	
+			// TODO: remove me and update all tests/scripts etc. 
 		} else if (strcmp(argv[i], "-nhillclimbs") == 0) {
 			n_hill_climbs = atoi(argv[++i]);
 			printf("\n-nhillclimbs %d", n_hill_climbs);			
@@ -208,10 +209,6 @@ int main(int argc, char **argv) {
 		n_cribs = 0;
 	}
 
-	// Load n-gram file. 
-
-	ngram_data = load_ngrams(ngram_file, ngram_size, verbose);
-
 	// Compute ciphertext indices. A -> 0, B -> 1, ..., Z -> 25 (Assuming ALPHABET_SIZE = 26)
 
 	ord(ciphertext, cipher_indices);
@@ -226,6 +223,10 @@ int main(int argc, char **argv) {
 			&n_cycleword_lengths, 
 			cycleword_lengths, 
 			verbose);
+
+	// Load n-gram file. 
+
+	ngram_data = load_ngrams(ngram_file, ngram_size, verbose);
 
 	// Set random seed.
 
@@ -246,6 +247,13 @@ int main(int argc, char **argv) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
 			}
 
+			// Check the cipher satisfies the cribs. 
+
+			if (! cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], verbose)) {
+				printf("\n\nCiphertext does not satisfy the cribs for cycleword length %d. \n\n", cycleword_lengths[i]);
+				continue;
+			}
+
 			score = quagmire3_shotgun_hill_climber(
 				cipher_indices, 
 				cipher_len, 
@@ -253,8 +261,7 @@ int main(int argc, char **argv) {
 				crib_positions, 
 				n_cribs, 
 				cycleword_lengths[i],
-				j, 
-				n_local, 
+				j,  
 				n_hill_climbs, 
 				n_restarts, 
 				ngram_data, 
@@ -294,6 +301,147 @@ int main(int argc, char **argv) {
 }
 
 
+// Does the ciphertext trivially satisfy the cribs? For a given cycleword length, there 
+// should be a one-to-one mapping between the ciphertext and the plaintext. 
+
+bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
+	int crib_positions[], int n_cribs, int cycleword_len, bool verbose) {
+
+	int i, j, k, column_length, ciphertext_column_indices[MAX_CIPHER_LENGTH], 
+		ciphertext_column[MAX_CIPHER_LENGTH], crib_frequencies[ALPHABET_SIZE];
+
+	// Check cribs are present. 
+
+	if (n_cribs == 0) {
+		return true;
+	}
+
+	for (j = 0; j < cycleword_len; j++) {
+
+		// Extract column. 
+
+		k = 0;
+		while (cycleword_len*k + j < cipher_len) {
+			ciphertext_column_indices[k] = cycleword_len*k + j;
+			ciphertext_column[k] = cipher_indices[ciphertext_column_indices[k]];
+			k++;
+		}
+
+		column_length = k;
+
+		// Check column satisfies the cribs. 
+
+		for (i = 0; i < n_cribs; i++) {
+
+			// Reset frequencies to zero. 
+
+			for (k = 0; k < ALPHABET_SIZE; k++) {
+				crib_frequencies[k] = 0;
+			}
+
+			// Check the crib corresponds to exactly 1 ciphertext symbol. 
+
+			for (k = 0; k < column_length; k++) {
+				if (crib_positions[k] == ciphertext_column_indices[k]) {
+					crib_frequencies[ciphertext_column[k]] += 1;
+					if (crib_frequencies[ciphertext_column[k]] > 1) {
+						printf("\n\nClash at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+						return false;
+					}
+				}
+			}
+		}
+
+	}
+
+	return true;
+}
+
+
+// For a given candidate keyword - constrain the cycleword based on the cribs. If multiple 
+// cribs produce conflicting cycleword rotations, then we have a conflict and must reject
+// the keyword. 
+
+bool constrain_cycleword(int cipher_indices[], int cipher_len, 
+	int crib_indices[], int crib_positions[], int n_cribs, 
+	int keyword_indices[], int cycleword_indices[], int cycleword_len, 
+	bool verbose) {
+
+	int i, j, k, crib_char, ciphertext_char, posn_keyword, posn_cycleword, 
+		indx, crib_cyclewords[MAX_CYCLEWORD_LEN];
+
+	// Check cribs are present. 
+
+	if (n_cribs == 0) {
+		return false; // No contradiction. 
+	}
+
+	// Set cycleword rotations to inactive. This is used to check for a contradiction 
+	// and thus reject the candidate keyword. 
+	for (i = 0; i < cycleword_len; i++) {
+		crib_cyclewords[i] = INACTIVE; 
+	}
+
+	for (i = 0; i < cycleword_len; i++) {
+
+		// Rotate/modify cycleword based on keyword and crib. 
+
+		for (j = 0; j < n_cribs; j++) {
+			if (crib_positions[j]%cycleword_len == i) {
+
+				crib_char = crib_indices[j];
+				ciphertext_char = cipher_indices[crib_positions[j]];
+
+				// Find position of ciphertext_char in keyword. 
+				
+				for (k = 0; k < ALPHABET_SIZE; k++) {
+					if (keyword_indices[k] == ciphertext_char) {
+						posn_keyword = k;
+						break ;
+					}
+				}
+
+				// Find position of crib_char in keyword. 
+
+				for (k = 0; k < ALPHABET_SIZE; k++) {
+					if (keyword_indices[k] == crib_char) {
+						posn_cycleword = k;
+						break ;
+					}
+				}
+
+				// Compute cycleword rotation. 
+
+				indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
+				if (indx < 0) indx += ALPHABET_SIZE;
+
+				// Has this cycleword position been previously set? 
+
+				if (crib_cyclewords[i] == INACTIVE) {
+					if (false) {
+						printf("cycleword char %c at %d\n", keyword_indices[indx] + 'A', i);
+					}
+					crib_cyclewords[i] = keyword_indices[indx];
+					cycleword_indices[i] = keyword_indices[indx]; 
+				} else if (crib_cyclewords[i] != keyword_indices[indx]) { // Otherwise, do we have a contradiction? 
+					if (false) {
+						printf("\n\nContradiction at crib %c, posn %d; rejecting keyword ", 
+							crib_indices[j] + 'A', 
+							crib_positions[j]);
+						print_text(keyword_indices, ALPHABET_SIZE);
+						printf("\n");
+					}
+					return true; 
+				}
+
+			}
+
+		}
+
+	}
+
+	return false;
+}
 
 
 
@@ -303,22 +451,24 @@ double quagmire3_shotgun_hill_climber(
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
 	int cycleword_len, int keyword_len, 
-	int n_local, int n_hill_climbs, int n_restarts,
+	int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size,
 	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	bool verbose) {
 
-	int i, j, n, n_iterations, n_backtracks, n_explore, 
+	int i, n, n_iterations, n_backtracks, n_explore, n_contradictions,
 		local_keyword_state[ALPHABET_SIZE], current_keyword_state[ALPHABET_SIZE], 
 		best_keyword_state[ALPHABET_SIZE],
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
 	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
+	bool pertubate_keyword_p, contradiction;
 
 	n_iterations = 0;
 	n_backtracks = 0;
 	n_explore = 0;
+	n_contradictions = 0;
 	start_time = clock();
 
 	// TODO: remove local search (does nothing in this context.)
@@ -344,53 +494,60 @@ double quagmire3_shotgun_hill_climber(
 				decrypted, ngram_data, ngram_size);
 		}
 
+		pertubate_keyword_p = true;
+
 		for (i = 0; i < n_hill_climbs; i++) {
-
-			// Local search for improved state. 
-			for (j = 0; j < n_local; j++) {
 				
-				n_iterations += 1;
+			n_iterations += 1;
 
-				// Pertubate.
-				vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
-				vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
+			// Pertubate.
+			vec_copy(current_keyword_state, local_keyword_state, ALPHABET_SIZE);
+			vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
-				if (frand() < keyword_permutation_probability) {
-					pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
-				} else {
-					pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
-				}
+			if (pertubate_keyword_p || frand() < keyword_permutation_probability) {
+				pertubate_keyword(local_keyword_state, ALPHABET_SIZE, keyword_len);
+			} else {
+				pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+			}
 
-				// Compute score. 
-				local_score = state_score(cipher_indices, cipher_len, 
-					crib_indices, crib_positions, n_cribs, 
-					local_keyword_state, local_cycleword_state, cycleword_len,
-					decrypted, ngram_data, ngram_size);
+			pertubate_keyword_p = false;
+			contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
+				crib_positions, n_cribs, 
+				local_keyword_state, local_cycleword_state, cycleword_len, verbose);
+
+			if (contradiction) {
+				// Cycleword contradiction - must pertubate cycleword. 
+				n_contradictions += 1; 
+				pertubate_keyword_p = true;
+			}
+
+			// Compute score. 
+			local_score = state_score(cipher_indices, cipher_len, 
+				crib_indices, crib_positions, n_cribs, 
+				local_keyword_state, local_cycleword_state, cycleword_len,
+				decrypted, ngram_data, ngram_size);
 
 #if 0
-				printf("\nlocal_score = %.4f\n", local_score);
-				print_text(decrypted, cipher_len);
-				printf("\n");
-				print_text(local_keyword_state, ALPHABET_SIZE);
-				printf("\n");
-				print_text(local_cycleword_state, cycleword_len);
-				printf("\n");
+			printf("\nlocal_score = %.4f\n", local_score);
+			print_text(decrypted, cipher_len);
+			printf("\n");
+			print_text(local_keyword_state, ALPHABET_SIZE);
+			printf("\n");
+			print_text(local_cycleword_state, cycleword_len);
+			printf("\n");
 #endif
 
-				if (local_score > current_score) {
-					// printf("improvement\n");
-					current_score = local_score;
-					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
-					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
-					break ;
-				} else if (frand() < slip_probability) {
-					// printf("exploring\n");
-					n_explore += 1;
-					current_score = local_score;
-					vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
-					vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
-					break ;
-				}
+			if (local_score > current_score) {
+				// printf("improvement\n");
+				current_score = local_score;
+				vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
+				vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
+			} else if (frand() < slip_probability) {
+				// printf("exploring\n");
+				n_explore += 1;
+				current_score = local_score;
+				vec_copy(local_keyword_state, current_keyword_state, ALPHABET_SIZE);
+				vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
 			}
 
 			if (current_score > best_score) {
@@ -408,6 +565,7 @@ double quagmire3_shotgun_hill_climber(
 					printf("%d\t[restarts]\n", n);
 					printf("%d\t[iterations]\n", i);
 					printf("%d\t[slips]\n", n_explore);
+					printf("%.2f\t[contradiction pct]\n", ((double) n_contradictions)/n_iterations);
 					printf("%.2f\t[score]\n", best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
 					printf("\n");
@@ -446,12 +604,11 @@ double state_score(int cipher_indices[], int cipher_len,
 			float *ngram_data, int ngram_size) {
 
 	double score = 0., decrypted_ngram_score, decrypted_crib_score, 
-	weight_ngram, weight_crib, weight_ioc, mean_english_ioc, ioc, ioc_score; 
+	weight_ngram, weight_crib; 
 
 	// TODO: these should be command line args. 
 	weight_ngram = 1.;
 	weight_crib  = 3.;
-	weight_ioc   = 0.;
 
 	// Decrypt cipher using the candidate keyword and cycleword. 
 	quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -467,21 +624,21 @@ double state_score(int cipher_indices[], int cipher_len,
 
 	// Expected IOC for English is ~~ 1.742. 
 
-	mean_english_ioc = 1.742;
-	ioc = 26.*index_of_coincidence(decrypted, cipher_len);	
-	ioc_score = 1./(1. + pow(ioc - mean_english_ioc, 2));
+	// mean_english_ioc = 1.742;
+	// ioc = 26.*index_of_coincidence(decrypted, cipher_len);	
+	// ioc_score = 1./(1. + pow(ioc - mean_english_ioc, 2));
 	// printf("\nioc, score = %.4f, %.4f", ioc, ioc_score);
 
 	// Expected entropy for English is ~~ 2.85. 
 
 	// UNDER CONSTRUCTION
 
-	score = weight_ngram*decrypted_ngram_score + weight_crib*decrypted_crib_score + 
-		weight_ioc*ioc_score;
-	score /= weight_ngram + weight_crib + weight_ioc;
+	score = weight_ngram*decrypted_ngram_score + weight_crib*decrypted_crib_score;
+	score /= weight_ngram + weight_crib;
 
 	return score;
 }
+
 
 
 
@@ -490,15 +647,72 @@ double state_score(int cipher_indices[], int cipher_len,
 double entropy(int text[], int len) {
 
 	int frequencies[ALPHABET_SIZE];
-	double entropy = 0.;
+	double entropy = 0., freq;
 
 	// Count frequencies of each plaintext letter. 
 	tally(text, len, frequencies, ALPHABET_SIZE);
 
-	// TODO: under construction...
+	for (int i = 0; i < ALPHABET_SIZE; i++) {
+		freq = ((double) frequencies[i])/len;
+		entropy -= freq*log2(freq);
+	}
+	// printf("entropy = %.4f\n", entropy);
 
-	return entropy; 
+	return entropy;
 }
+
+
+// Ref: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
+double english_monograms[] = {
+	0.085517, // A
+	0.016048, // B
+	0.031644, // C
+	0.038712, // D
+	0.120965, // E
+	0.021815, // F
+	0.020863, // G
+	0.049557, // H
+	0.073251, // I
+	0.002198, // J
+	0.008087, // K
+	0.042065, // L
+	0.025263, // M
+	0.071722, // N
+	0.074673, // O
+	0.020662, // P
+	0.001040, // Q
+	0.063327, // R
+	0.067282, // S
+	0.089381, // T
+	0.026816, // U
+	0.010593, // V
+	0.018254, // W
+	0.001914, // X
+	0.017214, // Y
+	0.001138  // Z
+};
+
+
+
+// Chi-squared score. 
+
+double chi_squared(int plaintext[], int len) {
+
+	int i, counts[ALPHABET_SIZE];
+	double frequency, chi2 = 0.;
+
+	tally(plaintext, len, counts, ALPHABET_SIZE);
+
+	for (i = 0; i < ALPHABET_SIZE; i++) {
+		frequency = ((double) counts[i])/len;
+		//printf("%d, %.4f, %.4f\n", i, frequency, english_monograms[i]);
+		chi2 += pow(frequency - english_monograms[i], 2)/english_monograms[i];
+	}
+
+	return chi2;
+}
+
+
 
 
 // Score for known plaintext. (Naive - not using symmetry of the Vigenere encryption.)
@@ -1083,5 +1297,4 @@ int rand_int(int min, int max) {
 double frand() {
   return ((double) rand())/((double) RAND_MAX); // result in [0, 1]
 }
-
 
