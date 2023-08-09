@@ -8,6 +8,7 @@
 #include <math.h>
 #include <time.h>
 
+#define KRYPTOS 0
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -17,6 +18,10 @@
 #define MAX_NGRAM_SIZE 8
 
 #define INACTIVE -9999
+
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 
 
 double quagmire3_shotgun_hill_climber(

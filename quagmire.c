@@ -232,7 +232,7 @@ int main(int argc, char **argv) {
 
 	srand(time(NULL));
 
-	// For each cycleword length, run the 'shotgun' hill climber. 
+	// For each cycleword length and keyword length combination, run the 'shotgun' hill climber. 
 
 	best_score = 0.;
 
@@ -293,6 +293,45 @@ int main(int argc, char **argv) {
 	print_text(best_cycleword, best_cycleword_length);
 	printf("\n");
 	print_text(best_decrypted, cipher_len);
+	printf("\n\n");
+
+	// K4-specific checks for BERLIN, CLOCK, EAST and NORTH. 
+
+	char plaintext_string[MAX_CIPHER_LENGTH];
+
+	for (int i = 0; i < cipher_len; i++) {
+		plaintext_string[i] = best_decrypted[i] + 'A';
+	}
+	plaintext_string[cipher_len] = '\0';
+
+	if (strstr(plaintext_string, "BERLIN") != NULL) {
+		printf("**** \'BERLIN\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "CLOCK") != NULL) {
+		printf("**** \'CLOCK\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "EAST") != NULL) {
+		printf("**** \'EAST\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "NORTH") != NULL) {
+		printf("**** \'NORTH\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "BERLINCLOCK") != NULL) {
+		for (i = 0; i < 1000; i++) {
+			printf("**** \'BERLINCLOCK\' PRESENT!!! ****");
+		}
+	}
+
+	if (strstr(plaintext_string, "EASTNORTHEAST") != NULL) {
+		for (i = 0; i < 1000; i++) {
+			printf("**** \'EASTNORTHEAST\' PRESENT!!! ****");
+		}
+	}
+
 	printf("\n\n");
 
 	free(ngram_data);
@@ -662,6 +701,7 @@ double entropy(int text[], int len) {
 }
 
 
+
 // Ref: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 double english_monograms[] = {
 	0.085517, // A
@@ -807,6 +847,10 @@ void pertubate_cycleword(int state[], int max, int len) {
 
 void pertubate_keyword(int state[], int len, int keyword_len) {
 
+#if KRYPTOS
+	return ;
+#endif
+
 	int i, j, k, l, temp;
 
 	if (frand() < 0.2) {
@@ -884,16 +928,16 @@ void random_keyword(int keyword[], int len, int keyword_len) {
 	}
 
 #if 0
-	// SQUARE. 
-	keyword[0] = 18;
-	keyword[1] = 16;
-	keyword[2] = 20;
-	keyword[3] = 0;
-	keyword[4] = 17;
+	// KOMITE[T] 
+	keyword[0] = 10;
+	keyword[1] = 14;
+	keyword[2] = 12;
+	keyword[3] = 8;
+	keyword[4] = 19;
 	keyword[5] = 4;
 #endif
 
-#if 0
+#if KRYPTOS
 	// KRYPTOS
 	keyword[0] = 10;
 	keyword[1] = 17;
