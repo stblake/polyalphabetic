@@ -506,7 +506,7 @@ double quagmire3_shotgun_hill_climber(
 		best_keyword_state[ALPHABET_SIZE],
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
-	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
+	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi;
 	bool pertubate_keyword_p, contradiction;
 
 	n_iterations = 0;
@@ -600,6 +600,12 @@ double quagmire3_shotgun_hill_climber(
 				vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
 				if (verbose) {
 
+					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
+						best_keyword_state, best_cycleword_state, cycleword_len);
+
+					ioc = index_of_coincidence(decrypted, cipher_len);
+					chi = chi_squared(decrypted, cipher_len);
+
 					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
 					n_iter_per_sec = ((double) n_iterations)/elapsed;
 
@@ -610,14 +616,14 @@ double quagmire3_shotgun_hill_climber(
 					printf("%d\t[iterations]\n", i);
 					printf("%d\t[slips]\n", n_explore);
 					printf("%.2f\t[contradiction pct]\n", ((double) n_contradictions)/n_iterations);
+					printf("%.4f\t[IOC]\n", ioc);
+					printf("%.2f\t[chi-squared]\n", chi);
 					printf("%.2f\t[score]\n", best_score);
 					print_text(best_keyword_state, ALPHABET_SIZE);
 					printf("\n");
 					print_text(best_cycleword_state, cycleword_len);
 					printf("\n");
 
-					quagmire3_decrypt(decrypted, cipher_indices, cipher_len, 
-						best_keyword_state, best_cycleword_state, cycleword_len);
 					print_text(decrypted, cipher_len);
 					printf("\n");
 					fflush(stdout);
@@ -750,7 +756,7 @@ double chi_squared(int plaintext[], int len) {
 
 	for (i = 0; i < ALPHABET_SIZE; i++) {
 		frequency = ((double) counts[i])/len;
-		//printf("%d, %.4f, %.4f\n", i, frequency, english_monograms[i]);
+		// printf("%d, %.4f, %.4f\n", i, frequency, english_monograms[i]);
 		chi2 += pow(frequency - english_monograms[i], 2)/english_monograms[i];
 	}
 
@@ -1158,7 +1164,7 @@ void estimate_cycleword_lengths(
 	}
 
 	// Normalise (Z-score). 
-	
+
 	mu = vec_mean(word_len_norm_ioc, max_cycleword_len);
 	std = vec_stddev(word_len_norm_ioc, max_cycleword_len);
 
