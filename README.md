@@ -1,2 +1,2 @@
-# quagmire3
-stochastic shotgun-restarted hill climber for Quagmire 3-type ciphers.
+# Quagmire Cipher Solver
+stochastic shotgun-restarted hill climber for Quagmire-type ciphers.
