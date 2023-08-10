@@ -232,6 +232,13 @@ int main(int argc, char **argv) {
 
 	srand(time(NULL));
 
+	// User-defined cycleword length. 
+	
+	if (cycleword_len_present) {
+		n_cycleword_lengths = 1;
+		cycleword_lengths[0] = cycleword_len;
+	}
+
 	// For each cycleword length and keyword length combination, run the 'shotgun' hill climber. 
 
 	best_score = 0.;
@@ -240,8 +247,6 @@ int main(int argc, char **argv) {
 		for (j = 3; j < max_keyword_len; j++) {
 
 			if (keyword_len_present && j != keyword_len) continue;
-
-			if (cycleword_len_present && cycleword_lengths[i] != cycleword_len) continue;
 
 			if (verbose) {
 				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
@@ -851,6 +856,10 @@ void pertubate_keyword(int state[], int len, int keyword_len) {
 	return ;
 #endif
 
+#if KOMITET
+	return ;
+#endif
+
 	int i, j, k, l, temp;
 
 	if (frand() < 0.2) {
@@ -927,7 +936,7 @@ void random_keyword(int keyword[], int len, int keyword_len) {
 		}
 	}
 
-#if 0
+#if KOMITET
 	// KOMITE[T] 
 	keyword[0] = 10;
 	keyword[1] = 14;
@@ -1070,6 +1079,17 @@ int ngram_index_int(int *ngram, int ngram_size) {
 
 
 
+// English word length frequencies. (Ref: https://math.wvu.edu/~hdiamond/Math222F17/Sigurd_et_al-2004-Studia_Linguistica.pdf)
+
+int n_english_word_length_frequency_letters = 25;
+double english_word_length_frequencies[] = {
+	0.0316, 0.16975, 0.21192, 0.15678, 0.10852, 0.08524, 0.07724, 
+	0.05623, 0.04032, 0.02766, 0.01582, 0.00917, 0.00483, 0.00262, 
+	0.00099, 0.0005, 0.00027, 0.00022, 0.00011, 0.00006, 0.00005, 
+	0.00002, 0.00001, 0.00001, 0.00001};
+
+
+
 // Estimate the cycleword length from the ciphertext. 
 
 void estimate_cycleword_lengths(
@@ -1081,20 +1101,19 @@ void estimate_cycleword_lengths(
 	int cycleword_lengths[], 
 	bool verbose) {
 
-	int i, j, *caesar_column; 
-	double *mu_ioc, *mu_ioc_normalised, mu, std, max_ioc, current_ioc;
+	int i, j, caesar_column[MAX_CIPHER_LENGTH]; 
+	double mu, std, max_ioc, current_ioc, 
+		mu_ioc[MAX_CYCLEWORD_LEN], mu_ioc_normalised[MAX_CYCLEWORD_LEN], word_len_norm_ioc[MAX_CYCLEWORD_LEN];
 	bool threshold;
 
 	// Compute the mean IOC for each candidate cycleword length. 
-	mu_ioc = malloc((max_cycleword_len - 1)*sizeof(double));
-	mu_ioc_normalised = malloc((max_cycleword_len - 1)*sizeof(double));
-	caesar_column = malloc(len*sizeof(int));
 
 	for (i = 1; i <= max_cycleword_len; i++) {
 		mu_ioc[i - 1] = mean_ioc(text, len, i, caesar_column);
 	}
 
-	// Normalise.
+	// Normalise (Z-score). 
+
 	mu = vec_mean(mu_ioc, max_cycleword_len);
 	std = vec_stddev(mu_ioc, max_cycleword_len);
 
@@ -1108,7 +1127,7 @@ void estimate_cycleword_lengths(
 
 	// Select only those above n_sigma_threshold and sort by mean IOC. 
 
-	// TODO: the sorting by max IOC makes this code fucking ugly - rewrite! 
+	// TODO: the sorting by max IOC makes this code ugly - rewrite! 
 
 	*n_cycleword_lengths = 0;
 	current_ioc = 1.e6;
@@ -1128,11 +1147,30 @@ void estimate_cycleword_lengths(
 		}
 	}
 
+	// Compute English word length normalised score. 
+
+	for (i = 0; i < max_cycleword_len; i++) {
+		if (i < n_english_word_length_frequency_letters) {
+		word_len_norm_ioc[i] = english_word_length_frequencies[i]*mu_ioc[i];
+		} else {
+			word_len_norm_ioc[i] = 0.;
+		}
+	}
+
+	// Normalise (Z-score). 
+	
+	mu = vec_mean(word_len_norm_ioc, max_cycleword_len);
+	std = vec_stddev(word_len_norm_ioc, max_cycleword_len);
+
+	for (i = 0; i < max_cycleword_len; i++) {
+		word_len_norm_ioc[i] = (word_len_norm_ioc[i] - mu)/std;
+	}
+
 	if (verbose) {
-		printf("\nlen\tmean IOC\tnormalised IOC\n");
+		printf("\nlen\tmean IOC\tnorm IOC\tword len norm IOC\n");
 		for (i = 0; i < max_cycleword_len; i++) {
 			if (verbose) {
-				printf("%d\t%.3f\t\t%.2f\n", i + 1, mu_ioc[i], mu_ioc_normalised[i]);
+				printf("%d\t%.3f\t\t%.2f\t\t%.2f\n", i + 1, mu_ioc[i], mu_ioc_normalised[i], word_len_norm_ioc[i]);
 			}
 		}
 	}
@@ -1145,11 +1183,6 @@ void estimate_cycleword_lengths(
 		printf("\n\n");
 	}
 
-
-	free(mu_ioc);
-	free(mu_ioc_normalised);
-	free(caesar_column);
-	
 	return ;
 }
 

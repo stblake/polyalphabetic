@@ -9,6 +9,7 @@
 #include <time.h>
 
 #define KRYPTOS 0
+#define KOMITET 0
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
