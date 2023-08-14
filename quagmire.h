@@ -11,6 +11,12 @@
 #define KRYPTOS 0
 #define KOMITET 0
 
+#define VIGENERE 0
+#define QUAGMIRE_1 1
+#define QUAGMIRE_2 2
+#define QUAGMIRE_3 3
+#define QUAGMIRE_4 4
+
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
 #define MAX_FILENAME_LEN 100
@@ -25,13 +31,15 @@
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
 
-double quagmire3_shotgun_hill_climber(
+double quagmire_shotgun_hill_climber(
+	int cipher_type, 
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
-	int cycleword_len, int keyword_len,
+	int cycleword_len, int keyword_len, 
 	int n_hill_climbs, int n_restarts,
-	float *ngram_data, int ngram_size, 
-	int decrypted[MAX_CIPHER_LENGTH], int keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
+	float *ngram_data, int ngram_size,
+	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
+	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	bool verbose);
 
@@ -43,14 +51,18 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 	int keyword_indices[], int cycleword_indices[], int cycleword_len, 
 	bool verbose);
 
-void quagmire3_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
-	int keyword_indices[], int cycleword_indices[], int cycleword_len);
+void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+	int cycleword_indices[], int cycleword_len);
 
 double state_score(int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
-			int keyword_state[], int cycleword_state[], int cycleword_len,
+			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
+			int cycleword_state[], int cycleword_len,
 			int decrypted[], 
 			float *ngram_data, int ngram_size);
+
+void straight_alphabet(int keyword[], int len);
 
 double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size);
 
