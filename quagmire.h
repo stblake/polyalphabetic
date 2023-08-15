@@ -31,11 +31,12 @@
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
 
+
 double quagmire_shotgun_hill_climber(
 	int cipher_type, 
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
-	int cycleword_len, int keyword_len, 
+	int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
 	int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size,
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
@@ -48,8 +49,8 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 
 bool constrain_cycleword(int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs, 
-	int keyword_indices[], int cycleword_indices[], int cycleword_len, 
-	bool verbose);
+	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+	int cycleword_indices[], int cycleword_len, bool verbose);
 
 void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 

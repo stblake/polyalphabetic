@@ -52,6 +52,7 @@
 	
 
 	Performance: 
+
 		This program is designed for attacks on the final unsolved Kryptos cipher (K4), which is only of 
 		length 97. For longer ciphers a far better approach is to use frequency analysis on each simple 
 		substitution ciphers (once the period has been estimated). 
@@ -59,9 +60,11 @@
 
 int main(int argc, char **argv) {
 
-	int i, j, cipher_type = 3, cipher_len, keyword_len, cycleword_len, ngram_size = 0, 
-		max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
-		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length, best_keyword_length,
+	int i, j, k, cipher_type = 3, cipher_len, plaintext_keyword_len, cycleword_len, ngram_size = 0,
+		ciphertext_keyword_len, ciphertext_max_keyword_len = 12, 
+		min_keyword_len = 3, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length,
+		best_plaintext_keyword_length, best_ciphertext_keyword_length, 
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
 		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH],
 		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
@@ -72,8 +75,8 @@ int main(int argc, char **argv) {
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
-	bool verbose = false, cipher_present = false, crib_present = false, keyword_len_present = false, 
-		cycleword_len_present = false;
+	bool verbose = false, cipher_present = false, crib_present = false, plaintext_keyword_len_present = false, 
+		cycleword_len_present = false, ciphertext_keyword_len_present = false;
 	FILE *fp;
 	float *ngram_data;
 
@@ -98,18 +101,34 @@ int main(int argc, char **argv) {
 			strcpy(ngram_file, argv[++i]);
 			printf("\n-ngramfile %s", ngram_file);
 		} else if (strcmp(argv[i], "-maxkeywordlen") == 0) {
-			max_keyword_len = atoi(argv[++i]);
-			printf("\n-maxkeywordlen %d", max_keyword_len);
+			plaintext_keyword_len = atoi(argv[++i]);
+			ciphertext_keyword_len = plaintext_keyword_len;
+			printf("\n-maxkeywordlen %d", plaintext_keyword_len);
 		} else if (strcmp(argv[i], "-keywordlen") == 0) {
-			keyword_len_present = true;
-			keyword_len = atoi(argv[++i]);
-			printf("\n-keywordlen %d", keyword_len);
+			plaintext_keyword_len_present = true;
+			ciphertext_keyword_len_present = true;
+			plaintext_keyword_len = atoi(argv[++i]);
+			ciphertext_keyword_len = plaintext_keyword_len;
+			plaintext_max_keyword_len = max(plaintext_max_keyword_len, 1 + plaintext_keyword_len);
+			ciphertext_max_keyword_len = max(ciphertext_max_keyword_len, 1 + ciphertext_keyword_len);
+			printf("\n-keywordlen %d", plaintext_keyword_len);			
+		} else if (strcmp(argv[i], "-plaintextkeywordlen") == 0) {
+			plaintext_keyword_len_present = true;
+			plaintext_keyword_len = atoi(argv[++i]);
+			plaintext_max_keyword_len = max(plaintext_max_keyword_len, 1 + plaintext_keyword_len);
+			printf("\n-plaintextkeywordlen %d", plaintext_keyword_len);
+		} else if (strcmp(argv[i], "-ciphertextkeywordlen") == 0) {
+			ciphertext_keyword_len_present = true;
+			ciphertext_keyword_len = atoi(argv[++i]);
+			ciphertext_max_keyword_len = max(ciphertext_max_keyword_len, 1 + ciphertext_keyword_len);
+			printf("\n-ciphertextkeywordlen %d", ciphertext_keyword_len);
 		} else if (strcmp(argv[i], "-maxcyclewordlen") == 0) {
 			max_cycleword_len = atoi(argv[++i]);
 			printf("\n-maxcyclewordlen %d", max_cycleword_len);
 		} else if (strcmp(argv[i], "-cyclewordlen") == 0) {
 			cycleword_len_present = true;
 			cycleword_len = atoi(argv[++i]);
+			max_cycleword_len = max(max_cycleword_len, 1 + cycleword_len);
 			printf("\n-cyclewordlen %d", cycleword_len);
 		} else if (strcmp(argv[i], "-nsigmathreshold") == 0) {
 			n_sigma_threshold = atof(argv[++i]);
@@ -261,51 +280,66 @@ int main(int argc, char **argv) {
 	best_score = 0.;
 
 	for (i = 0; i < n_cycleword_lengths; i++) {
-		for (j = 3; j < max_keyword_len; j++) {
+		for (j = min_keyword_len; j < plaintext_max_keyword_len; j++) {
+			for (k = min_keyword_len; k < ciphertext_max_keyword_len; k++) {
+				
+				if (plaintext_keyword_len_present && j != plaintext_keyword_len) {
+					continue ;
+				}
 
-			if (keyword_len_present && j != keyword_len) continue;
+				if (ciphertext_keyword_len_present && k != ciphertext_keyword_len) {
+					continue ;
+				}
 
-			if (verbose) {
-				printf("\ncycleword/keyword length = %d, %d\n", cycleword_lengths[i], j);
-			}
+				// Both Vigenere and Quagmire 3 use the same ciphertext and plaintext keywords. 
+				if ((cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) && j != k) continue ;
 
-			// Check the cipher satisfies the cribs. 
+				if (verbose) {
+					printf("\nplaintext, ciphertext, cycleword lengths = %d, %d, %d\n", j, k, cycleword_lengths[i]);
+				}
 
-			if (! cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], verbose)) {
-				printf("\n\nCiphertext does not satisfy the cribs for cycleword length %d. \n\n", cycleword_lengths[i]);
-				continue;
-			}
+				// Check the cipher satisfies the cribs. 
 
-			score = quagmire_shotgun_hill_climber(
-				cipher_type, 
-				cipher_indices, 
-				cipher_len, 
-				crib_indices, 
-				crib_positions, 
-				n_cribs, 
-				cycleword_lengths[i],
-				j,  
-				n_hill_climbs, 
-				n_restarts, 
-				ngram_data, 
-				ngram_size,
-				decrypted, 
-				plaintext_keyword,
-				ciphertext_keyword,
-				cycleword, 
-				backtracking_probability,
-				keyword_permutation_probability,
-				slip_probability, 
-				verbose);
+				if (! cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], verbose)) {
+					if (verbose) {
+						printf("\n\nCiphertext does not satisfy the cribs for cycleword length %d. \n\n", cycleword_lengths[i]);
+					}
+					continue;
+				}
 
-			if (score > best_score) {
-				best_score = score;
-				best_cycleword_length = cycleword_lengths[i];
-				best_keyword_length = j;
-				vec_copy(decrypted, best_decrypted, cipher_len);
-				vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
-				vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
-				vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
+				score = quagmire_shotgun_hill_climber(
+					cipher_type, 
+					cipher_indices, 
+					cipher_len, 
+					crib_indices, 
+					crib_positions, 
+					n_cribs, 
+					cycleword_lengths[i],
+					j,  
+					k,
+					n_hill_climbs, 
+					n_restarts, 
+					ngram_data, 
+					ngram_size,
+					decrypted, 
+					plaintext_keyword,
+					ciphertext_keyword,
+					cycleword, 
+					backtracking_probability,
+					keyword_permutation_probability,
+					slip_probability, 
+					verbose);
+
+				if (score > best_score) {
+					best_score = score;
+					best_cycleword_length = cycleword_lengths[i];
+					best_plaintext_keyword_length = j;
+					best_ciphertext_keyword_length = k;
+					vec_copy(decrypted, best_decrypted, cipher_len);
+					vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
+					vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
+					vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
+				}
 			}
 		}
 	}
@@ -377,7 +411,7 @@ double quagmire_shotgun_hill_climber(
 	int cipher_type, 
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
-	int cycleword_len, int keyword_len, 
+	int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
 	int n_hill_climbs, int n_restarts,
 	float *ngram_data, int ngram_size,
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
@@ -393,6 +427,10 @@ double quagmire_shotgun_hill_climber(
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
 	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi;
 	bool pertubate_keyword_p, contradiction;
+
+	if (cipher_type == VIGENERE) {
+		cycleword_len = ALPHABET_SIZE;
+	}
 
 	n_iterations = 0;
 	n_backtracks = 0;
@@ -415,35 +453,36 @@ double quagmire_shotgun_hill_climber(
 			// Initialise random state.
 			switch (cipher_type) {
 				case VIGENERE:
-					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 					vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 					vec_copy(current_plaintext_keyword_state, current_cycleword_state, ALPHABET_SIZE);
 					break ;
 				case QUAGMIRE_1:
-					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 					straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
 					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 					break ;
 				case QUAGMIRE_2:
 					straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
-					random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, keyword_len);
+					random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 					break ;
 				case QUAGMIRE_3:
-					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 					vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 					break ;
 				case QUAGMIRE_4:
-					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
-					random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, keyword_len);
+					random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+					random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 					break ;
 			}
 
 			current_score = state_score(cipher_indices, cipher_len, 
 				crib_indices, crib_positions, n_cribs, 
-				current_plaintext_keyword_state, current_ciphertext_keyword_state, current_cycleword_state, cycleword_len,
+				current_plaintext_keyword_state, current_ciphertext_keyword_state, 
+				current_cycleword_state, cycleword_len,
 				decrypted, ngram_data, ngram_size);
 		}
 
@@ -460,21 +499,26 @@ double quagmire_shotgun_hill_climber(
 
 			if (pertubate_keyword_p || cipher_type == VIGENERE || frand() < keyword_permutation_probability) {
 				switch (cipher_type) {
+					case VIGENERE:
+						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+						vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);	
+						vec_copy(local_plaintext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
+						break ; 
 					case QUAGMIRE_1:
-						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						break ;
 					case QUAGMIRE_2:
-						pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, keyword_len);
+						pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 						break ;
 					case QUAGMIRE_3:
-						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 						break ;
 					case QUAGMIRE_4:
 						if (frand() < 0.5) {
-							pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, keyword_len);
+							pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						} else {
-							pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, keyword_len);
+							pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 						}
 					break ;
 				}
@@ -482,12 +526,72 @@ double quagmire_shotgun_hill_climber(
 				pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
 			}
 
+#if KOMITET
+	// KOMITE[T] 
+	local_plaintext_keyword_state[0] = 10;
+	local_plaintext_keyword_state[1] = 14;
+	local_plaintext_keyword_state[2] = 12;
+	local_plaintext_keyword_state[3] = 8;
+	local_plaintext_keyword_state[4] = 19;
+	local_plaintext_keyword_state[5] = 4;
+	local_plaintext_keyword_state[5] = 0;
+	local_plaintext_keyword_state[5] = 1;
+	local_plaintext_keyword_state[5] = 2;
+	local_plaintext_keyword_state[5] = 3;
+	local_plaintext_keyword_state[5] = 5;
+	local_plaintext_keyword_state[5] = 6;
+	local_plaintext_keyword_state[5] = 7;
+	local_plaintext_keyword_state[5] = 9;
+	local_plaintext_keyword_state[5] = 11;
+	local_plaintext_keyword_state[5] = 13;
+	local_plaintext_keyword_state[5] = 15;
+	local_plaintext_keyword_state[5] = 16;
+	local_plaintext_keyword_state[5] = 17;
+	local_plaintext_keyword_state[5] = 18;
+	local_plaintext_keyword_state[5] = 20;
+	local_plaintext_keyword_state[5] = 21;
+	local_plaintext_keyword_state[5] = 22;
+	local_plaintext_keyword_state[5] = 23;
+	local_plaintext_keyword_state[5] = 24;
+	local_plaintext_keyword_state[5] = 25;
+#endif
+
+#if KRYPTOS
+	// KRYPTOS
+	local_plaintext_keyword_state[0] = 10;
+	local_plaintext_keyword_state[1] = 17;
+	local_plaintext_keyword_state[2] = 24;
+	local_plaintext_keyword_state[3] = 15;
+	local_plaintext_keyword_state[4] = 19;
+	local_plaintext_keyword_state[5] = 14;
+	local_plaintext_keyword_state[6] = 18;
+	local_plaintext_keyword_state[7] = 0; 
+	local_plaintext_keyword_state[8] = 1;
+	local_plaintext_keyword_state[9] = 2;
+	local_plaintext_keyword_state[10] = 3;
+	local_plaintext_keyword_state[11] = 4;
+	local_plaintext_keyword_state[12] = 5; 
+	local_plaintext_keyword_state[13] = 6; 
+	local_plaintext_keyword_state[14] = 7; 
+	local_plaintext_keyword_state[15] = 8;
+	local_plaintext_keyword_state[16] = 9;
+	local_plaintext_keyword_state[17] = 11; 
+	local_plaintext_keyword_state[18] = 12;
+	local_plaintext_keyword_state[19] = 13;
+	local_plaintext_keyword_state[20] = 16;
+	local_plaintext_keyword_state[21] = 20;
+	local_plaintext_keyword_state[22] = 21; 
+	local_plaintext_keyword_state[23] = 22;
+	local_plaintext_keyword_state[24] = 23; 
+	local_plaintext_keyword_state[25] = 25;
+#endif
 
 			if (cipher_type != VIGENERE) {
 				pertubate_keyword_p = false;
 				contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
 					crib_positions, n_cribs, 
-					local_plaintext_keyword_state, local_cycleword_state, cycleword_len, verbose);
+					local_plaintext_keyword_state, local_ciphertext_keyword_state, 
+					local_cycleword_state, cycleword_len, verbose);
 
 				if (contradiction) {
 					// Cycleword contradiction - must pertubate cycleword. 
@@ -651,8 +755,8 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 
 bool constrain_cycleword(int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs, 
-	int keyword_indices[], int cycleword_indices[], int cycleword_len, 
-	bool verbose) {
+	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+	int cycleword_indices[], int cycleword_len, bool verbose) {
 
 	int i, j, k, crib_char, ciphertext_char, posn_keyword, posn_cycleword, 
 		indx, crib_cyclewords[MAX_CYCLEWORD_LEN];
@@ -679,19 +783,19 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 				crib_char = crib_indices[j];
 				ciphertext_char = cipher_indices[crib_positions[j]];
 
-				// Find position of ciphertext_char in keyword. 
+				// Find position of ciphertext_char in the ciphertext keyword. 
 				
 				for (k = 0; k < ALPHABET_SIZE; k++) {
-					if (keyword_indices[k] == ciphertext_char) {
+					if (ciphertext_keyword_indices[k] == ciphertext_char) {
 						posn_keyword = k;
 						break ;
 					}
 				}
 
-				// Find position of crib_char in keyword. 
+				// Find position of crib_char in plaintext keyword. 
 
 				for (k = 0; k < ALPHABET_SIZE; k++) {
-					if (keyword_indices[k] == crib_char) {
+					if (plaintext_keyword_indices[k] == crib_char) {
 						posn_cycleword = k;
 						break ;
 					}
@@ -706,16 +810,18 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 
 				if (crib_cyclewords[i] == INACTIVE) {
 					if (false) {
-						printf("cycleword char %c at %d\n", keyword_indices[indx] + 'A', i);
+						printf("cycleword char %c at %d\n", plaintext_keyword_indices[indx] + 'A', i);
 					}
-					crib_cyclewords[i] = keyword_indices[indx];
-					cycleword_indices[i] = keyword_indices[indx]; 
-				} else if (crib_cyclewords[i] != keyword_indices[indx]) { // Otherwise, do we have a contradiction? 
+					crib_cyclewords[i] = plaintext_keyword_indices[indx];
+					cycleword_indices[i] = plaintext_keyword_indices[indx]; 
+				} else if (crib_cyclewords[i] != plaintext_keyword_indices[indx]) { // Otherwise, do we have a contradiction? 
 					if (false) {
 						printf("\n\nContradiction at crib %c, posn %d; rejecting keyword ", 
 							crib_indices[j] + 'A', 
 							crib_positions[j]);
-						print_text(keyword_indices, ALPHABET_SIZE);
+						print_text(plaintext_keyword_indices, ALPHABET_SIZE);
+						printf("\n");
+						print_text(ciphertext_keyword_indices, ALPHABET_SIZE);
 						printf("\n");
 					}
 					return true; 
@@ -948,14 +1054,6 @@ void pertubate_cycleword(int state[], int max, int len) {
 
 void pertubate_keyword(int state[], int len, int keyword_len) {
 
-#if KRYPTOS
-	return ;
-#endif
-
-#if KOMITET
-	return ;
-#endif
-
 	int i, j, k, l, temp;
 
 	if (frand() < 0.2) {
@@ -1031,27 +1129,6 @@ void random_keyword(int keyword[], int len, int keyword_len) {
 			keyword[n_chars++] = candidate;
 		}
 	}
-
-#if KOMITET
-	// KOMITE[T] 
-	keyword[0] = 10;
-	keyword[1] = 14;
-	keyword[2] = 12;
-	keyword[3] = 8;
-	keyword[4] = 19;
-	keyword[5] = 4;
-#endif
-
-#if KRYPTOS
-	// KRYPTOS
-	keyword[0] = 10;
-	keyword[1] = 17;
-	keyword[2] = 24;
-	keyword[3] = 15;
-	keyword[4] = 19;
-	keyword[5] = 14;
-	keyword[6] = 18;
-#endif
 
 	// Pad out the rest of the chars. Eg. if we have "KRYPTOS", then here we 
 	// generate "ABCDEFGHIJLMNQUVWXZ" (in index form). 
