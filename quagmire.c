@@ -534,26 +534,26 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[3] = 8;
 	local_plaintext_keyword_state[4] = 19;
 	local_plaintext_keyword_state[5] = 4;
-	local_plaintext_keyword_state[5] = 0;
-	local_plaintext_keyword_state[5] = 1;
-	local_plaintext_keyword_state[5] = 2;
-	local_plaintext_keyword_state[5] = 3;
-	local_plaintext_keyword_state[5] = 5;
-	local_plaintext_keyword_state[5] = 6;
-	local_plaintext_keyword_state[5] = 7;
-	local_plaintext_keyword_state[5] = 9;
-	local_plaintext_keyword_state[5] = 11;
-	local_plaintext_keyword_state[5] = 13;
-	local_plaintext_keyword_state[5] = 15;
-	local_plaintext_keyword_state[5] = 16;
-	local_plaintext_keyword_state[5] = 17;
-	local_plaintext_keyword_state[5] = 18;
-	local_plaintext_keyword_state[5] = 20;
-	local_plaintext_keyword_state[5] = 21;
-	local_plaintext_keyword_state[5] = 22;
-	local_plaintext_keyword_state[5] = 23;
-	local_plaintext_keyword_state[5] = 24;
-	local_plaintext_keyword_state[5] = 25;
+	local_plaintext_keyword_state[6] = 0;
+	local_plaintext_keyword_state[7] = 1;
+	local_plaintext_keyword_state[8] = 2;
+	local_plaintext_keyword_state[9] = 3;
+	local_plaintext_keyword_state[10] = 5;
+	local_plaintext_keyword_state[11] = 6;
+	local_plaintext_keyword_state[12] = 7;
+	local_plaintext_keyword_state[13] = 9;
+	local_plaintext_keyword_state[14] = 11;
+	local_plaintext_keyword_state[15] = 13;
+	local_plaintext_keyword_state[16] = 15;
+	local_plaintext_keyword_state[17] = 16;
+	local_plaintext_keyword_state[18] = 17;
+	local_plaintext_keyword_state[19] = 18;
+	local_plaintext_keyword_state[20] = 20;
+	local_plaintext_keyword_state[21] = 21;
+	local_plaintext_keyword_state[22] = 22;
+	local_plaintext_keyword_state[23] = 23;
+	local_plaintext_keyword_state[24] = 24;
+	local_plaintext_keyword_state[25] = 25;
 #endif
 
 #if KRYPTOS

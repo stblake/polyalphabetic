@@ -8,7 +8,7 @@
 #include <math.h>
 #include <time.h>
 
-#define KRYPTOS 0
+#define KRYPTOS 1
 #define KOMITET 0
 
 #define VIGENERE 0
