@@ -8,8 +8,11 @@
 #include <math.h>
 #include <time.h>
 
-#define KRYPTOS 0
-#define KOMITET 0
+#define KRYPTOS_PT 0
+#define KOMITET_PT 0
+
+#define KRYPTOS_CT 0
+#define KOMITET_CT 0
 
 #define VIGENERE 0
 #define QUAGMIRE_1 1

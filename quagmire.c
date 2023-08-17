@@ -527,8 +527,10 @@ double quagmire_shotgun_hill_climber(
 				pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
 			}
 
-#if KOMITET
-	// KOMITE[T] 
+// The following are K4-specific hacks to manually set the ciphertext and plaintext keywords to KRYPTOS and/or KOMITET.
+
+#if KOMITET_PT
+	// KOMITE[T]
 	local_plaintext_keyword_state[0] = 10;
 	local_plaintext_keyword_state[1] = 14;
 	local_plaintext_keyword_state[2] = 12;
@@ -555,9 +557,48 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[23] = 23;
 	local_plaintext_keyword_state[24] = 24;
 	local_plaintext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+	}
 #endif
 
-#if KRYPTOS
+#if KOMITET_CT
+	// KOMITE[T]
+	local_ciphertext_keyword_state[0] = 10;
+	local_ciphertext_keyword_state[1] = 14;
+	local_ciphertext_keyword_state[2] = 12;
+	local_ciphertext_keyword_state[3] = 8;
+	local_ciphertext_keyword_state[4] = 19;
+	local_ciphertext_keyword_state[5] = 4;
+	local_ciphertext_keyword_state[6] = 0;
+	local_ciphertext_keyword_state[7] = 1;
+	local_ciphertext_keyword_state[8] = 2;
+	local_ciphertext_keyword_state[9] = 3;
+	local_ciphertext_keyword_state[10] = 5;
+	local_ciphertext_keyword_state[11] = 6;
+	local_ciphertext_keyword_state[12] = 7;
+	local_ciphertext_keyword_state[13] = 9;
+	local_ciphertext_keyword_state[14] = 11;
+	local_ciphertext_keyword_state[15] = 13;
+	local_ciphertext_keyword_state[16] = 15;
+	local_ciphertext_keyword_state[17] = 16;
+	local_ciphertext_keyword_state[18] = 17;
+	local_ciphertext_keyword_state[19] = 18;
+	local_ciphertext_keyword_state[20] = 20;
+	local_ciphertext_keyword_state[21] = 21;
+	local_ciphertext_keyword_state[22] = 22;
+	local_ciphertext_keyword_state[23] = 23;
+	local_ciphertext_keyword_state[24] = 24;
+	local_ciphertext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
+
+#if KRYPTOS_PT
 	// KRYPTOS
 	local_plaintext_keyword_state[0] = 10;
 	local_plaintext_keyword_state[1] = 17;
@@ -585,6 +626,44 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[23] = 22;
 	local_plaintext_keyword_state[24] = 23; 
 	local_plaintext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
+#if KRYPTOS_CT
+	// KRYPTOS
+	local_ciphertext_keyword_state[0] = 10;
+	local_ciphertext_keyword_state[1] = 17;
+	local_ciphertext_keyword_state[2] = 24;
+	local_ciphertext_keyword_state[3] = 15;
+	local_ciphertext_keyword_state[4] = 19;
+	local_ciphertext_keyword_state[5] = 14;
+	local_ciphertext_keyword_state[6] = 18;
+	local_ciphertext_keyword_state[7] = 0; 
+	local_ciphertext_keyword_state[8] = 1;
+	local_ciphertext_keyword_state[9] = 2;
+	local_ciphertext_keyword_state[10] = 3;
+	local_ciphertext_keyword_state[11] = 4;
+	local_ciphertext_keyword_state[12] = 5; 
+	local_ciphertext_keyword_state[13] = 6; 
+	local_ciphertext_keyword_state[14] = 7; 
+	local_ciphertext_keyword_state[15] = 8;
+	local_ciphertext_keyword_state[16] = 9;
+	local_ciphertext_keyword_state[17] = 11; 
+	local_ciphertext_keyword_state[18] = 12;
+	local_ciphertext_keyword_state[19] = 13;
+	local_ciphertext_keyword_state[20] = 16;
+	local_ciphertext_keyword_state[21] = 20;
+	local_ciphertext_keyword_state[22] = 21; 
+	local_ciphertext_keyword_state[23] = 22;
+	local_ciphertext_keyword_state[24] = 23; 
+	local_ciphertext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
+	}
 #endif
 
 			if (cipher_type != VIGENERE) {
@@ -1015,7 +1094,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
 		score += ngram_data[indx];
 	}
 
-	return int_pow(ALPHABET_SIZE,ngram_size)*score/(cipher_len - ngram_size);
+	return pow(ALPHABET_SIZE,ngram_size)*score/(cipher_len - ngram_size);
 }
 
 
