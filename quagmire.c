@@ -6,7 +6,8 @@
 
 
 // TODO: 	- remove decryption from state_score. 
-// 			- cipher tests for all quagmire types.  
+//			- weights in scoring function should be command line args. 
+//			- update documentation. 
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
@@ -46,7 +47,7 @@
 			lines will not be read. 
 
 		/crib file/ -- uses "_" for unknown chars. Just a single line of the same length
-			as the ciphers contained in the cipher file. For Kryptos K4 cipher it should contain
+			as the ciphers contained in the cipher file. For the Kryptos K4 cipher it should contain
 
 		_____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
 	
@@ -425,7 +426,7 @@ double quagmire_shotgun_hill_climber(
 		best_plaintext_keyword_state[ALPHABET_SIZE], best_ciphertext_keyword_state[ALPHABET_SIZE],
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
-	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi;
+	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi, entropy_score;
 	bool pertubate_keyword_p, contradiction;
 
 	if (cipher_type == VIGENERE) {
@@ -647,6 +648,7 @@ double quagmire_shotgun_hill_climber(
 
 					ioc = index_of_coincidence(decrypted, cipher_len);
 					chi = chi_squared(decrypted, cipher_len);
+					entropy_score = entropy(decrypted, cipher_len);
 
 					elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
 					n_iter_per_sec = ((double) n_iterations)/elapsed;
@@ -659,6 +661,7 @@ double quagmire_shotgun_hill_climber(
 					printf("%d\t[slips]\n", n_explore);
 					printf("%.2f\t[contradiction pct]\n", ((double) n_contradictions)/n_iterations);
 					printf("%.4f\t[IOC]\n", ioc);
+					printf("%.4f\t[entropy]\n", entropy_score);
 					printf("%.2f\t[chi-squared]\n", chi);
 					printf("%.2f\t[score]\n", best_score);
 					print_text(best_plaintext_keyword_state, ALPHABET_SIZE);
@@ -847,14 +850,17 @@ double state_score(int cipher_indices[], int cipher_len,
 			int decrypted[], 
 			float *ngram_data, int ngram_size) {
 
-	double score = 0., decrypted_ngram_score, decrypted_crib_score, 
-	weight_ngram, weight_crib; 
+	double score, decrypted_ngram_score, decrypted_crib_score, 
+	weight_ngram, weight_crib, weight_ioc, weight_entropy;
 
 	// TODO: these should be command line args. 
-	weight_ngram = 1.;
-	weight_crib  = 3.;
+	weight_ngram = 2.;
+	weight_crib  = 6.;
+	weight_ioc   = 1.;
+	weight_entropy = 1.;
 
 	// Decrypt cipher using the candidate keyword and cycleword. 
+
 	quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
 		plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len);
 
@@ -866,19 +872,25 @@ double state_score(int cipher_indices[], int cipher_len,
 
 	decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
 
-	// Expected IOC for English is ~~ 1.742. 
+	// Expected IOC. 
 
-	// mean_english_ioc = 1.742;
-	// ioc = 26.*index_of_coincidence(decrypted, cipher_len);	
-	// ioc_score = 1./(1. + pow(ioc - mean_english_ioc, 2));
-	// printf("\nioc, score = %.4f, %.4f", ioc, ioc_score);
+	double mean_english_ioc, ioc_score;
+	mean_english_ioc = 1.742;
+	ioc_score = ALPHABET_SIZE*index_of_coincidence(decrypted, cipher_len);	
+	ioc_score = 1./(1. + pow(ioc_score - mean_english_ioc, 2));
 
-	// Expected entropy for English is ~~ 2.85. 
+	// Expected entropy. 
 
-	// UNDER CONSTRUCTION
+	double mean_english_entropy, entropy_score; 
+	mean_english_entropy = 2.85;
+	entropy_score = entropy(decrypted, cipher_len);
+	entropy_score = 1./(1. + pow(entropy_score - mean_english_entropy, 2));
 
-	score = weight_ngram*decrypted_ngram_score + weight_crib*decrypted_crib_score;
-	score /= weight_ngram + weight_crib;
+	// printf("\n%.4f, %.4f, %.4f, %.4f", decrypted_ngram_score, decrypted_crib_score, ioc_score, entropy_score);
+
+	score = weight_ngram*decrypted_ngram_score + weight_crib*decrypted_crib_score + 
+		weight_ioc*ioc_score + weight_entropy*entropy_score;
+	score /= weight_ngram + weight_crib + weight_ioc + weight_ioc + weight_entropy;
 
 	return score;
 }
@@ -897,8 +909,10 @@ double entropy(int text[], int len) {
 	tally(text, len, frequencies, ALPHABET_SIZE);
 
 	for (int i = 0; i < ALPHABET_SIZE; i++) {
-		freq = ((double) frequencies[i])/len;
-		entropy -= freq*log2(freq);
+		if (frequencies[i] > 0) {
+			freq = ((double) frequencies[i])/len;
+			entropy -= freq*log(freq);
+		}
 	}
 	// printf("entropy = %.4f\n", entropy);
 
@@ -988,12 +1002,16 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
 
 	for (int i = 0; i < cipher_len - ngram_size; i++) {
 
+		// printf("\n");
 		// Extract slice decrypted[i : i + ngram_size].
 		for (int j = 0; j < ngram_size; j++) {
 			ngram[j] = decrypted[i + j];
+			// printf("%c", ngram[j] + 'A');
 		}
+		// printf("\t");
 
 		indx = ngram_index_int(ngram, ngram_size);
+		// printf("%.12f", ngram_data[indx]);
 		score += ngram_data[indx];
 	}
 
@@ -1229,11 +1247,12 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
  
 int ngram_index_str(char *ngram, int ngram_size) {
 
-	int c, index = 0;
+	int c, index = 0, base = 1;
 
 	for (int i = 0; i < ngram_size; i++) {
 		c = toupper(ngram[i]) - 'A';
-		index += c*int_pow(ALPHABET_SIZE, i);
+		index += c*base;
+		base *= ALPHABET_SIZE;
 	}
 
 	return index;
@@ -1241,10 +1260,11 @@ int ngram_index_str(char *ngram, int ngram_size) {
 
 int ngram_index_int(int *ngram, int ngram_size) {
 
-	int index = 0;
+	int index = 0, base = 1;
 
 	for (int i = 0; i < ngram_size; i++) {
-		index += ngram[i]*int_pow(ALPHABET_SIZE, i);
+		index += ngram[i]*base;
+		base *= ALPHABET_SIZE;
 	}
 
 	return index;
@@ -1415,7 +1435,7 @@ double vec_stddev(double vec[], int len) {
 
 void vec_print(int vec[], int len) {
 	for (int i = 0; i < len; i++) {
-		printf("%d, ", vec[i]);
+		printf("%d ", vec[i]);
 	}
 	printf("\n");
 }
