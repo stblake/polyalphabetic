@@ -13,7 +13,6 @@
 
 #include "quagmire.h"
 
-
 /* Program syntax:
 
 	$ ./quagmire \
@@ -63,7 +62,7 @@ int main(int argc, char **argv) {
 
 	int i, j, k, cipher_type = 3, cipher_len, plaintext_keyword_len, cycleword_len, ngram_size = 0,
 		ciphertext_keyword_len, ciphertext_max_keyword_len = 12, 
-		min_keyword_len = 3, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+		min_keyword_len = 6, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
 		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length,
 		best_plaintext_keyword_length, best_ciphertext_keyword_length, 
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
@@ -284,22 +283,27 @@ int main(int argc, char **argv) {
 		for (j = min_keyword_len; j < plaintext_max_keyword_len; j++) {
 			for (k = min_keyword_len; k < ciphertext_max_keyword_len; k++) {
 				
+				// User-specified plaintext keyword length. 
+
 				if (plaintext_keyword_len_present && j != plaintext_keyword_len) {
 					continue ;
 				}
+
+				// User-specified ciphertext keyword length. 
 
 				if (ciphertext_keyword_len_present && k != ciphertext_keyword_len) {
 					continue ;
 				}
 
 				// Both Vigenere and Quagmire 3 use the same ciphertext and plaintext keywords. 
+
 				if ((cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) && j != k) continue ;
 
 				if (verbose) {
 					printf("\nplaintext, ciphertext, cycleword lengths = %d, %d, %d\n", j, k, cycleword_lengths[i]);
 				}
 
-				// Check the cipher satisfies the cribs. 
+				// Check the cipher satisfies the cribs for the cycleword lenth. 
 
 				if (! cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], verbose)) {
 					if (verbose) {
@@ -307,6 +311,8 @@ int main(int argc, char **argv) {
 					}
 					continue;
 				}
+
+				// Run the hill-climber. 
 
 				score = quagmire_shotgun_hill_climber(
 					cipher_type, 
@@ -330,6 +336,8 @@ int main(int argc, char **argv) {
 					keyword_permutation_probability,
 					slip_probability, 
 					verbose);
+
+				// Keep the best solution. 
 
 				if (score > best_score) {
 					best_score = score;
@@ -406,7 +414,7 @@ int main(int argc, char **argv) {
 
 
 
-// slippery stochastic shotgun restarted hill climber for Quagmire 3 cipher
+// Slippery stochastic shotgun restarted hill climber for Quagmire 3 cipher
 
 double quagmire_shotgun_hill_climber(
 	int cipher_type, 
@@ -486,6 +494,146 @@ double quagmire_shotgun_hill_climber(
 				current_cycleword_state, cycleword_len,
 				decrypted, ngram_data, ngram_size);
 		}
+
+// The following are K4-specific hacks to manually set the ciphertext and plaintext keywords to KRYPTOS and/or KOMITET.
+
+#if KOMITET_PT
+	// KOMITE[T]
+	current_plaintext_keyword_state[0] = 10;
+	current_plaintext_keyword_state[1] = 14;
+	current_plaintext_keyword_state[2] = 12;
+	current_plaintext_keyword_state[3] = 8;
+	current_plaintext_keyword_state[4] = 19;
+	current_plaintext_keyword_state[5] = 4;
+	current_plaintext_keyword_state[6] = 0;
+	current_plaintext_keyword_state[7] = 1;
+	current_plaintext_keyword_state[8] = 2;
+	current_plaintext_keyword_state[9] = 3;
+	current_plaintext_keyword_state[10] = 5;
+	current_plaintext_keyword_state[11] = 6;
+	current_plaintext_keyword_state[12] = 7;
+	current_plaintext_keyword_state[13] = 9;
+	current_plaintext_keyword_state[14] = 11;
+	current_plaintext_keyword_state[15] = 13;
+	current_plaintext_keyword_state[16] = 15;
+	current_plaintext_keyword_state[17] = 16;
+	current_plaintext_keyword_state[18] = 17;
+	current_plaintext_keyword_state[19] = 18;
+	current_plaintext_keyword_state[20] = 20;
+	current_plaintext_keyword_state[21] = 21;
+	current_plaintext_keyword_state[22] = 22;
+	current_plaintext_keyword_state[23] = 23;
+	current_plaintext_keyword_state[24] = 24;
+	current_plaintext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
+#if KOMITET_CT
+	// KOMITE[T]
+	current_ciphertext_keyword_state[0] = 10;
+	current_ciphertext_keyword_state[1] = 14;
+	current_ciphertext_keyword_state[2] = 12;
+	current_ciphertext_keyword_state[3] = 8;
+	current_ciphertext_keyword_state[4] = 19;
+	current_ciphertext_keyword_state[5] = 4;
+	current_ciphertext_keyword_state[6] = 0;
+	current_ciphertext_keyword_state[7] = 1;
+	current_ciphertext_keyword_state[8] = 2;
+	current_ciphertext_keyword_state[9] = 3;
+	current_ciphertext_keyword_state[10] = 5;
+	current_ciphertext_keyword_state[11] = 6;
+	current_ciphertext_keyword_state[12] = 7;
+	current_ciphertext_keyword_state[13] = 9;
+	current_ciphertext_keyword_state[14] = 11;
+	current_ciphertext_keyword_state[15] = 13;
+	current_ciphertext_keyword_state[16] = 15;
+	current_ciphertext_keyword_state[17] = 16;
+	current_ciphertext_keyword_state[18] = 17;
+	current_ciphertext_keyword_state[19] = 18;
+	current_ciphertext_keyword_state[20] = 20;
+	current_ciphertext_keyword_state[21] = 21;
+	current_ciphertext_keyword_state[22] = 22;
+	current_ciphertext_keyword_state[23] = 23;
+	current_ciphertext_keyword_state[24] = 24;
+	current_ciphertext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
+
+#if KRYPTOS_PT
+	// KRYPTOS
+	current_plaintext_keyword_state[0] = 10;
+	current_plaintext_keyword_state[1] = 17;
+	current_plaintext_keyword_state[2] = 24;
+	current_plaintext_keyword_state[3] = 15;
+	current_plaintext_keyword_state[4] = 19;
+	current_plaintext_keyword_state[5] = 14;
+	current_plaintext_keyword_state[6] = 18;
+	current_plaintext_keyword_state[7] = 0; 
+	current_plaintext_keyword_state[8] = 1;
+	current_plaintext_keyword_state[9] = 2;
+	current_plaintext_keyword_state[10] = 3;
+	current_plaintext_keyword_state[11] = 4;
+	current_plaintext_keyword_state[12] = 5; 
+	current_plaintext_keyword_state[13] = 6; 
+	current_plaintext_keyword_state[14] = 7; 
+	current_plaintext_keyword_state[15] = 8;
+	current_plaintext_keyword_state[16] = 9;
+	current_plaintext_keyword_state[17] = 11; 
+	current_plaintext_keyword_state[18] = 12;
+	current_plaintext_keyword_state[19] = 13;
+	current_plaintext_keyword_state[20] = 16;
+	current_plaintext_keyword_state[21] = 20;
+	current_plaintext_keyword_state[22] = 21; 
+	current_plaintext_keyword_state[23] = 22;
+	current_plaintext_keyword_state[24] = 23; 
+	current_plaintext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
+#if KRYPTOS_CT
+	// KRYPTOS
+	current_ciphertext_keyword_state[0] = 10;
+	current_ciphertext_keyword_state[1] = 17;
+	current_ciphertext_keyword_state[2] = 24;
+	current_ciphertext_keyword_state[3] = 15;
+	current_ciphertext_keyword_state[4] = 19;
+	current_ciphertext_keyword_state[5] = 14;
+	current_ciphertext_keyword_state[6] = 18;
+	current_ciphertext_keyword_state[7] = 0; 
+	current_ciphertext_keyword_state[8] = 1;
+	current_ciphertext_keyword_state[9] = 2;
+	current_ciphertext_keyword_state[10] = 3;
+	current_ciphertext_keyword_state[11] = 4;
+	current_ciphertext_keyword_state[12] = 5; 
+	current_ciphertext_keyword_state[13] = 6; 
+	current_ciphertext_keyword_state[14] = 7; 
+	current_ciphertext_keyword_state[15] = 8;
+	current_ciphertext_keyword_state[16] = 9;
+	current_ciphertext_keyword_state[17] = 11; 
+	current_ciphertext_keyword_state[18] = 12;
+	current_ciphertext_keyword_state[19] = 13;
+	current_ciphertext_keyword_state[20] = 16;
+	current_ciphertext_keyword_state[21] = 20;
+	current_ciphertext_keyword_state[22] = 21; 
+	current_ciphertext_keyword_state[23] = 22;
+	current_ciphertext_keyword_state[24] = 23; 
+	current_ciphertext_keyword_state[25] = 25;
+
+	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
+	}
+#endif
+
 
 		pertubate_keyword_p = true;
 
