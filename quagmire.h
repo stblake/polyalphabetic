@@ -9,7 +9,7 @@
 #include <time.h>
 
 #define KRYPTOS_PT 0
-#define KOMITET_PT 1
+#define KOMITET_PT 0
 
 #define KRYPTOS_CT 0
 #define KOMITET_CT 0

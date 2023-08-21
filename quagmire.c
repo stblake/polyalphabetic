@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
 
 	int i, j, k, cipher_type = 3, cipher_len, plaintext_keyword_len, cycleword_len, ngram_size = 0,
 		ciphertext_keyword_len, ciphertext_max_keyword_len = 12, 
-		min_keyword_len = 6, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+		min_keyword_len = 5, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
 		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length,
 		best_plaintext_keyword_length, best_ciphertext_keyword_length, 
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
@@ -280,8 +280,8 @@ int main(int argc, char **argv) {
 	best_score = 0.;
 
 	for (i = 0; i < n_cycleword_lengths; i++) {
-		for (j = min_keyword_len; j < plaintext_max_keyword_len; j++) {
-			for (k = min_keyword_len; k < ciphertext_max_keyword_len; k++) {
+		for (j = min_keyword_len; j < plaintext_max_keyword_len; j += 2) {
+			for (k = min_keyword_len; k < ciphertext_max_keyword_len; k += 2) {
 				
 				// User-specified plaintext keyword length. 
 
@@ -669,7 +669,7 @@ double quagmire_shotgun_hill_climber(
 						} else {
 							pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 						}
-					break ;
+						break ;
 				}
 			} else {
 				pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
