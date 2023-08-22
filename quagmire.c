@@ -111,16 +111,19 @@ int main(int argc, char **argv) {
 			ciphertext_keyword_len = plaintext_keyword_len;
 			plaintext_max_keyword_len = max(plaintext_max_keyword_len, 1 + plaintext_keyword_len);
 			ciphertext_max_keyword_len = max(ciphertext_max_keyword_len, 1 + ciphertext_keyword_len);
+			min_keyword_len = plaintext_keyword_len;
 			printf("\n-keywordlen %d", plaintext_keyword_len);			
 		} else if (strcmp(argv[i], "-plaintextkeywordlen") == 0) {
 			plaintext_keyword_len_present = true;
 			plaintext_keyword_len = atoi(argv[++i]);
 			plaintext_max_keyword_len = max(plaintext_max_keyword_len, 1 + plaintext_keyword_len);
+			min_keyword_len = plaintext_keyword_len;
 			printf("\n-plaintextkeywordlen %d", plaintext_keyword_len);
 		} else if (strcmp(argv[i], "-ciphertextkeywordlen") == 0) {
 			ciphertext_keyword_len_present = true;
 			ciphertext_keyword_len = atoi(argv[++i]);
 			ciphertext_max_keyword_len = max(ciphertext_max_keyword_len, 1 + ciphertext_keyword_len);
+			min_keyword_len = ciphertext_keyword_len;
 			printf("\n-ciphertextkeywordlen %d", ciphertext_keyword_len);
 		} else if (strcmp(argv[i], "-maxcyclewordlen") == 0) {
 			max_cycleword_len = atoi(argv[++i]);
