@@ -368,8 +368,19 @@ int main(int argc, char **argv) {
 	print_text(best_decrypted, cipher_len);
 	printf("\n\n");
 
-	// TODO: display the Vigenere tablau. 
+	// Single line summary of results for subsequent filtering and analysis. 
 
+	printf("\n\n>>> %.2f, %d, %s, ", best_score, cipher_type, ciphertext_file);
+	print_text(cipher_indices, cipher_len);
+	printf(", ");
+	print_text(best_plaintext_keyword, ALPHABET_SIZE);
+	printf(", ");
+	print_text(best_ciphertext_keyword, ALPHABET_SIZE);
+	printf(", ");
+	print_text(best_cycleword, best_cycleword_length);
+	printf(", ");
+	print_text(best_decrypted, cipher_len);
+	printf("\n\n");
 
 	// K4-specific checks for BERLIN, CLOCK, EAST, NORTH, BERLINCLOCK and EASTNORTHEAST. 
 
@@ -1386,6 +1397,8 @@ void random_cycleword(int cycleword[], int max, int keyword_len) {
 
 
 
+// English monogram frequency-weighted pseudo-random selection. 
+
 int rand_int_frequency_weighted(int state[], int min_index, int max_index) {
 
 	double total, rnd, cumsum;
@@ -1406,6 +1419,7 @@ int rand_int_frequency_weighted(int state[], int min_index, int max_index) {
 
 	return max_index - 1;
 }
+
 
 
 // Load n-gram data from file. 
