@@ -1151,38 +1151,6 @@ double entropy(int text[], int len) {
 
 
 
-// Ref: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
-double english_monograms[] = {
-	0.085517, // A
-	0.016048, // B
-	0.031644, // C
-	0.038712, // D
-	0.120965, // E
-	0.021815, // F
-	0.020863, // G
-	0.049557, // H
-	0.073251, // I
-	0.002198, // J
-	0.008087, // K
-	0.042065, // L
-	0.025263, // M
-	0.071722, // N
-	0.074673, // O
-	0.020662, // P
-	0.001040, // Q
-	0.063327, // R
-	0.067282, // S
-	0.089381, // T
-	0.026816, // U
-	0.010593, // V
-	0.018254, // W
-	0.001914, // X
-	0.017214, // Y
-	0.001138  // Z
-};
-
-
-
 // Chi-squared score. 
 
 double chi_squared(int plaintext[], int len) {
@@ -1316,8 +1284,13 @@ void pertubate_keyword(int state[], int len, int keyword_len) {
 		// a letter outside and remake the letters following the 
 		// keyspace in normal order.
 
+#if FREQUENCY_WEIGHTED_SELECTION
+		i = rand_int_frequency_weighted(state, 0, keyword_len);
+		j = rand_int_frequency_weighted(state, keyword_len, len);
+#else
 		i = rand_int(0, keyword_len);
 		j = rand_int(keyword_len, len);
+#endif
 
 		// printf("\ni,j = %d,%d\n", i, j);
 
@@ -1412,6 +1385,29 @@ void random_cycleword(int cycleword[], int max, int keyword_len) {
 }
 
 
+
+int rand_int_frequency_weighted(int state[], int min_index, int max_index) {
+
+	double total, rnd, cumsum;
+
+	total = 0.;
+	for (int i = min_index; i < max_index; i++) {
+		total += english_monograms[state[i]];
+	}
+
+	rnd = frand();
+	cumsum = 0.;
+	for (int i = min_index; i < max_index; i++) {
+		cumsum += english_monograms[state[i]]/total;
+		if (cumsum > rnd) {
+			return i;
+		}
+	}
+
+	return max_index - 1;
+}
+
+
 // Load n-gram data from file. 
 
 float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
@@ -1499,17 +1495,6 @@ int ngram_index_int(int *ngram, int ngram_size) {
 
 	return index;
 }
-
-
-
-// English word length frequencies. (Ref: https://math.wvu.edu/~hdiamond/Math222F17/Sigurd_et_al-2004-Studia_Linguistica.pdf)
-
-int n_english_word_length_frequency_letters = 25;
-double english_word_length_frequencies[] = {
-	0.0316, 0.16975, 0.21192, 0.15678, 0.10852, 0.08524, 0.07724, 
-	0.05623, 0.04032, 0.02766, 0.01582, 0.00917, 0.00483, 0.00262, 
-	0.00099, 0.0005, 0.00027, 0.00022, 0.00011, 0.00006, 0.00005, 
-	0.00002, 0.00001, 0.00001, 0.00001};
 
 
 
@@ -1715,6 +1700,8 @@ void tally(int plaintext[], int len, int frequencies[], int n_frequencies) {
 	return ;
 }
 
+
+
 // Friedman's Index of Coincidence. 
 
 float index_of_coincidence(int plaintext[], int len) {
@@ -1744,6 +1731,7 @@ void straight_alphabet(int keyword[], int len) {
 
 	return ;
 }
+
 
 
 bool file_exists(const char *filename) {

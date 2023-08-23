@@ -27,11 +27,55 @@
 #define MAX_CYCLEWORD_LEN 30
 #define MAX_NGRAM_SIZE 8
 
+#define FREQUENCY_WEIGHTED_SELECTION 1
+
 #define INACTIVE -9999
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
+
+
+// English word length frequencies. (Ref: https://math.wvu.edu/~hdiamond/Math222F17/Sigurd_et_al-2004-Studia_Linguistica.pdf)
+
+int n_english_word_length_frequency_letters = 25;
+double english_word_length_frequencies[] = {
+	0.0316, 0.16975, 0.21192, 0.15678, 0.10852, 0.08524, 0.07724, 
+	0.05623, 0.04032, 0.02766, 0.01582, 0.00917, 0.00483, 0.00262, 
+	0.00099, 0.0005, 0.00027, 0.00022, 0.00011, 0.00006, 0.00005, 
+	0.00002, 0.00001, 0.00001, 0.00001};
+
+
+
+// Ref: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
+double english_monograms[] = {
+	0.085517, // A
+	0.016048, // B
+	0.031644, // C
+	0.038712, // D
+	0.120965, // E
+	0.021815, // F
+	0.020863, // G
+	0.049557, // H
+	0.073251, // I
+	0.002198, // J
+	0.008087, // K
+	0.042065, // L
+	0.025263, // M
+	0.071722, // N
+	0.074673, // O
+	0.020662, // P
+	0.001040, // Q
+	0.063327, // R
+	0.067282, // S
+	0.089381, // T
+	0.026816, // U
+	0.010593, // V
+	0.018254, // W
+	0.001914, // X
+	0.017214, // Y
+	0.001138  // Z
+};
 
 
 
@@ -86,7 +130,7 @@ void random_cycleword(int cycleword[], int max, int keyword_len);
 void pertubate_cycleword(int state[], int max, int len);
 
 int rand_int(int min, int max);
-
+int rand_int_frequency_weighted(int state[], int min_index, int max_index);
 
 double mean_ioc(int text[], int len, int len_cycleword, int *caesar_column);
 void estimate_cycleword_lengths(int text[], int len, int max_cycleword_len, double n_sigma_threshold,
