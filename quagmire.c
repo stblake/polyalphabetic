@@ -368,6 +368,53 @@ int main(int argc, char **argv) {
 	print_text(best_decrypted, cipher_len);
 	printf("\n\n");
 
+	// K4-specific checks for BERLIN, CLOCK, EAST, NORTH, BERLINCLOCK and EASTNORTHEAST. 
+
+	char plaintext_string[MAX_CIPHER_LENGTH];
+	bool berlin_present = false, clock_present = false, east_present = false, north_present = false, 
+		berlinclock_present = false, eastnortheast_present = false; 
+
+	for (int i = 0; i < cipher_len; i++) {
+		plaintext_string[i] = best_decrypted[i] + 'A';
+	}
+	plaintext_string[cipher_len] = '\0';
+
+	if (strstr(plaintext_string, "BERLIN") != NULL) {
+		berlin_present = true;
+		printf("**** \'BERLIN\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "CLOCK") != NULL) {
+		clock_present = true;
+		printf("**** \'CLOCK\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "EAST") != NULL) {
+		east_present = true;
+		printf("**** \'EAST\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "NORTH") != NULL) {
+		north_present = true;
+		printf("**** \'NORTH\' PRESENT!!! ****\n");
+	}
+
+	if (strstr(plaintext_string, "BERLINCLOCK") != NULL) {
+		berlinclock_present = true;
+		for (i = 0; i < 1000; i++) {
+			printf("**** \'BERLINCLOCK\' PRESENT!!! ****");
+		}
+	}
+
+	if (strstr(plaintext_string, "EASTNORTHEAST") != NULL) {
+		eastnortheast_present = true;
+		for (i = 0; i < 1000; i++) {
+			printf("**** \'EASTNORTHEAST\' PRESENT!!! ****");
+		}
+	}
+
+	printf("\n\n");
+
 	// Single line summary of results for subsequent filtering and analysis. 
 
 	printf("\n\n>>> %.2f, %d, %s, ", best_score, cipher_type, ciphertext_file);
@@ -380,45 +427,24 @@ int main(int argc, char **argv) {
 	print_text(best_cycleword, best_cycleword_length);
 	printf(", ");
 	print_text(best_decrypted, cipher_len);
-	printf("\n\n");
-
-	// K4-specific checks for BERLIN, CLOCK, EAST, NORTH, BERLINCLOCK and EASTNORTHEAST. 
-
-	char plaintext_string[MAX_CIPHER_LENGTH];
-
-	for (int i = 0; i < cipher_len; i++) {
-		plaintext_string[i] = best_decrypted[i] + 'A';
+	if (berlin_present) {
+		printf(", BERLIN");
 	}
-	plaintext_string[cipher_len] = '\0';
-
-	if (strstr(plaintext_string, "BERLIN") != NULL) {
-		printf("**** \'BERLIN\' PRESENT!!! ****\n");
+	if (clock_present) {
+		printf(", CLOCK");
 	}
-
-	if (strstr(plaintext_string, "CLOCK") != NULL) {
-		printf("**** \'CLOCK\' PRESENT!!! ****\n");
+	if (east_present) {
+		printf(", EAST");
 	}
-
-	if (strstr(plaintext_string, "EAST") != NULL) {
-		printf("**** \'EAST\' PRESENT!!! ****\n");
+	if (north_present) {
+		printf(", NORTH");
 	}
-
-	if (strstr(plaintext_string, "NORTH") != NULL) {
-		printf("**** \'NORTH\' PRESENT!!! ****\n");
+	if (berlinclock_present) {
+		printf(", BERLINCLOCK");
 	}
-
-	if (strstr(plaintext_string, "BERLINCLOCK") != NULL) {
-		for (i = 0; i < 1000; i++) {
-			printf("**** \'BERLINCLOCK\' PRESENT!!! ****");
-		}
+	if (eastnortheast_present) {
+		printf(", EASTNORTHEAST");
 	}
-
-	if (strstr(plaintext_string, "EASTNORTHEAST") != NULL) {
-		for (i = 0; i < 1000; i++) {
-			printf("**** \'EASTNORTHEAST\' PRESENT!!! ****");
-		}
-	}
-
 	printf("\n\n");
 
 	free(ngram_data);
