@@ -17,13 +17,17 @@ After about 2 seconds we arrive at the following decryption:
 
 ```
 2.15	[sec]
-268K	[it/sec]
-33	[backtracks]
-231	[restarts]
-740	[iterations]
-281	[slips]
+358K	[it/sec]
+44	[backtracks]
+308	[restarts]
+32	[iterations]
+406	[slips]
 1.00	[contradiction pct]
-3.51	[score]
+0.0642	[IOC]
+2.7714	[entropy]
+0.12	[chi-squared]
+2.73	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
 KRYPTOSABCDEFGHIJLMNQUVWXZ
 KOMITET
 MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWILLSEEFURTHERINFORM
