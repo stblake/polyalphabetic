@@ -1,5 +1,5 @@
 # Quagmire Cipher Solver
-stochastic shotgun-restarted hill climber for Quagmire-type ciphers.
+stochastic shotgun-restarted hill climber for Quagmire (0 (Vigenere), I, II, III, IV) ciphers. 
 
 Here is a simple example where we solve the following length 97, Quagmire III cipher
 
