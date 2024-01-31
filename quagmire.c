@@ -60,8 +60,8 @@
 
 int main(int argc, char **argv) {
 
-	int i, j, k, cipher_type = 3, cipher_len, plaintext_keyword_len, cycleword_len, ngram_size = 0,
-		ciphertext_keyword_len, ciphertext_max_keyword_len = 12, 
+	int i, j, k, cipher_type = 3, cipher_len, cycleword_len, ngram_size = 0,
+		ciphertext_keyword_len = 7, plaintext_keyword_len = 7, ciphertext_max_keyword_len = 12, 
 		min_keyword_len = 7, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
 		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length,
 		best_plaintext_keyword_length, best_ciphertext_keyword_length, 
@@ -70,8 +70,8 @@ int main(int argc, char **argv) {
 		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
 		plaintext_keyword[ALPHABET_SIZE], ciphertext_keyword[ALPHABET_SIZE], cycleword[ALPHABET_SIZE],
 		best_plaintext_keyword[ALPHABET_SIZE], best_ciphertext_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
-	double n_sigma_threshold = 1., backtracking_probability = 0.01, keyword_permutation_probability = 0.01, 
-		slip_probability = 0.0005, score, best_score;
+	double n_sigma_threshold = 1., ioc_threshold = 0.047, backtracking_probability = 0.01, 
+	keyword_permutation_probability = 0.01, slip_probability = 0.0005, score, best_score;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
@@ -153,6 +153,9 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-slipprob") == 0) {
 			slip_probability = atof(argv[++i]);
 			printf("\n-slipprob %.4f", slip_probability);
+		} else if (strcmp(argv[i], "-iocthreshold") == 0) {
+			ioc_threshold = atof(argv[++i]);
+			printf("\n-iocthreshold %.4f", ioc_threshold);
 		} else if (strcmp(argv[i], "-verbose") == 0) {
 			verbose = true;
 			printf("\n-verbose ");
@@ -259,6 +262,7 @@ int main(int argc, char **argv) {
 			cipher_len, 
 			max_cycleword_len, 
 			n_sigma_threshold,
+			ioc_threshold, 
 			&n_cycleword_lengths, 
 			cycleword_lengths, 
 			verbose);
@@ -278,13 +282,13 @@ int main(int argc, char **argv) {
 		cycleword_lengths[0] = cycleword_len;
 	}
 
-	// For each cycleword length and keyword length combination, run the 'shotgun' hill climber. 
+	// For each cycleword length and keyword length combination, run the 'shotgun' hill-climber. 
 
 	best_score = 0.;
 
 	for (i = 0; i < n_cycleword_lengths; i++) {
-		for (j = min_keyword_len; j < plaintext_max_keyword_len; j++) {
-			for (k = min_keyword_len; k < ciphertext_max_keyword_len; k++) {
+		for (j = min(min_keyword_len, plaintext_keyword_len); j < plaintext_max_keyword_len; j++) {
+			for (k = min(min_keyword_len, ciphertext_keyword_len); k < ciphertext_max_keyword_len; k++) {
 				
 				// User-specified plaintext keyword length. 
 
@@ -1230,7 +1234,32 @@ double crib_score(int text[], int len, int crib_indices[], int crib_positions[],
 
 // Score a plaintext based on ngram frequencies. 
 
+
 double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size) {
+
+	int index, base;
+	double score = 0.;
+
+	for (int i = 0; i < cipher_len - ngram_size; i++) {
+
+		index = 0;
+		base = 1;
+
+		for (int j = 0; j < ngram_size; j++) {
+			index += decrypted[i + j]*base;
+			base *= ALPHABET_SIZE;
+		}
+
+		score += ngram_data[index];
+	}
+
+	return pow(ALPHABET_SIZE,ngram_size)*score/(cipher_len - ngram_size);
+}
+
+
+// Old, slow ngram score routine. 
+
+double ngram_score_slow(int decrypted[], int cipher_len, float *ngram_data, int ngram_size) {
 
 	int indx, ngram[MAX_NGRAM_SIZE];
 	double score = 0.;
@@ -1545,6 +1574,7 @@ void estimate_cycleword_lengths(
 	int len, 
 	int max_cycleword_len, 
 	double n_sigma_threshold,
+	double ioc_threshold,
 	int *n_cycleword_lengths, 
 	int cycleword_lengths[], 
 	bool verbose) {
@@ -1583,7 +1613,7 @@ void estimate_cycleword_lengths(
 		threshold = false;
 		max_ioc = 0.;
 		for (j = 0; j < max_cycleword_len; j++) {
-			if (mu_ioc_normalised[j] > n_sigma_threshold && mu_ioc_normalised[j] > max_ioc && mu_ioc_normalised[j] < current_ioc) {
+			if (mu_ioc_normalised[j] > n_sigma_threshold && mu_ioc[j] > ioc_threshold && mu_ioc_normalised[j] > max_ioc && mu_ioc_normalised[j] < current_ioc) {
 				threshold = true;
 				max_ioc = mu_ioc_normalised[j];
 				cycleword_lengths[i] = j + 1;
@@ -1618,7 +1648,7 @@ void estimate_cycleword_lengths(
 		printf("\nlen\tmean IOC\tnorm IOC\tword len norm IOC\n");
 		for (i = 0; i < max_cycleword_len; i++) {
 			if (verbose) {
-				printf("%d\t%.3f\t\t%.2f\t\t%.2f\n", i + 1, mu_ioc[i], mu_ioc_normalised[i], word_len_norm_ioc[i]);
+				printf("%d\t%.4f\t\t%.2f\t\t%.2f\n", i + 1, mu_ioc[i], mu_ioc_normalised[i], word_len_norm_ioc[i]);
 			}
 		}
 	}
@@ -1651,7 +1681,7 @@ double mean_ioc(int text[], int len, int len_cycleword, int *caesar_column) {
 			i++;
 		}
 
-		weighted_ioc += 26.*index_of_coincidence(caesar_column, i);
+		weighted_ioc += index_of_coincidence(caesar_column, i);
 	}
 
 	return weighted_ioc/len_cycleword;
