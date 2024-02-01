@@ -971,8 +971,8 @@ double quagmire_shotgun_hill_climber(
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
 	int crib_positions[], int n_cribs, int cycleword_len, bool verbose) {
 
-	int i, j, k, column_length, ciphertext_column_indices[MAX_CIPHER_LENGTH], 
-		ciphertext_column[MAX_CIPHER_LENGTH], crib_frequencies[ALPHABET_SIZE];
+	int i, j, k, ii, jj, total, column_length, ciphertext_column_indices[MAX_CIPHER_LENGTH], 
+		ciphertext_column[MAX_CIPHER_LENGTH], crib_frequencies[ALPHABET_SIZE][ALPHABET_SIZE];
 
 	// Check cribs are present. 
 
@@ -981,6 +981,10 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 	}
 
 	for (j = 0; j < cycleword_len; j++) {
+
+		if (verbose) {
+			printf("\nCOLUMN = %d \n", j);
+		}
 
 		// Extract column. 
 
@@ -993,24 +997,39 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 
 		column_length = k;
 
+		// Reset frequencies to zero. 
+
+		for (i = 0; i < ALPHABET_SIZE; i++) {
+			for (k = 0; k < ALPHABET_SIZE; k++) {
+				crib_frequencies[i][k] = 0;
+			}
+		}
+
 		// Check column satisfies the cribs. 
 
 		for (i = 0; i < n_cribs; i++) {
 
-			// Reset frequencies to zero. 
-
-			for (k = 0; k < ALPHABET_SIZE; k++) {
-				crib_frequencies[k] = 0;
-			}
-
 			// Check the crib corresponds to exactly 1 ciphertext symbol. 
 
 			for (k = 0; k < column_length; k++) {
-				if (crib_positions[k] == ciphertext_column_indices[k]) {
-					crib_frequencies[ciphertext_column[k]] += 1;
-					if (crib_frequencies[ciphertext_column[k]] > 1) {
-						printf("\n\nClash at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
-						return false;
+
+				if (crib_positions[i] == ciphertext_column_indices[k]) {
+
+					if (verbose) {
+						printf("CT = %c, PT = %c\n", ciphertext_column[k] + 'A', crib_indices[i] + 'A');
+					}
+
+					crib_frequencies[crib_indices[i]][ciphertext_column[k]] = 1;
+
+					for (ii = 0; ii < ALPHABET_SIZE; ii++) {
+						total = 0;
+						for (jj = 0; jj < ALPHABET_SIZE; jj++) {
+							total += crib_frequencies[ii][jj];
+							if (total > 1) {
+								printf("\n\nClash at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+								return false;
+							}
+						}
 					}
 				}
 			}
