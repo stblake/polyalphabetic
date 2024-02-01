@@ -1026,11 +1026,22 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 						for (jj = 0; jj < ALPHABET_SIZE; jj++) {
 							total += crib_frequencies[ii][jj];
 							if (total > 1) {
-								printf("\n\nClash at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+								printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
 								return false;
 							}
 						}
 					}
+
+					for (jj = 0; jj < ALPHABET_SIZE; jj++) {
+						total = 0;
+						for (ii = 0; ii < ALPHABET_SIZE; ii++) {
+							total += crib_frequencies[ii][jj];
+							if (total > 1) {
+								printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+								return false;
+							}
+						}
+					}					
 				}
 			}
 		}
@@ -1664,10 +1675,10 @@ void estimate_cycleword_lengths(
 	}
 
 	if (verbose) {
-		printf("\nlen\tmean IOC\tnorm IOC\tword len norm IOC\n");
+		printf("\nlen\tmean IOC\n");
 		for (i = 0; i < max_cycleword_len; i++) {
 			if (verbose) {
-				printf("%d\t%.4f\t\t%.2f\t\t%.2f\n", i + 1, mu_ioc[i], mu_ioc_normalised[i], word_len_norm_ioc[i]);
+				printf("%d\t%.4f\n", i + 1, mu_ioc[i]);
 			}
 		}
 	}
