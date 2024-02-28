@@ -8,11 +8,15 @@
 #include <math.h>
 #include <time.h>
 
+#define KRYPTOS_PT_SCRAMBLE 0
+
 #define KRYPTOS_PT 0
 #define KOMITET_PT 0
+#define SOLUBLE_PT 0
 
 #define KRYPTOS_CT 0
 #define KOMITET_CT 0
+#define SOLUBLE_CT 0
 
 #define VIGENERE 0
 #define QUAGMIRE_1 1
@@ -133,7 +137,8 @@ int rand_int(int min, int max);
 int rand_int_frequency_weighted(int state[], int min_index, int max_index);
 
 double mean_ioc(int text[], int len, int len_cycleword, int *caesar_column);
-void estimate_cycleword_lengths(int text[], int len, int max_cycleword_len, double n_sigma_threshold,
+void estimate_cycleword_lengths(int text[], int len, int max_cycleword_len, 
+	double n_sigma_threshold, double ioc_threshold, 
 	int *n_cycleword_lengths, int cycleword_lengths[], bool verbose);
 double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
