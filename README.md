@@ -5,6 +5,14 @@ This program is inspired by various explanations of Jim Gillogly's cipher solvin
 
 https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
+## Vigenere
+
+## Beaufort
+
+## Quagmire I
+
+## Quagmire II
+
 ## Quagmire III
 Here is a simple example where we solve the following length 97, Quagmire III cipher (which we store in `cipher.txt`)
 
