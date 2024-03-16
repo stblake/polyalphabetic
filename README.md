@@ -1,6 +1,10 @@
 # Quagmire Cipher Solver
 stochastic shotgun-restarted hill climber for Quagmire (0 (Vigenere), I, II, III, IV) ciphers. 
 
+This program is inspired by various explanations of Jim Gillogly's cipher solving program: 
+
+https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
+
 ## Quagmire III
 Here is a simple example where we solve the following length 97, Quagmire III cipher (which we store in `cipher.txt`)
 
