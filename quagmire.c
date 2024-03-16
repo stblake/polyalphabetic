@@ -33,6 +33,7 @@
 		-backtrackprob /probability of backtracking to the best 
 			solution instead of a random initial solution/ \
 		-keywordpermprob /probability of permuting the keyword instead of the cycleword/
+		-slipprob /probability of slipping to a worse score/
 		-iocthreshold /lower limit for ioc/
 		-dictionary /dictionary file, a text file containing one word per line/
 		-weightngram /weight used in the hillclimber score for the ngram score/
