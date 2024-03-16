@@ -8,6 +8,9 @@
 #include <math.h>
 #include <time.h>
 
+#define KRYPTOS 1
+#define CRIB_CHECK 0
+
 #define KRYPTOS_PT_SCRAMBLE 0
 
 #define KRYPTOS_PT 0
@@ -30,8 +33,11 @@
 #define MAX_KEYWORD_LEN 30
 #define MAX_CYCLEWORD_LEN 30
 #define MAX_NGRAM_SIZE 8
+#define MAX_DICT_WORD_LEN 30
 
 #define FREQUENCY_WEIGHTED_SELECTION 1
+
+#define DICTIONARY 1
 
 #define INACTIVE -9999
 
@@ -122,6 +128,10 @@ double crib_score(int text[], int len, int crib_indices[], int crib_positions[],
 
 double entropy(int text[], int len);
 double chi_squared(int plaintext[], int len);
+
+void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_dict_word_len, bool verbose);
+void free_dictionary(char **dict, int n_dict_words);
+int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int max_dict_word_len);
 
 float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);
 int ngram_index_int(int *ngram, int ngram_size);

@@ -61,10 +61,10 @@
 int main(int argc, char **argv) {
 
 	int i, j, k, cipher_type = 3, cipher_len, cycleword_len, ngram_size = 0,
-		ciphertext_keyword_len = 7, plaintext_keyword_len = 7, ciphertext_max_keyword_len = 12, 
-		min_keyword_len = 7, plaintext_max_keyword_len = 12, max_cycleword_len = 12, n_restarts = 1, 
+		ciphertext_keyword_len = 5, plaintext_keyword_len = 5, ciphertext_max_keyword_len = 12, 
+		min_keyword_len = 5, plaintext_max_keyword_len = 12, max_cycleword_len = 20, n_restarts = 1, 
 		n_cycleword_lengths, n_hill_climbs = 1000, n_cribs, best_cycleword_length,
-		best_plaintext_keyword_length, best_ciphertext_keyword_length, 
+		best_plaintext_keyword_length, best_ciphertext_keyword_length, n_words_found, 
 		cipher_indices[MAX_CIPHER_LENGTH], crib_positions[MAX_CIPHER_LENGTH], 
 		crib_indices[MAX_CIPHER_LENGTH], cycleword_lengths[MAX_CIPHER_LENGTH],
 		decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH],
@@ -72,14 +72,13 @@ int main(int argc, char **argv) {
 		best_plaintext_keyword[ALPHABET_SIZE], best_ciphertext_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
 	double n_sigma_threshold = 1., ioc_threshold = 0.047, backtracking_probability = 0.01, 
 	keyword_permutation_probability = 0.01, slip_probability = 0.0005, score, best_score;
-	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], 
+	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], dictionary_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
 	bool verbose = false, cipher_present = false, crib_present = false, plaintext_keyword_len_present = false, 
-		cycleword_len_present = false, ciphertext_keyword_len_present = false;
+		cycleword_len_present = false, ciphertext_keyword_len_present = false, dictionary_present_p = false;
 	FILE *fp;
 	float *ngram_data;
-
 
 	// Read command line args. 
 	for(i = 1; i < argc; i++) {
@@ -131,6 +130,9 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-cyclewordlen") == 0) {
 			cycleword_len_present = true;
 			cycleword_len = atoi(argv[++i]);
+			if (cycleword_len == 0) {
+				cycleword_len_present = false;
+			}
 			max_cycleword_len = max(max_cycleword_len, 1 + cycleword_len);
 			printf("\n-cyclewordlen %d", cycleword_len);
 		} else if (strcmp(argv[i], "-nsigmathreshold") == 0) {
@@ -156,6 +158,10 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-iocthreshold") == 0) {
 			ioc_threshold = atof(argv[++i]);
 			printf("\n-iocthreshold %.4f", ioc_threshold);
+		} else if (strcmp(argv[i], "-dictionary") == 0 || strcmp(argv[i], "-dict") == 0) {
+			dictionary_present_p = true;
+			strcpy(dictionary_file, argv[++i]);
+			printf("\n-dictionary %s", dictionary_file);
 		} else if (strcmp(argv[i], "-verbose") == 0) {
 			verbose = true;
 			printf("\n-verbose ");
@@ -282,6 +288,11 @@ int main(int argc, char **argv) {
 		cycleword_lengths[0] = cycleword_len;
 	}
 
+	// Vigenere cipher case.
+	if (cipher_type == VIGENERE) {
+		min_keyword_len = 1;
+	}
+
 	// For each cycleword length and keyword length combination, run the 'shotgun' hill-climber. 
 
 	best_score = 0.;
@@ -306,6 +317,10 @@ int main(int argc, char **argv) {
 
 				if ((cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) && j != k) continue ;
 
+				// Vigenere cipher uses same ciphertext, plaintext, and cycleword lengths.
+
+				if (cipher_type == VIGENERE && ! (cycleword_lengths[i] == j && cycleword_lengths[i] == k)) continue ;
+
 				if (verbose) {
 					printf("\nplaintext, ciphertext, cycleword lengths = %d, %d, %d\n", j, k, cycleword_lengths[i]);
 				}
@@ -316,7 +331,9 @@ int main(int argc, char **argv) {
 					if (verbose) {
 						printf("\n\nCiphertext does not satisfy the cribs for cycleword length %d. \n\n", cycleword_lengths[i]);
 					}
+#if CRIB_CHECK
 					continue;
+#endif
 				}
 
 				// Run the hill-climber. 
@@ -360,7 +377,37 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	// Find dictionary words. 
+
+	char plaintext_string[MAX_CIPHER_LENGTH];
+
+	for (int i = 0; i < cipher_len; i++) {
+		plaintext_string[i] = best_decrypted[i] + 'A';
+	}
+	plaintext_string[cipher_len] = '\0';
+
+#if DICTIONARY
+	if (dictionary_present_p) {
+		char **dict = NULL;
+		int n_dict_words, max_dict_word_len;
+
+		load_dictionary(dictionary_file, &dict, &n_dict_words, &max_dict_word_len, verbose);
+
+		if (verbose) {
+			printf("\nDictionary words = \n");
+		}
+
+		n_words_found = find_dictionary_words(plaintext_string, dict, n_dict_words, max_dict_word_len);
+		printf("\n%d words found.\n", n_words_found);
+
+		free_dictionary(dict, n_dict_words);
+	}
+#endif
+
 	printf("\n\n%.2f\n", best_score);
+	if (dictionary_present_p) {
+		printf("%d\n", n_words_found);
+	}
 	print_text(cipher_indices, cipher_len);
 	printf("\n");
 	print_text(best_plaintext_keyword, ALPHABET_SIZE);
@@ -374,14 +421,9 @@ int main(int argc, char **argv) {
 
 	// K4-specific checks for BERLIN, CLOCK, EAST, NORTH, BERLINCLOCK and EASTNORTHEAST. 
 
-	char plaintext_string[MAX_CIPHER_LENGTH];
+#if KRYPTOS
 	bool berlin_present = false, clock_present = false, east_present = false, north_present = false, 
 		berlinclock_present = false, eastnortheast_present = false; 
-
-	for (int i = 0; i < cipher_len; i++) {
-		plaintext_string[i] = best_decrypted[i] + 'A';
-	}
-	plaintext_string[cipher_len] = '\0';
 
 	if (strstr(plaintext_string, "BERLIN") != NULL) {
 		berlin_present = true;
@@ -418,10 +460,15 @@ int main(int argc, char **argv) {
 	}
 
 	printf("\n\n");
+#endif
 
 	// Single line summary of results for subsequent filtering and analysis. 
 
-	printf("\n\n>>> %.2f, %d, %s, ", best_score, cipher_type, ciphertext_file);
+	if (dictionary_present_p) {
+		printf("\n\n>>> %.2f, %d, %d, %s, ", best_score, n_words_found, cipher_type, ciphertext_file);
+	} else {
+		printf("\n\n>>> %.2f, %d, %s, ", best_score, cipher_type, ciphertext_file);
+	}
 	print_text(cipher_indices, cipher_len);
 	printf(", ");
 	print_text(best_plaintext_keyword, ALPHABET_SIZE);
@@ -431,6 +478,7 @@ int main(int argc, char **argv) {
 	print_text(best_cycleword, best_cycleword_length);
 	printf(", ");
 	print_text(best_decrypted, cipher_len);
+#if KRYPTOS
 	if (berlin_present) {
 		printf(", BERLIN");
 	}
@@ -450,6 +498,7 @@ int main(int argc, char **argv) {
 		printf(", EASTNORTHEAST");
 	}
 	printf("\n\n");
+#endif
 
 	free(ngram_data);
 
@@ -1473,6 +1522,8 @@ double state_score(int cipher_indices[], int cipher_len,
 
 	score /= weight_ngram + weight_crib + weight_ioc + weight_entropy;
 
+	score /= 3.41; // score for example cipher of length 97 (using the current weighting scheme). 
+
 	return score;
 }
 
@@ -1889,6 +1940,120 @@ int ngram_index_int(int *ngram, int ngram_size) {
 	return index;
 }
 
+
+
+// Load dictionary. 
+
+void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_dict_word_len, bool verbose) {
+
+	FILE *fp;
+	int i, n_words, max_word_len;
+	char word[MAX_DICT_WORD_LEN];
+
+	if (verbose) {
+		printf("\nLoading dictionary...\n\n");
+	}
+
+	// Count the number of words in the file. 
+
+	fp = fopen(filename, "r");
+
+	n_words = 0;
+	max_word_len = 0;
+	while(!feof (fp)) {
+		fscanf(fp, "%s\n", word);
+		n_words++;
+		if (strlen(word) > max_word_len) {
+			max_word_len = strlen(word);
+		}
+	}
+
+	*max_dict_word_len = max_word_len;
+	*n_dict_words = n_words;
+
+	fclose(fp);
+
+	if (verbose) {
+		printf("%d words in dictionary, ", n_words);
+		printf("longest word has %d chars.\n", max_word_len);
+	}
+
+	// Allocate memory for array of words. 
+
+	*dict = malloc(n_words*sizeof(char*));
+	for (i = 0; i < n_words; i++) {
+		(*dict)[i] = malloc((max_word_len + 1)*sizeof(char));
+	}
+
+	// Fill array with words from dictionary. 
+
+	fp = fopen(filename, "r");
+
+	i = 0; 
+	while(!feof (fp)) {
+		fscanf(fp, "%s\n", word);
+		strcpy((*dict)[i], word);
+		i++; 
+	}
+
+	fclose(fp);
+
+	if (verbose) {
+		printf("\n...finished.\n");
+	}
+}
+
+// Deallocate dictionary. 
+
+void free_dictionary(char **dict, int n_dict_words) {
+
+	for (int i = 0; i < n_dict_words; i++) {
+		free(dict[i]);
+	}
+	free(dict);
+}
+
+// Find dictionary words in plaintext. 
+
+int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int max_dict_word_len) {
+
+	int n_matches = 0, plaintext_len, min_word_len;
+	char fragment[MAX_DICT_WORD_LEN], *dict_word;
+
+	// printf("\nn_dict_words, max_dict_word_len = %d, %d\n", n_dict_words, max_dict_word_len);
+
+	plaintext_len = strlen(plaintext);
+	min_word_len = 3;
+
+	for (int i = 0; i < plaintext_len - min_word_len; i++) {
+		for (int word_len = min_word_len; word_len < min(max_dict_word_len, plaintext_len - i); word_len++) {
+
+			//  fragment = plaintext[i : i + word_len]
+
+			for (int j = 0; j < word_len; j++) {
+				fragment[j] = plaintext[i + j];
+			}
+			fragment[word_len] = '\0'; 
+
+			// Check if fragment is in dictionary. 
+			for (int k = 0; k < n_dict_words; k++) {
+				dict_word = dict[k];
+				if (strlen(dict_word) > word_len) {
+					continue ;
+				} else if (strlen(dict_word) < word_len) {
+					break ;
+				} else if (strcmp(dict_word, fragment) == 0 ) {
+					printf("%s\n", fragment);
+					n_matches++;
+					break ;
+				}
+			}
+
+		}
+	}
+
+	return n_matches;
+}
 
 
 // Estimate the cycleword length from the ciphertext. 
