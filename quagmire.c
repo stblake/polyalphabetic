@@ -8,6 +8,7 @@
 // TODO: 	- remove decryption from state_score. 
 //			- weights in scoring function should be command line args. 
 //			- update documentation. 
+// 			- add Beaufort and 'variant Beaufort' ciphers. (Ref: https://en.wikipedia.org/wiki/Beaufort_cipher)
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
