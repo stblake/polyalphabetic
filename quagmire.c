@@ -6,7 +6,6 @@
 
 
 // TODO: 	- remove decryption from state_score. 
-//			- weights in scoring function should be command line args. 
 //			- update documentation. 
 // 			- add Beaufort and 'variant Beaufort' ciphers. (Ref: https://en.wikipedia.org/wiki/Beaufort_cipher)
 
@@ -34,6 +33,12 @@
 		-backtrackprob /probability of backtracking to the best 
 			solution instead of a random initial solution/ \
 		-keywordpermprob /probability of permuting the keyword instead of the cycleword/
+		-iocthreshold /lower limit for ioc/
+		-dictionary /dictionary file, a text file containing one word per line/
+		-weightngram /weight used in the hillclimber score for the ngram score/
+		-weightcrib /weight used in the hillclimber score for the crib matches/
+		-weightioc /weight used in the hillclimber score for the IoC/
+		-weightentropy /weight used in the hillclimber score for the plaintext entropy/
 		-nrestarts /number of restarts/ \
 		-verbose
 
@@ -47,7 +52,8 @@
 			lines will not be read. 
 
 		/crib file/ -- uses "_" for unknown chars. Just a single line of the same length
-			as the ciphers contained in the cipher file. For the Kryptos K4 cipher it should contain
+			as the ciphers contained in the cipher file. For the Kryptos K4 cipher (assuming Sanborn has not 
+			made any enciphering and/or spelling mistakes) it should contain
 
 		_____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
 	
@@ -72,7 +78,8 @@ int main(int argc, char **argv) {
 		plaintext_keyword[ALPHABET_SIZE], ciphertext_keyword[ALPHABET_SIZE], cycleword[ALPHABET_SIZE],
 		best_plaintext_keyword[ALPHABET_SIZE], best_ciphertext_keyword[ALPHABET_SIZE], best_cycleword[ALPHABET_SIZE]; 
 	double n_sigma_threshold = 1., ioc_threshold = 0.047, backtracking_probability = 0.01, 
-	keyword_permutation_probability = 0.01, slip_probability = 0.0005, score, best_score;
+		keyword_permutation_probability = 0.01, slip_probability = 0.0005, score, best_score;
+	float weight_ngram = 12., weight_crib = 36., weight_ioc = 1., weight_entropy = 1.;
 	char ciphertext_file[MAX_FILENAME_LEN], crib_file[MAX_FILENAME_LEN], dictionary_file[MAX_FILENAME_LEN], 
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
@@ -163,6 +170,18 @@ int main(int argc, char **argv) {
 			dictionary_present_p = true;
 			strcpy(dictionary_file, argv[++i]);
 			printf("\n-dictionary %s", dictionary_file);
+		} else if (strcmp(argv[i], "-weightngram") == 0) { 
+			weight_ngram = atof(argv[++i]);
+			printf("\n-weightngram %.4f", weight_ngram);
+		} else if (strcmp(argv[i], "-weightcrib") == 0) { 
+			weight_crib = atof(argv[++i]);
+			printf("\n-weightcrib %.4f", weight_crib);
+		} else if (strcmp(argv[i], "-weightioc") == 0) { 
+			weight_ioc = atof(argv[++i]);
+			printf("\n-weightioc %.4f", weight_ioc);
+		} else if (strcmp(argv[i], "-weightentropy") == 0) { 
+			weight_entropy = atof(argv[++i]);
+			printf("\n-weightentropy %.4f", weight_entropy);
 		} else if (strcmp(argv[i], "-verbose") == 0) {
 			verbose = true;
 			printf("\n-verbose ");
@@ -198,6 +217,17 @@ int main(int argc, char **argv) {
 	if (crib_present && ! file_exists(crib_file)) {
 		printf("\nERROR: missing file '%s'\n", crib_file);
   		return 0;
+	}
+
+	// Check if OxfordEnglishWords.txt is present. 
+
+	char oxford_english_words[] = "OxfordEnglishWords.txt";
+	if (! dictionary_present_p && file_exists(oxford_english_words)) {
+		dictionary_present_p = true;
+		strcpy(dictionary_file, oxford_english_words);
+		if (verbose) {
+			printf("\ndictionary = %s\n\n", dictionary_file);
+		}
 	}
 
 	// Read ciphertext. 
@@ -360,6 +390,10 @@ int main(int argc, char **argv) {
 					backtracking_probability,
 					keyword_permutation_probability,
 					slip_probability, 
+					weight_ngram, 
+					weight_crib, 
+					weight_ioc, 
+					weight_entropy,
 					verbose);
 
 				// Keep the best solution. 
@@ -520,6 +554,7 @@ double quagmire_shotgun_hill_climber(
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
+	float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy, 
 	bool verbose) {
 
 	int i, n, n_iterations, n_backtracks, n_explore, n_contradictions,
@@ -586,7 +621,8 @@ double quagmire_shotgun_hill_climber(
 				crib_indices, crib_positions, n_cribs, 
 				current_plaintext_keyword_state, current_ciphertext_keyword_state, 
 				current_cycleword_state, cycleword_len,
-				decrypted, ngram_data, ngram_size);
+				decrypted, ngram_data, ngram_size,
+				weight_ngram, weight_crib, weight_ioc, weight_entropy);
 		}
 
 // The following are K4-specific hacks to manually set the ciphertext and plaintext keywords to KRYPTOS and/or KOMITET.
@@ -1195,7 +1231,8 @@ double quagmire_shotgun_hill_climber(
 				crib_indices, crib_positions, n_cribs, 
 				local_plaintext_keyword_state, local_ciphertext_keyword_state, 
 				local_cycleword_state, cycleword_len,
-				decrypted, ngram_data, ngram_size);
+				decrypted, ngram_data, ngram_size,
+				weight_ngram, weight_crib, weight_ioc, weight_entropy);
 
 #if 0
 			printf("\nlocal_score = %.4f\n", local_score);
@@ -1469,21 +1506,17 @@ double state_score(int cipher_indices[], int cipher_len,
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
 			int cycleword_state[], int cycleword_len,
 			int decrypted[], 
-			float *ngram_data, int ngram_size) {
+			float *ngram_data, int ngram_size, 
+			float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy) {
 
-	double score, decrypted_ngram_score, decrypted_crib_score, 
-	weight_ngram, weight_crib, weight_ioc, weight_entropy;
+	double score, decrypted_ngram_score, decrypted_crib_score;
 
 	// TODO: these should be command line args. 
-	weight_ngram = 12.; // 6
-	weight_crib  = 36.; // 2
-	weight_ioc   = 1.; // 1
-	weight_entropy = 1.; // 1
-
-	//weight_ngram = 2.; 
-	//weight_crib  = 6.; 
-	//weight_ioc   = 1.; 
-	//weight_entropy = 1.; 
+	//double weight_ngram, weight_crib, weight_ioc, weight_entropy;
+	//weight_ngram = 12.; // 6
+	//weight_crib  = 36.; // 2
+	//weight_ioc   = 1.; // 1
+	//weight_entropy = 1.; // 1
 
 	// Decrypt cipher using the candidate keyword and cycleword. 
 
