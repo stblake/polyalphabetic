@@ -26,6 +26,7 @@
 #define QUAGMIRE_2 2
 #define QUAGMIRE_3 3
 #define QUAGMIRE_4 4
+#define BEAUFORT   5
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -100,6 +101,7 @@ double quagmire_shotgun_hill_climber(
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy,
+	bool variant, bool beaufort,
 	bool verbose);
 
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
@@ -108,16 +110,22 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 bool constrain_cycleword(int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool verbose);
+	int cycleword_indices[], int cycleword_len,
+	bool variant, bool beaufort, bool verbose);
 
 void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len);
+	int cycleword_indices[], int cycleword_len, bool beaufort);
+
+void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+	int cycleword_indices[], int cycleword_len, bool beaufort);
 
 double state_score(int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-			int cycleword_state[], int cycleword_len,
+			int cycleword_state[], int cycleword_len, 
+			bool variant, bool beaufort, 
 			int decrypted[], 
 			float *ngram_data, int ngram_size,
 			float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy);
@@ -139,11 +147,11 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);
 int ngram_index_int(int *ngram, int ngram_size);
 int ngram_index_str(char *ngram, int ngram_size);
 
-void pertubate_keyword(int state[], int len, int keyword_len);
+void perturbate_keyword(int state[], int len, int keyword_len);
 void random_keyword(int keyword[], int len, int keyword_len);
 
 void random_cycleword(int cycleword[], int max, int keyword_len);
-void pertubate_cycleword(int state[], int max, int len);
+void perturbate_cycleword(int state[], int max, int len);
 
 int rand_int(int min, int max);
 int rand_int_frequency_weighted(int state[], int min_index, int max_index);

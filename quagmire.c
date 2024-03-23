@@ -6,17 +6,28 @@
 
 
 // TODO: 	- remove decryption from state_score. 
-//			- update documentation. 
-// 			- add Beaufort and 'variant Beaufort' ciphers. (Ref: https://en.wikipedia.org/wiki/Beaufort_cipher)
+// 			- add Beaufort cipher. (Ref: https://en.wikipedia.org/wiki/Beaufort_cipher)
+//			- add 'variant' Vigenere, Quagmire, and Beaufort (where decryption and encryption are reversed.)
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
+
+// Cipher types: 
+// 
+//		0 - Vigenere
+//		1 - Quagmire I
+//		2 - Quagmire II
+//		3 - Quagmire III
+//		4 - Quagmire IV
+//		5 - Beaufort
+
+
 
 #include "quagmire.h"
 
 /* Program syntax:
 
 	$ ./quagmire \
-		-type /quagmire cipher type (0,1,2,3, or 4)/ \
+		-type /quagmire cipher type (0, 1, 2, 3, 4, or 5)/ \
 		-cipher /ciphertext file/ \
 		-crib /crib file/ \
 		-temperature /initial temperature/ \
@@ -32,14 +43,14 @@
 		-nhillclimbs /number of hillclimbing steps/ \
 		-backtrackprob /probability of backtracking to the best 
 			solution instead of a random initial solution/ \
-		-keywordpermprob /probability of permuting the keyword instead of the cycleword/
-		-slipprob /probability of slipping to a worse score/
-		-iocthreshold /lower limit for ioc/
-		-dictionary /dictionary file, a text file containing one word per line/
-		-weightngram /weight used in the hillclimber score for the ngram score/
-		-weightcrib /weight used in the hillclimber score for the crib matches/
-		-weightioc /weight used in the hillclimber score for the IoC/
-		-weightentropy /weight used in the hillclimber score for the plaintext entropy/
+		-keywordpermprob /probability of permuting the keyword instead of the cycleword/ \
+		-slipprob /probability of slipping to a worse score/ \
+		-iocthreshold /lower limit for ioc/ \
+		-dictionary /dictionary file, a text file containing one word per line/ \
+		-weightngram /weight used in the hillclimber score for the ngram score/ \
+		-weightcrib /weight used in the hillclimber score for the crib matches/ \
+		-weightioc /weight used in the hillclimber score for the IoC/ \
+		-weightentropy /weight used in the hillclimber score for the plaintext entropy/ \
 		-nrestarts /number of restarts/ \
 		-verbose
 
@@ -85,7 +96,8 @@ int main(int argc, char **argv) {
 		ngram_file[MAX_FILENAME_LEN], ciphertext[MAX_CIPHER_LENGTH], 
 		cribtext[MAX_CIPHER_LENGTH];
 	bool verbose = false, cipher_present = false, crib_present = false, plaintext_keyword_len_present = false, 
-		cycleword_len_present = false, ciphertext_keyword_len_present = false, dictionary_present_p = false;
+		cycleword_len_present = false, ciphertext_keyword_len_present = false, dictionary_present_p = false,
+		variant = false, beaufort = false;
 	FILE *fp;
 	float *ngram_data;
 
@@ -183,6 +195,9 @@ int main(int argc, char **argv) {
 		} else if (strcmp(argv[i], "-weightentropy") == 0) { 
 			weight_entropy = atof(argv[++i]);
 			printf("\n-weightentropy %.4f", weight_entropy);
+		} else if (strcmp(argv[i], "-variant") == 0) { 
+			variant = true;
+			printf("\n-variant");
 		} else if (strcmp(argv[i], "-verbose") == 0) {
 			verbose = true;
 			printf("\n-verbose ");
@@ -193,9 +208,38 @@ int main(int argc, char **argv) {
 	}
 	printf("\n\n");
 
+
+	if (cipher_type == BEAUFORT) {
+		beaufort = true;
+	}
+
+	// Print cipher type. 
+
+	char variant_display[10], variant_str[] = "variant";
+	if (variant) {
+		strcpy(variant_display, variant_str);
+	} else {
+		strcpy(variant_display, "");
+	}
+
+	if (cipher_type == VIGENERE) {
+		printf("\n\nSolving a %s Vigenere cipher.\n\n", variant_display);
+	} else if (cipher_type == BEAUFORT) {
+		printf("\n\nSolving a %s Beaufort cipher.\n\n", variant_display);
+	} else if (cipher_type == QUAGMIRE_1) {
+		printf("\n\nSolving a %s Quagmire I cipher.\n\n", variant_display);
+	} else if (cipher_type == QUAGMIRE_2) {
+		printf("\n\nSolving a %s Quagmire II cipher.\n\n", variant_display);
+	} else if (cipher_type == QUAGMIRE_3) {
+		printf("\n\nSolving a %s Quagmire III cipher.\n\n", variant_display);
+	} else if (cipher_type == QUAGMIRE_4) {
+		printf("\n\nSolving a %s Quagmire IV cipher.\n\n", variant_display);
+	}
+
+
 	// Check command line inputs. 
 
-	if (!cipher_present) {
+	if (! cipher_present) {
 		printf("\n\nERROR: cipher file not present.\n\n");
 		return 0;
 	}
@@ -395,6 +439,8 @@ int main(int argc, char **argv) {
 					weight_crib, 
 					weight_ioc, 
 					weight_entropy,
+					variant, 
+					beaufort,
 					verbose);
 
 				// Keep the best solution. 
@@ -543,7 +589,7 @@ int main(int argc, char **argv) {
 
 
 
-// Slippery stochastic shotgun restarted hill climber for Quagmire 3 cipher
+// Slippery stochastic shotgun restarted hill climber for Quagmire ciphers.
 
 double quagmire_shotgun_hill_climber(
 	int cipher_type, 
@@ -556,6 +602,7 @@ double quagmire_shotgun_hill_climber(
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy, 
+	bool variant, bool beaufort,
 	bool verbose) {
 
 	int i, n, n_iterations, n_backtracks, n_explore, n_contradictions,
@@ -565,7 +612,7 @@ double quagmire_shotgun_hill_climber(
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
 	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi, entropy_score;
-	bool pertubate_keyword_p, contradiction;
+	bool perturbate_keyword_p, contradiction;
 
 	if (cipher_type == VIGENERE) {
 		cycleword_len = ALPHABET_SIZE;
@@ -622,6 +669,7 @@ double quagmire_shotgun_hill_climber(
 				crib_indices, crib_positions, n_cribs, 
 				current_plaintext_keyword_state, current_ciphertext_keyword_state, 
 				current_cycleword_state, cycleword_len,
+				variant, beaufort, 
 				decrypted, ngram_data, ngram_size,
 				weight_ngram, weight_crib, weight_ioc, weight_entropy);
 		}
@@ -899,44 +947,44 @@ double quagmire_shotgun_hill_climber(
 	}
 #endif
 
-		pertubate_keyword_p = true;
+		perturbate_keyword_p = true;
 
 		for (i = 0; i < n_hill_climbs; i++) {
 				
 			n_iterations += 1;
 
-			// Pertubate.
+			// perturbate.
 			vec_copy(current_plaintext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
 			vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 			vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
-			if (pertubate_keyword_p || cipher_type == VIGENERE || frand() < keyword_permutation_probability) {
+			if (perturbate_keyword_p || cipher_type == VIGENERE || frand() < keyword_permutation_probability) {
 				switch (cipher_type) {
 					case VIGENERE:
-						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+						perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);	
 						vec_copy(local_plaintext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
 						break ; 
 					case QUAGMIRE_1:
-						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+						perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						break ;
 					case QUAGMIRE_2:
-						pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+						perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 						break ;
 					case QUAGMIRE_3:
-						pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+						perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 						break ;
 					case QUAGMIRE_4:
 						if (frand() < 0.5) {
-							pertubate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+							perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
 						} else {
-							pertubate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+							perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 						}
 						break ;
 				}
 			} else {
-				pertubate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+				perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
 			}
 
 
@@ -1214,16 +1262,16 @@ double quagmire_shotgun_hill_climber(
 #endif
 
 			if (cipher_type != VIGENERE) {
-				pertubate_keyword_p = false;
+				perturbate_keyword_p = false;
 				contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
 					crib_positions, n_cribs, 
 					local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-					local_cycleword_state, cycleword_len, verbose);
+					local_cycleword_state, cycleword_len, variant, beaufort, verbose);
 
 				if (contradiction) {
-					// Cycleword contradiction - must pertubate cycleword. 
+					// Cycleword contradiction - must perturbate cycleword. 
 					n_contradictions += 1; 
-					pertubate_keyword_p = true; 
+					perturbate_keyword_p = true; 
 				}
 			}
 
@@ -1232,6 +1280,7 @@ double quagmire_shotgun_hill_climber(
 				crib_indices, crib_positions, n_cribs, 
 				local_plaintext_keyword_state, local_ciphertext_keyword_state, 
 				local_cycleword_state, cycleword_len,
+				variant, beaufort, 
 				decrypted, ngram_data, ngram_size,
 				weight_ngram, weight_crib, weight_ioc, weight_entropy);
 
@@ -1269,9 +1318,15 @@ double quagmire_shotgun_hill_climber(
 				vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
 				if (verbose) {
 
-					quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-						best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-						best_cycleword_state, cycleword_len);
+					if (variant) {
+						quagmire_encrypt(decrypted, cipher_indices, cipher_len, 
+							best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+							best_cycleword_state, cycleword_len, beaufort);
+					} else {
+						quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+							best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+							best_cycleword_state, cycleword_len, beaufort);
+					}
 
 					ioc = index_of_coincidence(decrypted, cipher_len);
 					chi = chi_squared(decrypted, cipher_len);
@@ -1312,9 +1367,15 @@ double quagmire_shotgun_hill_climber(
 	vec_copy(best_ciphertext_keyword_state, ciphertext_keyword, ALPHABET_SIZE);
 	vec_copy(best_cycleword_state, cycleword, cycleword_len);
 
-	quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+	if (variant) {
+		quagmire_encrypt(decrypted, cipher_indices, cipher_len, 
 						best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-						best_cycleword_state, cycleword_len);
+						best_cycleword_state, cycleword_len, beaufort);
+	} else {
+		quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+						best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+						best_cycleword_state, cycleword_len, beaufort);
+	}
 
 	return best_score;
 }
@@ -1418,7 +1479,8 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 bool constrain_cycleword(int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool verbose) {
+	int cycleword_indices[], int cycleword_len, 
+	bool variant, bool beaufort, bool verbose) {
 
 	int i, j, k, crib_char, ciphertext_char, posn_keyword, posn_cycleword, 
 		indx, crib_cyclewords[MAX_CYCLEWORD_LEN];
@@ -1445,28 +1507,53 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 				crib_char = crib_indices[j];
 				ciphertext_char = cipher_indices[crib_positions[j]];
 
-				// Find position of ciphertext_char in the ciphertext keyword. 
-				
-				for (k = 0; k < ALPHABET_SIZE; k++) {
-					if (ciphertext_keyword_indices[k] == ciphertext_char) {
-						posn_keyword = k;
-						break ;
+				if (variant) {
+					// Find position of ciphertext_char in the ciphertext keyword. 
+					
+					for (k = 0; k < ALPHABET_SIZE; k++) {
+						if (plaintext_keyword_indices[k] == ciphertext_char) {
+							posn_keyword = k;
+							break ;
+						}
 					}
-				}
 
-				// Find position of crib_char in plaintext keyword. 
+					// Find position of crib_char in plaintext keyword. 
 
-				for (k = 0; k < ALPHABET_SIZE; k++) {
-					if (plaintext_keyword_indices[k] == crib_char) {
-						posn_cycleword = k;
-						break ;
+					for (k = 0; k < ALPHABET_SIZE; k++) {
+						if (ciphertext_keyword_indices[k] == crib_char) {
+							posn_cycleword = k;
+							break ;
+						}
 					}
+
+					// Compute cycleword rotation. 
+
+					indx = (posn_cycleword - posn_keyword)%ALPHABET_SIZE;
+					if (indx < 0) indx += ALPHABET_SIZE;
+				} else {
+					// Find position of ciphertext_char in the ciphertext keyword. 
+					
+					for (k = 0; k < ALPHABET_SIZE; k++) {
+						if (ciphertext_keyword_indices[k] == ciphertext_char) {
+							posn_keyword = k;
+							break ;
+						}
+					}
+
+					// Find position of crib_char in plaintext keyword. 
+
+					for (k = 0; k < ALPHABET_SIZE; k++) {
+						if (plaintext_keyword_indices[k] == crib_char) {
+							posn_cycleword = k;
+							break ;
+						}
+					}
+
+					// Compute cycleword rotation. 
+
+					indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
+					if (indx < 0) indx += ALPHABET_SIZE;					
 				}
-
-				// Compute cycleword rotation. 
-
-				indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
-				if (indx < 0) indx += ALPHABET_SIZE;
 
 				// Has this cycleword position been previously set? 
 
@@ -1505,24 +1592,23 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 double state_score(int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-			int cycleword_state[], int cycleword_len,
+			int cycleword_state[], int cycleword_len, 
+			bool variant, bool beaufort, 
 			int decrypted[], 
 			float *ngram_data, int ngram_size, 
 			float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy) {
 
 	double score, decrypted_ngram_score, decrypted_crib_score;
 
-	// TODO: these should be command line args. 
-	//double weight_ngram, weight_crib, weight_ioc, weight_entropy;
-	//weight_ngram = 12.; // 6
-	//weight_crib  = 36.; // 2
-	//weight_ioc   = 1.; // 1
-	//weight_entropy = 1.; // 1
-
 	// Decrypt cipher using the candidate keyword and cycleword. 
 
-	quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-		plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len);
+	if (variant) {
+		quagmire_encrypt(decrypted, cipher_indices, cipher_len, 
+			plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len, beaufort);
+	} else {
+		quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+			plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len, beaufort);
+	}
 
 	// n-gram score. 
 
@@ -1689,7 +1775,7 @@ double ngram_score_slow(int decrypted[], int cipher_len, float *ngram_data, int 
 
 void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len) {
+	int cycleword_indices[], int cycleword_len, bool beaufort) {
 	
 	int i, j, posn_keyword, posn_cycleword, indx;
 
@@ -1721,9 +1807,46 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 
 
 
-// Pertubate a cycleword. 
+// Given a ciphertext, keyword and cycleword (all in index form), compute the 
+// Quagmire 4 encryption. 
 
-void pertubate_cycleword(int state[], int max, int len) {
+void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+	int cycleword_indices[], int cycleword_len, bool beaufort) {
+	
+	int i, j, posn_keyword, posn_cycleword, indx;
+
+	for (i = 0; i < cipher_len; i++) {
+
+		// Find position of plaintext char in the plaintext keyword. 
+		for (j = 0; j < ALPHABET_SIZE; j++) {
+			if (plaintext_indices[i] == plaintext_keyword_indices[j]) {
+				posn_keyword = j;
+				break ;
+			}
+		}
+
+		// Find the position of cycleword char in the ciphertext keyword. 
+		for (j = 0; j < ALPHABET_SIZE; j++) {
+			if (cycleword_indices[i%cycleword_len] == ciphertext_keyword_indices[j]) {
+				posn_cycleword = j; 
+				break ;
+			}
+		}
+
+		indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
+		if (indx < 0) indx += ALPHABET_SIZE;
+		encrypted[i] = ciphertext_keyword_indices[indx];
+	}
+
+	return ;
+}
+
+
+
+// perturbate a cycleword. 
+
+void perturbate_cycleword(int state[], int max, int len) {
 
 	int i; 
 	i = rand_int(0, len);
@@ -1732,9 +1855,9 @@ void pertubate_cycleword(int state[], int max, int len) {
 
 
 
-// Pertubate a key - Ref: http://www.mountainvistasoft.com/cryptoden/articles/Q3%20Keyspace.pdf
+// perturbate a key - Ref: http://www.mountainvistasoft.com/cryptoden/articles/Q3%20Keyspace.pdf
 
-void pertubate_keyword(int state[], int len, int keyword_len) {
+void perturbate_keyword(int state[], int len, int keyword_len) {
 
 	int i, j, k, l, temp;
 
@@ -2038,6 +2161,8 @@ void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_d
 	}
 }
 
+
+
 // Deallocate dictionary. 
 
 void free_dictionary(char **dict, int n_dict_words) {
@@ -2047,6 +2172,8 @@ void free_dictionary(char **dict, int n_dict_words) {
 	}
 	free(dict);
 }
+
+
 
 // Find dictionary words in plaintext. 
 
@@ -2071,6 +2198,7 @@ int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int ma
 			fragment[word_len] = '\0'; 
 
 			// Check if fragment is in dictionary. 
+
 			for (int k = 0; k < n_dict_words; k++) {
 				dict_word = dict[k];
 				if (strlen(dict_word) > word_len) {
