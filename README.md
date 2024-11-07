@@ -5,7 +5,30 @@ This program is inspired by various explanations of Jim Gillogly's cipher solvin
 
 https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
-## Vigenere
+## Vigenère
+The Vigenère cipher is a method of encrypting alphabetic text by using a keyword to shift each letter of the plaintext. Each letter in the keyword determines the shift for the corresponding letter in the plaintext, resulting in a polyalphabetic substitution cipher that is more resistant to frequency analysis than monoalphabetic ciphers.
+
+Here we solve a simple K4-like Vigenère cipher:
+
+```$ ./quagmire_NOCRIBCHECK -type 0 -cipher cipher_vigenere.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -keywordlen 7 -cyclewordlen 7 -verbose```
+
+```
+0.04	[sec]
+386K	[it/sec]
+3	[backtracks]
+32	[restarts]
+453	[iterations]
+9	[slips]
+0.00	[contradiction pct]
+0.0642	[IOC]
+2.7714	[entropy]
+0.12	[chi-squared]
+1.00	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWILLSEEFURTHERINFORM
+```
 
 ## Beaufort
 
