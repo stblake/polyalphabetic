@@ -8,8 +8,8 @@
 #include <math.h>
 #include <time.h>
 
-#define KRYPTOS 1
-#define CRIB_CHECK 0
+#define KRYPTOS 0
+#define CRIB_CHECK 1
 
 #define KRYPTOS_PT_SCRAMBLE 0
 
@@ -111,7 +111,7 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 	int crib_indices[], int crib_positions[], int n_cribs, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
 	int cycleword_indices[], int cycleword_len,
-	bool variant, bool beaufort, bool verbose);
+	bool variant, bool verbose);
 
 void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 

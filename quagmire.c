@@ -4,10 +4,19 @@
 
 // Written by Sam Blake, started 14 July 2023
 
+/*
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+*/
 
 // TODO: 	- remove decryption from state_score. 
-// 			- add Beaufort cipher. (Ref: https://en.wikipedia.org/wiki/Beaufort_cipher)
-//			- add 'variant' Vigenere, Quagmire, and Beaufort (where decryption and encryption are reversed.)
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
@@ -369,6 +378,13 @@ int main(int argc, char **argv) {
 		min_keyword_len = 1;
 	}
 
+	// Beaufort cipher case.
+	if (cipher_type == BEAUFORT) {
+		min_keyword_len = 1;
+		plaintext_max_keyword_len = 2;
+		plaintext_max_keyword_len = 2;
+	}
+
 	// For each cycleword length and keyword length combination, run the 'shotgun' hill-climber. 
 
 	best_score = 0.;
@@ -377,38 +393,38 @@ int main(int argc, char **argv) {
 		for (j = min(min_keyword_len, plaintext_keyword_len); j < plaintext_max_keyword_len; j++) {
 			for (k = min(min_keyword_len, ciphertext_keyword_len); k < ciphertext_max_keyword_len; k++) {
 				
-				// User-specified plaintext keyword length. 
+				// printf("i,j,k = %d, %d, %d", i, j, k);
 
+				// User-specified plaintext keyword length. 
 				if (plaintext_keyword_len_present && j != plaintext_keyword_len) {
 					continue ;
 				}
 
 				// User-specified ciphertext keyword length. 
-
 				if (ciphertext_keyword_len_present && k != ciphertext_keyword_len) {
 					continue ;
 				}
 
 				// Both Vigenere and Quagmire 3 use the same ciphertext and plaintext keywords. 
-
 				if ((cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) && j != k) continue ;
 
 				// Vigenere cipher uses same ciphertext, plaintext, and cycleword lengths.
-
 				if (cipher_type == VIGENERE && ! (cycleword_lengths[i] == j && cycleword_lengths[i] == k)) continue ;
+
+				// Beaufort cipher uses a plaintext and ciphertext keyword of 'A'.
+				if (cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue ;
 
 				if (verbose) {
 					printf("\nplaintext, ciphertext, cycleword lengths = %d, %d, %d\n", j, k, cycleword_lengths[i]);
 				}
 
-				// Check the cipher satisfies the cribs for the cycleword lenth. 
-
+				// Check the cipher satisfies the cribs for the cycleword length. 
 				if (! cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], verbose)) {
 					if (verbose) {
 						printf("\n\nCiphertext does not satisfy the cribs for cycleword length %d. \n\n", cycleword_lengths[i]);
 					}
 #if CRIB_CHECK
-					continue;
+					continue ;
 #endif
 				}
 
@@ -663,6 +679,13 @@ double quagmire_shotgun_hill_climber(
 					random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
 					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
 					break ;
+				case BEAUFORT:
+					plaintext_keyword_len = ALPHABET_SIZE;
+					ciphertext_keyword_len = ALPHABET_SIZE;
+					for (i = 0; i < ALPHABET_SIZE; i++) current_plaintext_keyword_state[i] = i;
+					vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+					random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+					break ; 
 			}
 
 			current_score = state_score(cipher_indices, cipher_len, 
@@ -704,7 +727,7 @@ double quagmire_shotgun_hill_climber(
 	current_plaintext_keyword_state[24] = 24;
 	current_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -737,7 +760,7 @@ double quagmire_shotgun_hill_climber(
 	current_ciphertext_keyword_state[24] = 24;
 	current_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -771,7 +794,7 @@ double quagmire_shotgun_hill_climber(
 	current_plaintext_keyword_state[24] = 24;
 	current_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -805,7 +828,7 @@ double quagmire_shotgun_hill_climber(
 	current_ciphertext_keyword_state[24] = 24;
 	current_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -840,7 +863,7 @@ double quagmire_shotgun_hill_climber(
 	current_plaintext_keyword_state[24] = 23; 
 	current_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -874,7 +897,7 @@ double quagmire_shotgun_hill_climber(
 	current_ciphertext_keyword_state[24] = 23; 
 	current_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -908,7 +931,7 @@ double quagmire_shotgun_hill_climber(
 	current_plaintext_keyword_state[24] = 24; 
 	current_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -942,7 +965,7 @@ double quagmire_shotgun_hill_climber(
 	current_ciphertext_keyword_state[24] = 24; 
 	current_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(current_ciphertext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -958,7 +981,7 @@ double quagmire_shotgun_hill_climber(
 			vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 			vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
-			if (perturbate_keyword_p || cipher_type == VIGENERE || frand() < keyword_permutation_probability) {
+			if (cipher_type != BEAUFORT && (perturbate_keyword_p || cipher_type == VIGENERE || frand() < keyword_permutation_probability)) {
 				switch (cipher_type) {
 					case VIGENERE:
 						perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
@@ -1018,7 +1041,7 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[24] = 24;
 	local_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1051,7 +1074,7 @@ double quagmire_shotgun_hill_climber(
 	local_ciphertext_keyword_state[24] = 24;
 	local_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
 	}	
 #endif
@@ -1085,7 +1108,7 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[24] = 24;
 	local_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1119,7 +1142,7 @@ double quagmire_shotgun_hill_climber(
 	local_ciphertext_keyword_state[24] = 24;
 	local_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1154,7 +1177,7 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[24] = 23; 
 	local_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1188,7 +1211,7 @@ double quagmire_shotgun_hill_climber(
 	local_ciphertext_keyword_state[24] = 23; 
 	local_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1222,7 +1245,7 @@ double quagmire_shotgun_hill_climber(
 	local_plaintext_keyword_state[24] = 24; 
 	local_plaintext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
@@ -1256,17 +1279,17 @@ double quagmire_shotgun_hill_climber(
 	local_ciphertext_keyword_state[24] = 24; 
 	local_ciphertext_keyword_state[25] = 25;
 
-	if (cipher_type == VIGENERE || cipher_type == QUAGMIRE_3) {
+	if (cipher_type == VIGENERE || cipher_type == BEAUFORT || cipher_type == QUAGMIRE_3) {
 		vec_copy(local_ciphertext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
 	}
 #endif
 
-			if (cipher_type != VIGENERE) {
+			if (cipher_type != VIGENERE && cipher_type != BEAUFORT) {
 				perturbate_keyword_p = false;
 				contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
 					crib_positions, n_cribs, 
 					local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-					local_cycleword_state, cycleword_len, variant, beaufort, verbose);
+					local_cycleword_state, cycleword_len, variant, verbose);
 
 				if (contradiction) {
 					// Cycleword contradiction - must perturbate cycleword. 
@@ -1480,7 +1503,7 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 	int crib_indices[], int crib_positions[], int n_cribs, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
 	int cycleword_indices[], int cycleword_len, 
-	bool variant, bool beaufort, bool verbose) {
+	bool variant, bool verbose) {
 
 	int i, j, k, crib_char, ciphertext_char, posn_keyword, posn_cycleword, 
 		indx, crib_cyclewords[MAX_CYCLEWORD_LEN];
@@ -1777,13 +1800,14 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
 	int cycleword_indices[], int cycleword_len, bool beaufort) {
 	
-	int i, j, posn_keyword, posn_cycleword, indx;
+	int i, j, posn_keyword, posn_cycleword, indx, ct_indx, cw_indx; 
 
 	for (i = 0; i < cipher_len; i++) {
 
 		// Find position of ciphertext char in keyword. 
 		for (j = 0; j < ALPHABET_SIZE; j++) {
-			if (cipher_indices[i] == ciphertext_keyword_indices[j]) {
+			ct_indx = ciphertext_keyword_indices[j];
+			if (cipher_indices[i] == ct_indx) {
 				posn_keyword = j;
 				break ;
 			}
@@ -1791,7 +1815,11 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 
 		// Find the position of cycleword char in keyword. 
 		for (j = 0; j < ALPHABET_SIZE; j++) {
-			if (cycleword_indices[i%cycleword_len] == ciphertext_keyword_indices[j]) {
+			cw_indx = cycleword_indices[i%cycleword_len];
+			if (beaufort) {
+				cw_indx = ALPHABET_SIZE - cw_indx - 1; // Atbash
+			}
+			if (cw_indx == ciphertext_keyword_indices[j]) {
 				posn_cycleword = j; 
 				break ;
 			}
@@ -1800,6 +1828,9 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 		indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
 		if (indx < 0) indx += ALPHABET_SIZE;
 		decrypted[i] = plaintext_keyword_indices[indx];
+		if (beaufort) {
+			decrypted[i] = ALPHABET_SIZE - decrypted[i] - 1; // Atbash
+		}
 	}
 
 	return ;
@@ -1814,13 +1845,14 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
 	int cycleword_indices[], int cycleword_len, bool beaufort) {
 	
-	int i, j, posn_keyword, posn_cycleword, indx;
+	int i, j, posn_keyword, posn_cycleword, indx, pt_indx, cw_indx;
 
 	for (i = 0; i < cipher_len; i++) {
 
 		// Find position of plaintext char in the plaintext keyword. 
 		for (j = 0; j < ALPHABET_SIZE; j++) {
-			if (plaintext_indices[i] == plaintext_keyword_indices[j]) {
+			pt_indx = plaintext_indices[i];
+			if (pt_indx == plaintext_keyword_indices[j]) {
 				posn_keyword = j;
 				break ;
 			}
@@ -1828,7 +1860,11 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 
 		// Find the position of cycleword char in the ciphertext keyword. 
 		for (j = 0; j < ALPHABET_SIZE; j++) {
-			if (cycleword_indices[i%cycleword_len] == ciphertext_keyword_indices[j]) {
+			cw_indx = cycleword_indices[i%cycleword_len];
+			if (beaufort) {
+				cw_indx = ALPHABET_SIZE - cw_indx - 1; // Atbash
+			}
+			if (cw_indx == ciphertext_keyword_indices[j]) {
 				posn_cycleword = j; 
 				break ;
 			}
@@ -1837,6 +1873,9 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 		indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
 		if (indx < 0) indx += ALPHABET_SIZE;
 		encrypted[i] = ciphertext_keyword_indices[indx];
+		if (beaufort) {
+			encrypted[i] = ALPHABET_SIZE - encrypted[i] - 1; // Atbash
+		}
 	}
 
 	return ;
