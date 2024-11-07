@@ -1,5 +1,5 @@
 # Quagmire Cipher Solver
-stochastic shotgun-restarted hill climber for Quagmire (0 (Vigenere), I, II, III, IV) ciphers. 
+A prototype stochastic shotgun-restarted hill climber for Vigenere, Beaufort, Quagmire I, II, III, IV) ciphers (including variants.) 
 
 This program is inspired by various explanations of Jim Gillogly's cipher solving program: 
 
