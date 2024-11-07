@@ -16,7 +16,7 @@ Here is an example where we solve a length 370 Quagmire I cipher with a length 5
 
 ```$ ./quagmire -type 1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
 
-After a few seconds, we have the decryption: 
+We quickly obtain the following decryption: 
 
 ```
 0.74	[sec]
