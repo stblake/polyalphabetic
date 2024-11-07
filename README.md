@@ -44,6 +44,10 @@ The Quagmire II cipher uses a straight plaintext alphabet, a ciphertext keyword,
 Similarly to the previous cipher, we can solve a Quagmire II cipher as follows:
 
 ```
+$ ./quagmire -type 2 -cipher cipher_quagmire_2_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -ciphertextkeywordlen 6 -cyclewordlen 7
+```
+
+```
 8.27	[sec]
 85K	[it/sec]
 69	[backtracks]
