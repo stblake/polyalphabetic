@@ -12,7 +12,7 @@ https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 ## Quagmire I
 The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword. 
 
-Here is an example where we solve a length 370 Quagmire I cipher with a length 5 plaintext keyword, and a length 7 cycleword.
+Here is an example where we solve a length 370 Quagmire I cipher (which we store in `cipher_quagmire_1_longer.txt`) with a length 5 plaintext keyword, and a length 7 cycleword.
 
 ```$ ./quagmire -type 1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
 
