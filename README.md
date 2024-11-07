@@ -10,10 +10,39 @@ https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 ## Beaufort
 
 ## Quagmire I
+The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword. 
+
+Here is an example where we solve a length 370 Quagmire I cipher with a length 5 plaintext keyword, and a length 7 cycleword.
+
+```$ ./quagmire -type 1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
+
+After a few seconds, we have the decryption: 
+
+```
+0.74	[sec]
+66K	[it/sec]
+30	[backtracks]
+97	[restarts]
+73	[iterations]
+21	[slips]
+0.00	[contradiction pct]
+0.0656	[IOC]
+2.8699	[entropy]
+0.24	[chi-squared]
+0.75	[score]
+WILAMBCDEFGHJKNOPQRSTUVXYZ
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+WEBSTER
+ITWASTOTALLYINVISIBLEHOWSTHATPOSSIBLETHEYUSEDTHEEARTHSMAGNETICFIELDXTHEINFORMATIONWASGATHEREDANDTRANSMITTEDUNDERGRUUNDTOANUNKNOWNLOCATIONXDOESLANGLEYKNOWABOUTTHISTHEYSHOULDITSBURIEDOUTTHERESOMEWHEREXWHOKNOWSTHEEXACTLOCATIONONLYWWTHISWASHISLASTMESSAGEXTHIRTYEIGHTDEGREESFIFTYSEVENMINUTESSIXPOINTFIVESECONDSNORTHSEVENTYSEVENDEGREESEIGHTMINUTESFORTYFOURSECONDSWESTXLAYERTWO
+```
+
 
 ## Quagmire II
 
+
 ## Quagmire III
+The Quagmire III cipher uses the same plaintext and ciphertext keywords, and a distinct cycleword. 
+
 Here is a simple example where we solve the following length 97, Quagmire III cipher (which we store in `cipher.txt`)
 
 ```MFABBMNNQEYEZIAIABLJJEFXNWJOTNPVDIBHQNNSIMRJPZIXOEJXROJVTNPFILBBJNSNTGLDRISJZWQCSDVIFKNNMVOIXTQOP```
