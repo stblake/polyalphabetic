@@ -154,7 +154,7 @@ So the (plaintext and ciphertext) keywords were `KRYPTOS` and the cycleword (ind
 
 ## Quagmire IV
 
-Quagmire IV ciphers use a plaintext keyword, a ciphertext keyword, and a cycleword. They are, at least for this program, significantly harder to solve than other Quagmire ciphers. 
+Quagmire IV ciphers use a plaintext keyword, a ciphertext keyword, and a cycleword. They are, at least for this program, significantly harder to solve than other Quagmire ciphers (especially in the absence of any cribs.)
 
 Here we solve a relatively easy Quagmire IV cipher, with a plaintext keyword of length 7, a ciphertext keyword of length 3, and a cycleword of length 3. 
 
@@ -180,7 +180,10 @@ MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERKINCKOCLYOUWIK
 
 The keywords are `KRYPTOS`, `CIA`, and `USA`. 
 
+The following cipher is significantly harder for this program to solve: 
 
+```$ ./quagmire -type 4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
 
+After a hour, we cannot solve this Quagmire IV cipher. 
 
 
