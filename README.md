@@ -30,7 +30,7 @@ KRYPTOSABCDEFGHIJLMNQUVWXZ
 MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWILLSEEFURTHERINFORM
 ```
 
-So the (plaintext, ciphertext, and cycleword) keyword is `KRYPTOS`. 
+So the (plaintext, ciphertext, and cycleword) keyword is `KRYPTOS`. (TODO: Look into why I had to use the _NOCRIBCHECK version of quagmire for this example.)
 
 ## Beaufort
 The Beaufort cipher is a polyalphabetic substitution cipher that encrypts text by pairing each letter of the plaintext with a key and performing modular subtraction. It’s similar to the Vigenère cipher but uses subtraction instead of addition, making it its own reciprocal—encryption and decryption are performed with the same process.
