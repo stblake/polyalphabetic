@@ -186,4 +186,7 @@ The following cipher is significantly harder for this program to solve:
 
 After a hour, we cannot solve this Quagmire IV cipher. 
 
+## Variants
+
+## Indicator keys
 
