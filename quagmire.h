@@ -101,8 +101,7 @@ double quagmire_shotgun_hill_climber(
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy,
-	bool variant, bool beaufort,
-	bool verbose);
+	bool variant, bool beaufort, bool verbose);
 
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
 	int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
@@ -124,7 +123,7 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 double state_score(int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-			int cycleword_state[], int cycleword_len, 
+			int cycleword_state[], int cycleword_len,
 			bool variant, bool beaufort, 
 			int decrypted[], 
 			float *ngram_data, int ngram_size,

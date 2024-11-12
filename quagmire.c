@@ -1,8 +1,11 @@
 //
-//	Quagmire cipher solver - stochastic shotgun-restarted hill climber 
+//	Polyalphabetic cipher solver
 //
 
-// Written by Sam Blake, started 14 July 2023
+// A stochastic, shotgun-restarted hill climber with backtracking for solving 
+// Vigenere, Beaufort, and Quagmire I - IV with variants. 
+
+// Written by Sam Blake, started 14 July 2023. 
 
 /*
     This program is free software: you can redistribute it and/or modify
@@ -20,23 +23,12 @@
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
-// Cipher types: 
-// 
-//		0 - Vigenere
-//		1 - Quagmire I
-//		2 - Quagmire II
-//		3 - Quagmire III
-//		4 - Quagmire IV
-//		5 - Beaufort
-
-
-
 #include "quagmire.h"
 
 /* Program syntax:
 
 	$ ./quagmire \
-		-type /quagmire cipher type (0, 1, 2, 3, 4, or 5)/ \
+		-type /cipher type (0, 1, 2, 3, 4, or 5)/ \
 		-cipher /ciphertext file/ \
 		-crib /crib file/ \
 		-temperature /initial temperature/ \
@@ -67,14 +59,15 @@
 	Notes: 
 
 		/quagmire cipher type (0,1,2,3, or 4)/ -- type 0 is a Vigenere cipher, then 1-4 are Quagmire types
-			1 to 4 as defined by the ACA (https://www.cryptogram.org/resource-area/cipher-types/).
+			1 to 4 as defined by the ACA (https://www.cryptogram.org/resource-area/cipher-types/), type 5 
+			is the Beaufort cipher as defined by the ACA (https://www.cryptogram.org/downloads/aca.info/ciphers/Beaufort.pdf)
 
 		/ciphertext file/ -- the entire cipher should be on the first line of the file. Subsequent 
 			lines will not be read. 
 
 		/crib file/ -- uses "_" for unknown chars. Just a single line of the same length
 			as the ciphers contained in the cipher file. For the Kryptos K4 cipher (assuming Sanborn has not 
-			made any enciphering and/or spelling mistakes) it should contain
+			made any enciphering and/or spelling and/or positional mistakes) it should contain
 
 		_____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
 	
@@ -83,7 +76,8 @@
 
 		This program is designed for attacks on the final unsolved Kryptos cipher (K4), which is only of 
 		length 97. For longer ciphers a far better approach is to use frequency analysis on each simple 
-		substitution ciphers (once the period has been estimated). 
+		substitution ciphers (once the period has been estimated). Furthermore, if we knew for certain that 
+		the cribs given for K4 were correct we could make additional performance improvements. 
 */
 
 int main(int argc, char **argv) {
@@ -246,7 +240,7 @@ int main(int argc, char **argv) {
 	}
 
 
-	// Check command line inputs. 
+	// Sense check command line inputs. 
 
 	if (! cipher_present) {
 		printf("\n\nERROR: cipher file not present.\n\n");
@@ -284,7 +278,8 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	// Read ciphertext. 
+	// Read ciphertext. Only the first line of the ciphertext file is read (leaving 
+	// further lines for explanation/derivation etc.)
 
 	fp = fopen(ciphertext_file, "r");
 	fscanf(fp, "%s", ciphertext);
@@ -506,6 +501,7 @@ int main(int argc, char **argv) {
 	if (dictionary_present_p) {
 		printf("%d\n", n_words_found);
 	}
+
 	print_text(cipher_indices, cipher_len);
 	printf("\n");
 	print_text(best_plaintext_keyword, ALPHABET_SIZE);
@@ -618,16 +614,16 @@ double quagmire_shotgun_hill_climber(
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE],
 	double backtracking_probability, double keyword_permutation_probability, double slip_probability,
 	float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy, 
-	bool variant, bool beaufort,
-	bool verbose) {
+	bool variant, bool beaufort, bool verbose) {
 
-	int i, n, n_iterations, n_backtracks, n_explore, n_contradictions,
+	int i, j, n, indx, n_iterations, n_backtracks, n_explore, n_contradictions,
 		local_plaintext_keyword_state[ALPHABET_SIZE], current_plaintext_keyword_state[ALPHABET_SIZE], 
 		local_ciphertext_keyword_state[ALPHABET_SIZE], current_ciphertext_keyword_state[ALPHABET_SIZE], 
 		best_plaintext_keyword_state[ALPHABET_SIZE], best_ciphertext_keyword_state[ALPHABET_SIZE],
 		local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN], 
 		best_cycleword_state[MAX_CYCLEWORD_LEN];
-	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi, entropy_score;
+	double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score, ioc, chi, 
+		entropy_score;
 	bool perturbate_keyword_p, contradiction;
 
 	if (cipher_type == VIGENERE) {
@@ -691,7 +687,7 @@ double quagmire_shotgun_hill_climber(
 			current_score = state_score(cipher_indices, cipher_len, 
 				crib_indices, crib_positions, n_cribs, 
 				current_plaintext_keyword_state, current_ciphertext_keyword_state, 
-				current_cycleword_state, cycleword_len,
+				current_cycleword_state, cycleword_len, 
 				variant, beaufort, 
 				decrypted, ngram_data, ngram_size,
 				weight_ngram, weight_crib, weight_ioc, weight_entropy);
@@ -1292,7 +1288,7 @@ double quagmire_shotgun_hill_climber(
 					local_cycleword_state, cycleword_len, variant, verbose);
 
 				if (contradiction) {
-					// Cycleword contradiction - must perturbate cycleword. 
+					// Cycleword contradiction - must perturbate keyword(s). 
 					n_contradictions += 1; 
 					perturbate_keyword_p = true; 
 				}
@@ -1302,7 +1298,7 @@ double quagmire_shotgun_hill_climber(
 			local_score = state_score(cipher_indices, cipher_len, 
 				crib_indices, crib_positions, n_cribs, 
 				local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-				local_cycleword_state, cycleword_len,
+				local_cycleword_state, cycleword_len, 
 				variant, beaufort, 
 				decrypted, ngram_data, ngram_size,
 				weight_ngram, weight_crib, weight_ioc, weight_entropy);
@@ -1370,10 +1366,21 @@ double quagmire_shotgun_hill_climber(
 					printf("%.2f\t[chi-squared]\n", chi);
 					printf("%.2f\t[score]\n", best_score);
 					print_text(best_plaintext_keyword_state, ALPHABET_SIZE);
-					printf("\n");					
+					printf("\n");
 					print_text(best_ciphertext_keyword_state, ALPHABET_SIZE);
 					printf("\n");
 					print_text(best_cycleword_state, cycleword_len);
+					printf("\n");
+
+					// Display Quagmire tablau. 
+					printf("\n");
+					for (i = 0; i < cycleword_len; i++) {
+						for (j = 0; j < ALPHABET_SIZE; j++) {
+							indx = (j + best_cycleword_state[i]) % ALPHABET_SIZE;
+							printf("%c", best_ciphertext_keyword_state[indx] + 'A');
+						}
+						printf("\n");
+					}
 					printf("\n");
 
 					print_text(decrypted, cipher_len);
@@ -1381,9 +1388,7 @@ double quagmire_shotgun_hill_climber(
 					fflush(stdout);
 				}
 			}
-
 		}
-
 	}
 
 	vec_copy(best_plaintext_keyword_state, plaintext_keyword, ALPHABET_SIZE);
@@ -1522,7 +1527,7 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 
 	for (i = 0; i < cycleword_len; i++) {
 
-		// Rotate/modify cycleword based on keyword and crib. 
+		// Rotate/modify cycleword based on (plaintext and ciphertext) keyword(s) and crib. 
 
 		for (j = 0; j < n_cribs; j++) {
 			if (crib_positions[j]%cycleword_len == i) {
@@ -1627,10 +1632,12 @@ double state_score(int cipher_indices[], int cipher_len,
 
 	if (variant) {
 		quagmire_encrypt(decrypted, cipher_indices, cipher_len, 
-			plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len, beaufort);
+			plaintext_keyword_state, ciphertext_keyword_state, 
+			cycleword_state, cycleword_len, beaufort);
 	} else {
 		quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-			plaintext_keyword_state, ciphertext_keyword_state, cycleword_state, cycleword_len, beaufort);
+			plaintext_keyword_state, ciphertext_keyword_state, 
+			cycleword_state, cycleword_len, beaufort);
 	}
 
 	// n-gram score. 
@@ -1804,7 +1811,7 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 
 	for (i = 0; i < cipher_len; i++) {
 
-		// Find position of ciphertext char in keyword. 
+		// Find position of ciphertext char in ciphertext key. 
 		for (j = 0; j < ALPHABET_SIZE; j++) {
 			ct_indx = ciphertext_keyword_indices[j];
 			if (cipher_indices[i] == ct_indx) {
