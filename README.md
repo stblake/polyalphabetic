@@ -189,9 +189,9 @@ After a hour, we cannot solve this Quagmire IV cipher.
 ## Variants
 
 ## Indicator keys
-We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. This is not currently done in any clever way, and we iterate over ALPHABET_SIZE possible positions for each iteration of the solver. 
+We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. You need to do your own search for the cycleword, as we do not use a dictionary search for any of the keywords. 
 
-```./quagmire -type 1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -varyindicatorkey -verbose```
+```./quagmire -type 1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
 
 ```
 8.89	[sec]
