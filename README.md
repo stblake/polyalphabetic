@@ -187,6 +187,27 @@ The following cipher is significantly harder for this program to solve:
 After a hour, we cannot solve this Quagmire IV cipher. 
 
 ## Variants
+We can solve Quagmire-type variant ciphers (where the encryption and decryption steps are swapped.) For example, we use the `-variant` flag to solve a variant Quagmire-3 cipher: 
+
+```$ ./quagmire -type 3 -variant -cipher cipher_variant.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 7 -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
+
+```
+19.34	[sec]
+368K	[it/sec]
+453	[backtracks]
+2837	[restarts]
+998	[iterations]
+3531	[slips]
+1.00	[contradiction pct]
+0.0642	[IOC]
+2.7714	[entropy]
+0.12	[chi-squared]
+1.00	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KOMITET
+MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWILLSEEFURTHERINFORM
+```
 
 ## Indicator keys
 We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. You need to do your own search for the cycleword, as we do not use a dictionary search for any of the keywords. 
