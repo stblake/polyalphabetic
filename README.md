@@ -253,12 +253,17 @@ Otherwise, for any unspecified keyword length, `quagmire` will search through ke
 
 I have compile several different versions of `quagmire`, mostly for Kryptos-specific purposes. These are: 
 
-- `quagmire_NOCRIBCHECK` where we set
+- `quagmire_NOCRIBCHECK`, where we set
 ```
 #define CRIB_CHECK 0
 ```
 in `quagmire.h`. This option allows the program to run even if there is a contradiction between the cribs and the ciphertext. 
 
-- `quagmire_KRYPTOS_CT` 
+- `quagmire_KRYPTOS_CT`, where we set
+```
+#define KRYPTOS_CT 1
+```
+in `quagmire.h`. This option fixes the ciphertext keyword to KRYPTOS[ABCDEFGHIJLMNQUVWXZ]. Similarly for `#define KRYPTOS_PT 1` and the plaintext keyword. 
+
 
 
