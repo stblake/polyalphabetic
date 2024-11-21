@@ -28,20 +28,19 @@
 /* Program syntax:
 
 	$ ./quagmire \
+		-nhillclimbs /number of hillclimbing steps/ \
+		-nrestarts /number of restarts/ \
 		-type /cipher type (0, 1, 2, 3, 4, or 5)/ \
 		-cipher /ciphertext file/ \
 		-crib /crib file/ \
-		-temperature /initial temperature/ \
-		-coolrate /cooling rate/ \
 		-ngramsize /n-gram size in n-gram statistics file/ \
 		-ngramfile /n-gram statistics file/ \
 		-maxkeywordlen /max length of the keyword/ \
 		-maxcyclewordlen /max length of the cycleword/ \
-		-keywordlen /user defined length of the keyword/ \
+		-plaintextkeywordlen /user defined length of the plaintext keyword/ \
+		-ciphertextkeywordlen /user defined length of the ciphertext keyword/ \
 		-cyclewordlen /user defined length of the cycleword/ \
 		-nsigmathreshold /n sigma threshold for candidate keyword length/ \
-		-nlocal /number of local searches to find an improved score/ \
-		-nhillclimbs /number of hillclimbing steps/ \
 		-backtrackprob /probability of backtracking to the best 
 			solution instead of a random initial solution/ \
 		-keywordpermprob /probability of permuting the keyword instead of the cycleword/ \
@@ -52,7 +51,6 @@
 		-weightcrib /weight used in the hillclimber score for the crib matches/ \
 		-weightioc /weight used in the hillclimber score for the IoC/ \
 		-weightentropy /weight used in the hillclimber score for the plaintext entropy/ \
-		-nrestarts /number of restarts/ \
 		-verbose
 
 
