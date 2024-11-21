@@ -259,6 +259,6 @@ I have compile several different versions of `quagmire`, mostly for Kryptos-spec
 ```
 in `quagmire.h`. This option allows the program to run even if there is a contradiction between the cribs and the ciphertext. 
 
-- 
+- `quagmire_KRYPTOS_CT` 
 
 
