@@ -240,3 +240,25 @@ MNOPQRSTUVWXYZABCDEFGHIJKL
 ITWASTOTALLYINVISIBLEHOWSTHATQOSSIBLETHEYUSEDTHEEARTHSMAGNETICFIELDXTHEINFORMATIONWASGATHEREDANDTRANSMITTEDUNDERGRUUNDTOANUNKNOWNLOCATIONXDOESLANGLEYKNOWABOUTTHISTHEYSHOULDITSBURIEDOUTTHERESOMEWHEREXWHOKNOWSTHEEXACTLOCATIONONLYWWTHISWASHISLASTMESSAGEXTHIRTYEIGHTDEGREESFIFTYSEVENMINUTESSIXQOINTFIVESECONDSNORTHSEVENTYSEVENDEGREESEIGHTMINUTESFORTYFOURSECONDSWESTXLAYERTWO
 ```
 
+## Known and unknown key lengths
+If you know the key lengths for the ciphertext keyword, the plaintext keyword, or the cycleword (indicator) keyword, then you can set them manually via:
+
+- `-plaintextkeywordlen /positive integer/`
+- `-plaintextkeywordlen /positive integer/`
+- `-cyclewordlen /positive integer/` 
+
+Otherwise, for any unspecified keyword length, `quagmire` will search through keyword lengths up to `-maxkeywordlen` and it will estimate which cycleword lengths to test based on periodic index of coincidence statistics. (TODO: explain this in more detail with examples.)
+
+## Compiling different versions of `quagmire`
+
+I have compile several different versions of `quagmire`, mostly for Kryptos-specific purposes. These are: 
+
+- `quagmire_NOCRIBCHECK` where we set
+```
+#define CRIB_CHECK 0
+```
+in `quagmire.h`. This option allows the program to run even if there is a contradiction between the cribs and the ciphertext. 
+
+- 
+
+
