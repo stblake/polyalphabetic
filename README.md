@@ -184,7 +184,7 @@ The following cipher is significantly harder for this program to solve:
 
 ```$ ./quagmire -type 4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
 
-After around 5 minutes we get the following partial solution: 
+After around 5 minutes we get the following partial solution (keywords should be `WIL[L]IAM`, `WEBST[E]R`, and `ENIGMA`): 
 
 ```
 261.06	[sec]
