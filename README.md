@@ -184,7 +184,34 @@ The following cipher is significantly harder for this program to solve:
 
 ```$ ./quagmire -type 4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
 
-After a hour, we cannot solve this Quagmire IV cipher. 
+After around 5 minutes we get the following partial solution: 
+
+```
+261.06	[sec]
+81K	[it/sec]
+597	[backtracks]
+4195	[restarts]
+679	[iterations]
+10555	[slips]
+0.00	[contradiction pct]
+0.0632	[IOC]
+2.9092	[entropy]
+1.45	[chi-squared]
+0.52	[score]
+
+ILAMBCDEFGHJKNOPQRSTUVWXYZ
+WECSTRABDFGHIJKLMNOPQUVXYZ
+COJHNB
+
+CSTRABDFGHIJKLMNOPQUVXYZWE
+KLMNOPQUVXYZWECSTRABDFGHIJ
+FGHIJKLMNOPQUVXYZWECSTRABD
+BDFGHIJKLMNOPQUVXYZWECSTRA
+JKLMNOPQUVXYZWECSTRABDFGHI
+ECSTRABDFGHIJKLMNOPQUVXYZW
+
+CTZASTOTALLXCNVISVBLEHOZSTHATPOSSIBLETHEXUSEDTHEEARTHSMAGNETCCFIELDWTHEVNFOWMATIONZASGATHEREDANDTRANSMCTTEDUNDEWGRUUNDTOANPNKNOZNLOCATIONWDOESLANGLEXKNOZABOUTTHISTPEXSHOULDITSBPWIEDOPTTHERESOMEZHEREWZHOKNOZSTHEEWACTLOCATIONONLXZZTHISZASHISLASTMESSAGEWTHIRTXECGHTDEGREESFCFTXSEVENMINUTESSVWHOINTFIVESEIONDSNORTHSEVENTXSEVENDEGREESECGHTMVNUTESFORTXFOURSECONDSZESTWLAXERTZO
+```
 
 ## Variants
 We can solve Quagmire-type variant ciphers (where the encryption and decryption steps are swapped.) For example, we use the `-variant` flag to solve a variant Quagmire-3 cipher: 
