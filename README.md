@@ -307,7 +307,7 @@ Otherwise, for any unspecified keyword length, `quagmire` will search through ke
 
 ## Compiling different versions of `quagmire`
 
-I have compile several different versions of `quagmire`, mostly for Kryptos-specific purposes. These are: 
+I have compiled several different versions of `quagmire`, mostly for Kryptos-specific purposes. These are: 
 
 - `quagmire_NOCRIBCHECK`, where we set
 ```
