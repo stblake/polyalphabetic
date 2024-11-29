@@ -268,7 +268,7 @@ MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWIL
 ## Indicator keys
 We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. You need to do your own search for the cycleword, as we do not use a dictionary search for any of the keywords. 
 
-```./quagmire -type 1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
+```$ ./quagmire -type 1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
 
 ```
 8.89	[sec]
@@ -320,6 +320,51 @@ in `quagmire.h`. This option allows the program to run even if there is a contra
 #define KRYPTOS_CT 1
 ```
 in `quagmire.h`. This option fixes the ciphertext keyword to KRYPTOS[ABCDEFGHIJLMNQUVWXZ]. Similarly for `#define KRYPTOS_PT 1` and the plaintext keyword. 
+
+Using these versions of `quagmire`, we can easily solve K1: 
+
+`./quagmire_KRYPTOS_PT -type 3 -cipher k1.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nsigmathreshold 1. -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 7 -cyclewordlen 10`
+
+```
+0.07	[sec]
+504K	[it/sec]
+1	[backtracks]
+14	[restarts]
+543	[iterations]
+13	[slips]
+0.00	[contradiction pct]
+0.0650	[IOC]
+2.6692	[entropy]
+0.52	[chi-squared]
+0.74	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+PALIMPSEST
+BETWEENSUBTLESHADINGANDTHEABSENCEOFLIGHTLIESTHENUANCEOFIQLUSION
+```
+
+Similarly for K2: 
+
+`$ ./quagmire_KRYPTOS_PT -type 3 -cipher k2.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 8 -nsigmathreshold 1. -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose`
+
+```
+0.01	[sec]
+70K	[it/sec]
+0	[backtracks]
+0	[restarts]
+732	[iterations]
+1	[slips]
+0.00	[contradiction pct]
+0.0656	[IOC]
+2.8699	[entropy]
+0.24	[chi-squared]
+0.75	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+ABSCISSA
+ITWASTOTALLYINVISIBLEHOWSTHATPOSSIBLETHEYUSEDTHEEARTHSMAGNETICFIELDXTHEINFORMATIONWASGATHEREDANDTRANSMITTEDUNDERGRUUNDTOANUNKNOWNLOCATIONXDOESLANGLEYKNOWABOUTTHISTHEYSHOULDITSBURIEDOUTTHERESOMEWHEREXWHOKNOWSTHEEXACTLOCATIONONLYWWTHISWASHISLASTMESSAGEXTHIRTYEIGHTDEGREESFIFTYSEVENMINUTESSIXPOINTFIVESECONDSNORTHSEVENTYSEVENDEGREESEIGHTMINUTESFORTYFOURSECONDSWESTXLAYERTWO
+```
+
 
 
 
