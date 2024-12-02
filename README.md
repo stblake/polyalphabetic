@@ -323,7 +323,7 @@ in `quagmire.h`. This option fixes the ciphertext keyword to KRYPTOS[ABCDEFGHIJL
 
 Using these versions of `quagmire`, we can easily solve K1: 
 
-`./quagmire_KRYPTOS_PT -type 3 -cipher k1.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nsigmathreshold 1. -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 7 -cyclewordlen 10`
+`./quagmire_KRYPTOS_PT -type 3 -cipher k1.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 7 -cyclewordlen 10`
 
 ```
 0.07	[sec]
@@ -345,7 +345,7 @@ BETWEENSUBTLESHADINGANDTHEABSENCEOFLIGHTLIESTHENUANCEOFIQLUSION
 
 Similarly for K2: 
 
-`$ ./quagmire_KRYPTOS_PT -type 3 -cipher k2.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 8 -nsigmathreshold 1. -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose`
+`$ ./quagmire_KRYPTOS_PT -type 3 -cipher k2.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 8 -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose`
 
 ```
 0.01	[sec]
