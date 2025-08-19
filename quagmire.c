@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
 			backtracking_probability = atof(argv[++i]);
 			printf("\n-backtrackprob %.4f", backtracking_probability);
 		} else if (strcmp(argv[i], "-keywordpermprob") == 0) {
-			backtracking_probability = atof(argv[++i]);
+			keyword_permutation_probability = atof(argv[++i]);
 			printf("\n-keywordpermprob %.4f", keyword_permutation_probability);
 		} else if (strcmp(argv[i], "-slipprob") == 0) {
 			slip_probability = atof(argv[++i]);
