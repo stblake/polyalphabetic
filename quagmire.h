@@ -1,5 +1,3 @@
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -27,6 +25,7 @@
 #define QUAGMIRE_3 3
 #define QUAGMIRE_4 4
 #define BEAUFORT   5
+#define AUTOKEY    6
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -89,6 +88,17 @@ double english_monograms[] = {
 };
 
 
+void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+    int key_indices[], int key_len);
+
+double autokey_dictionary_attack(
+    int cipher_indices[], int cipher_len,
+    char **dict, int n_dict_words,
+    float *ngram_data, int ngram_size,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy,
+    char best_key[], int best_decrypted[],
+    bool verbose);
 
 double quagmire_shotgun_hill_climber(
 	int cipher_type, 
@@ -114,11 +124,11 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 
 void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool beaufort);
+	int cycleword_indices[], int cycleword_len, bool variant, bool beaufort);
 
 void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool beaufort);
+	int cycleword_indices[], int cycleword_len, bool variant, bool beaufort);
 
 double state_score(int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
