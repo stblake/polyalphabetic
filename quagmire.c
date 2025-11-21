@@ -1062,18 +1062,18 @@ double state_score(int cipher_indices[], int cipher_len,
         cycleword_state, cycleword_len, variant, beaufort);
 
     decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
-    return decrypted_crib_score; 
+    // return decrypted_crib_score; 
 
     decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
 
     if (n_cribs > 0) {
-        score = decrypted_ngram_score + decrypted_crib_score;
+        score = weight_ngram * decrypted_ngram_score + weight_crib * decrypted_crib_score;
         score /= weight_ngram + weight_crib;
+        score /= 3.55; 
     } else {
         score = decrypted_ngram_score;
     }
 
-    score /= 0.255; 
     return score;
 }
 
