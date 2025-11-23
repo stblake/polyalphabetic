@@ -101,6 +101,8 @@ typedef struct {
     bool variant;
     bool beaufort;
 
+    bool optimal_cycleword;
+
 } QuagmireConfig;
 
 typedef struct {
@@ -127,8 +129,6 @@ static double english_monograms[] = {
 	0.017214, 0.001138
 };
 
-// --- Function Prototypes ---
-
 // Core Logic
 void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg, SharedData *shared);
 
@@ -154,6 +154,12 @@ double quagmire_shotgun_hill_climber(
 	float *ngram_data,
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE]);
+
+void derive_optimal_cycleword(
+    int cipher_indices[], int cipher_len,
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
+    int cycleword_state[], int cycleword_len,
+    bool variant, bool beaufort);
 
 // Helpers
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 

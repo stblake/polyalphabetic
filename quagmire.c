@@ -117,6 +117,8 @@ void init_config(QuagmireConfig *cfg) {
     cfg->weight_crib = 36.0;
     cfg->weight_ioc = 0.0;
     cfg->weight_entropy = 0.0;
+
+    cfg->optimal_cycleword = true;
 }
 
 int main(int argc, char **argv) {
@@ -229,6 +231,8 @@ int main(int argc, char **argv) {
             cfg.variant = true;
         } else if (strcmp(argv[i], "-verbose") == 0) {
             cfg.verbose = true;
+        } else if (strcmp(argv[i], "-optimalcycle") == 0) {
+            cfg.optimal_cycleword = true;
         }
     }
 
@@ -390,10 +394,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
         }
     }
 
-    // -------------------------------------
     // Attack Logic
-    // -------------------------------------
-
     if (cfg->cipher_type == AUTOKEY) {
 
         if (!cfg->dictionary_present || shared->dict == NULL) {
@@ -492,9 +493,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
         }
     }
 
-    // -------------------------------------
     // Reporting
-    // -------------------------------------
 
     char plaintext_string[MAX_CIPHER_LENGTH];
     for (int i = 0; i < cipher_len; i++) {
@@ -545,9 +544,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
 }
 
 
-// ============================================================================
 // Hill Climber
-// ============================================================================
 
 double quagmire_shotgun_hill_climber(
     QuagmireConfig *cfg,
@@ -655,6 +652,14 @@ double quagmire_shotgun_hill_climber(
                     break ; 
             }
 
+            // If in optimal mode, fix the cycleword immediately for the initial random state
+            if (cfg->optimal_cycleword) {
+                derive_optimal_cycleword(cipher_indices, cipher_len, 
+                    current_plaintext_keyword_state, current_ciphertext_keyword_state, 
+                    current_cycleword_state, cycleword_len, 
+                    cfg->variant, cfg->beaufort);
+            }
+
             current_score = state_score(cipher_indices, cipher_len, 
                 crib_indices, crib_positions, n_cribs, 
                 current_plaintext_keyword_state, current_ciphertext_keyword_state, 
@@ -738,24 +743,70 @@ double quagmire_shotgun_hill_climber(
                 did_perturb_keyword = false;
             }
             
-            // If we decided NOT to perturb the keyword (because it was fixed by user, or stochastic choice),
-            // we perturb the cycleword.
-            if (!did_perturb_keyword) {
-                perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
-            }
-
-            if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT) {
-                perturbate_keyword_p = false; 
+            // ================================================================
+            // NEW BRANCHING LOGIC
+            // ================================================================
+            
+            if (cfg->optimal_cycleword) {
+                // --- NEW METHOD: DETERMINISTIC ---
+                // We NEVER perturb the cycleword randomly.
+                // We always mathematically derive the best cycleword for the current keyword.
                 
-                if (did_perturb_keyword) { 
-                    contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
-                        crib_positions, n_cribs, 
-                        local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                        local_cycleword_state, cycleword_len, cfg->variant, cfg->verbose);
+                // If we didn't touch the keyword this turn, and we're in optimal mode,
+                // re-calculating the cycleword for the SAME keyword is useless.
+                // We must force a keyword change to progress.
+                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT) {
+                    
+                    // Force perturbation on valid alphabets
+                    if (cfg->cipher_type == QUAGMIRE_3) {
+                         perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                         vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                         did_perturb_keyword = true;
+                    } 
+                    else if (cfg->cipher_type == QUAGMIRE_1) {
+                        perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        did_perturb_keyword = true;
+                    }
+                    else if (cfg->cipher_type == QUAGMIRE_2) {
+                        perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        did_perturb_keyword = true;
+                    }
+                    else if (cfg->cipher_type == QUAGMIRE_4) {
+                        // Random force
+                        if (frand() < 0.5) {
+                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        } else {
+                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        }
+                        did_perturb_keyword = true;
+                    }
+                }
 
-                    if (contradiction) {
-                        n_contradictions += 1; 
-                        perturbate_keyword_p = true; 
+                derive_optimal_cycleword(cipher_indices, cipher_len, 
+                    local_plaintext_keyword_state, local_ciphertext_keyword_state, 
+                    local_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+
+            } else {
+                // --- OLD METHOD: STOCHASTIC ---
+                // If we decided NOT to perturb the keyword (because it was fixed by user, or stochastic choice),
+                // we perturb the cycleword.
+                if (!did_perturb_keyword) {
+                    perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                }
+
+                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT) {
+                    perturbate_keyword_p = false; 
+                    
+                    if (did_perturb_keyword) { 
+                        contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
+                            crib_positions, n_cribs, 
+                            local_plaintext_keyword_state, local_ciphertext_keyword_state, 
+                            local_cycleword_state, cycleword_len, cfg->variant, cfg->verbose);
+
+                        if (contradiction) {
+                            n_contradictions += 1; 
+                            perturbate_keyword_p = true; 
+                        }
                     }
                 }
             }
@@ -850,9 +901,98 @@ double quagmire_shotgun_hill_climber(
 }
 
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
+
+// Solves the cycleword optimally for the given keywords using columnar dot product.
+
+void derive_optimal_cycleword(
+    int cipher_indices[], int cipher_len,
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
+    int cycleword_state[], int cycleword_len,
+    bool variant, bool beaufort) {
+
+    int col, row, i, shift, best_shift_index;
+    int ct_char, pt_char, pt_idx_calc;
+    int posn_keyword, posn_cycleword;
+    double best_score, current_score;
+    int char_counts[ALPHABET_SIZE];
+    int total_count;
+
+    // 1. Pre-calculate lookup table for ciphertext keyword positions to speed up the loop
+    int ct_key_lookup[ALPHABET_SIZE];
+    for (i = 0; i < ALPHABET_SIZE; i++) ct_key_lookup[i] = -1;
+    for (i = 0; i < ALPHABET_SIZE; i++) {
+        // We map the CHAR (0-25) to its POSITION (0-25) in the CT keyword
+        ct_key_lookup[ciphertext_keyword_indices[i]] = i;
+    }
+
+    // 2. Iterate over each column of the period
+    for (col = 0; col < cycleword_len; col++) {
+        best_score = -1.0;
+        best_shift_index = 0; // This will be the index in the CT keyword
+
+        // Try all 26 possible shifts (letters of the cycleword)
+        for (shift = 0; shift < ALPHABET_SIZE; shift++) {
+            
+            // Reset counts
+            for (i = 0; i < ALPHABET_SIZE; i++) char_counts[i] = 0;
+            total_count = 0;
+
+            // Decrypt this column using the current 'shift'
+            row = 0;
+            while ((row * cycleword_len + col) < cipher_len) {
+                ct_char = cipher_indices[row * cycleword_len + col];
+                
+                // Look up position of CT char in CT keyword
+                posn_keyword = ct_key_lookup[ct_char];
+                
+                // If the char isn't in the keyed alphabet (shouldn't happen if full alphabet), skip
+                if (posn_keyword == -1) { row++; continue; }
+
+                // The 'shift' variable acts as 'posn_cycleword'
+                posn_cycleword = shift;
+                if (beaufort) posn_cycleword = ALPHABET_SIZE - posn_cycleword - 1;
+
+                // Quagmire Decryption Math
+                if (variant) {
+                    pt_idx_calc = (posn_keyword + posn_cycleword) % ALPHABET_SIZE;
+                } else {
+                    pt_idx_calc = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
+                }
+                if (pt_idx_calc < 0) pt_idx_calc += ALPHABET_SIZE;
+
+                // Map index back to Plaintext Character
+                pt_char = plaintext_keyword_indices[pt_idx_calc];
+                if (beaufort) pt_char = ALPHABET_SIZE - pt_char - 1;
+
+                char_counts[pt_char]++;
+                total_count++;
+                row++;
+            }
+
+            // Calculate Dot Product Score (Frequency * English Probability)
+            current_score = 0.0;
+            if (total_count > 0) {
+                for (i = 0; i < ALPHABET_SIZE; i++) {
+                    // english_monograms is defined in quagmire.h
+                    current_score += ((double)char_counts[i]) * english_monograms[i];
+                }
+                // Normalize isn't strictly necessary for comparison, but good for debug
+                current_score /= total_count; 
+            }
+
+            // Maximizing Dot Product finds the best fit
+            if (current_score > best_score) {
+                best_score = current_score;
+                best_shift_index = shift;
+            }
+        }
+
+        // Set the best cycleword character for this column
+        // Note: The state stores the CHARACTER, not the index.
+        cycleword_state[col] = ciphertext_keyword_indices[best_shift_index];
+    }
+}
+
 
 
 // Performs a dictionary attack on an Autokey cipher.
@@ -1211,7 +1351,7 @@ void perturbate_cycleword(int state[], int max, int len) {
 void perturbate_keyword(int state[], int len, int keyword_len) {
     int i, j, k, l, temp;
 
-    if (frand() < 0.2) {
+    if (frand() < 0.2) { 
 #if KRYPTOS_PT_SCRAMBLE
         i = rand_int(7, keyword_len);
         j = rand_int(7, keyword_len);
