@@ -5,6 +5,46 @@ This program is inspired by various explanations of Jim Gillogly's cipher solvin
 
 https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
+
+Here is a detailed algorithmic description of your program, formatted in Markdown.
+
+## Algorithmic Description of the Polyalphabetic Solver
+
+### Stochastic Shotgun Hill Climbing Architecture
+The core engine of this program is a **Shotgun Hill Climber**, a heuristic search algorithm designed to navigate the rugged energy landscapes typical of polyalphabetic substitution ciphers. Unlike brute-force methods, which are computationally infeasible for alphabetic permutations ($26!$), this approach relies on iterative improvement.
+
+The "Shotgun" aspect refers to the initialization strategy: the solver performs $N$ distinct **Restarts**, each initializing the state with a completely random permutation of keywords and cyclewords. This prevents the solver from becoming permanently trapped in a local maximum—a common pitfall where a solution scores well relative to its neighbors but is not the true plaintext.
+
+During each restart, the algorithm executes a specified number of **Hill Climbing Steps**. In each step, the current state (the arrangement of the alphabets and the cycleword) is mutated slightly. If the mutation results in a higher fitness score, the new state is adopted. To further mitigate local maxima, the algorithm implements **Simulated Annealing-like mechanics**, including:
+* **Slipping:** A defined probability of accepting a state with a lower score to traverse "valleys" in the fitness landscape.
+* **Backtracking:** A probability of reverting the current state to the absolute best state found so far, ensuring that aggressive exploration does not lose a promising solution.
+
+### State Representation and Cipher Modeling
+The program models Quagmire I–IV, Beaufort, and Vigenère ciphers by managing three distinct state components:
+1.  **Plaintext Alphabet ($P_k$):** The keyed alphabet mapping plaintext letters.
+2.  **Ciphertext Alphabet ($C_k$):** The keyed alphabet mapping ciphertext letters.
+3.  **Cycleword (Indicator):** The vector of offsets determining the shift for each period position.
+
+Depending on the specific `cipher_type` selected, the mutator functions constrain these alphabets. For example, in a **Quagmire III**, the program ensures $P_k$ and $C_k$ remain identical but scrambled; in **Quagmire II**, $P_k$ is fixed to the standard alphabet while $C_k$ is scrambled.
+
+### Hybrid Deterministic Optimization (The "Optimal Cycleword" Method)
+A key innovation in this implementation is the **Profile-Based Cycleword Derivation** (activated via `-optimalcycle`). Standard hill climbers attempt to stochastically guess both the alphabet structure *and* the cycleword simultaneously. This creates a search space of magnitude $26! \times 26^N$.
+
+The hybrid approach reduces the dimensionality of the problem to just $26!$. It operates hierarchically:
+1.  **Stochastic Layer:** The hill climber perturbs the **Alphabet Keywords** only.
+2.  **Deterministic Layer:** For every candidate alphabet, the program performs a columnar frequency analysis. It decomposes the ciphertext into $N$ cosets (where $N$ is the period length).
+3.  **Cost Minimization:** For each coset, the algorithm calculates the **Dot Product** (or Chi-squared statistic) of the decrypted column against standard English monogram frequencies for all 26 possible shifts.
+4.  **State Injection:** The shift producing the highest correlation is mathematically selected as the cycleword character for that column.
+
+This ensures that every candidate alphabet is evaluated against its *theoretical best* cycleword, smoothing the scoring gradient and preventing correct alphabets from being discarded due to cycleword misalignment.
+
+### Scoring Function (Fitness Metric)
+The fitness of a candidate state is evaluated using a weighted sum of four metrics:
+1.  **N-gram Statistics (Log-Likelihood):** The primary driver of the solve. The program sums the log-probabilities of decrypted $N$-grams (typically trigrams or quadgrams) based on a corpus of English text. This penalizes unpronounceable or statistically improbable sequences.
+2.  **Crib Matching:** If a known plaintext string (crib) is provided, the function checks for consistency. In strict mode, a mismatch forces a score of zero; in weighted mode, partial matches contribute to the score.
+3.  **Index of Coincidence (IoC):** Used primarily for period estimation, this measures the unevenness of letter distributions (the "roughness" of the text).
+4.  **Entropy:** A measure of information density, ensuring the decrypted text resembles the low-entropy characteristics of natural language rather than random noise.
+
 ## Vigenère
 The Vigenère cipher is a method of encrypting alphabetic text by using a keyword to shift each letter of the plaintext. Each letter in the keyword determines the shift for the corresponding letter in the plaintext, resulting in a polyalphabetic substitution cipher that is more resistant to frequency analysis than monoalphabetic ciphers.
 
