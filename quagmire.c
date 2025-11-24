@@ -52,7 +52,7 @@
             5 : Beaufort
             6 : Autokey
         -variant : flag
-            Enable the Quagmire variant (different decipherment logic).
+            Enable the Quagmire variant (which swaps decryption for encryption.)
 
     Optimization Strategy:
         -optimalcycle : flag
