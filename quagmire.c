@@ -23,50 +23,109 @@
 
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
-/* Program syntax:
+/* Usage
+    -----
+    $ ./quagmire [options]
 
-    $ ./quagmire \
-        -nhillclimbs /number of hillclimbing steps/ \
-        -nrestarts /number of restarts/ \
-        -type /cipher type (0, 1, 2, 3, 4, 5, or 6)/ \
-        -cipher /ciphertext file/ \
-        -crib /crib file/ \
-        -ngramsize /n-gram size in n-gram statistics file/ \
-        -ngramfile /n-gram statistics file/ \
-        -maxkeywordlen /max length of the keyword/ \
-        -maxcyclewordlen /max length of the cycleword/ \
-        -plaintextkeywordlen /user defined length of the plaintext keyword/ \
-        -ciphertextkeywordlen /user defined length of the ciphertext keyword/ \
-        -cyclewordlen /user defined length of the cycleword/ \
-        -nsigmathreshold /n sigma threshold for candidate keyword length/ \
-        -backtrackprob /probability of backtracking to the best 
-            solution instead of a random initial solution/ \
-        -keywordpermprob /probability of permuting the keyword instead of the cycleword/ \
-        -slipprob /probability of slipping to a worse score/ \
-        -iocthreshold /lower limit for ioc/ \
-        -dictionary /dictionary file, a text file containing one word per line/ \
-        -weightngram /weight used in the hillclimber score for the ngram score/ \
-        -weightcrib /weight used in the hillclimber score for the crib matches/ \
-        -weightioc /weight used in the hillclimber score for the IoC/ \
-        -weightentropy /weight used in the hillclimber score for the plaintext entropy/ \
-        -verbose
+    Parameters
+    ----------
+    Input/Output:
+        -cipher <file> : str
+            Path to the ciphertext file. The cipher should be on the first line.
+        -batch <file> : str
+            Path to a file containing multiple ciphers (one per line) for batch processing.
+        -crib <file> : str
+            Path to the crib file. Use "_" for unknown characters. Must match cipher length.
+        -dictionary <file> : str, optional
+            Path to a dictionary file (one word per line). Defaults to "OxfordEnglishWords.txt".
+        -verbose : flag
+            Enable detailed output during execution.
 
+    Cipher Configuration:
+        -type <int> : int
+            The cipher algorithm to solve:
+            0 : Vigenere
+            1 : Quagmire I
+            2 : Quagmire II
+            3 : Quagmire III
+            4 : Quagmire IV
+            5 : Beaufort
+            6 : Autokey
+        -variant : flag
+            Enable the Quagmire variant (different decipherment logic).
 
-    Notes: 
+    Optimization Strategy:
+        -optimalcycle : flag
+            Enables hybrid deterministic solving. The cycleword is mathematically derived 
+            (using Chi-squared/Dot-product) for every keyword candidate, rather than being 
+            perturbed stochastically. Highly recommended for short ciphers without cribs.
+        -nhillclimbs <int> : int
+            Number of iterations per restart in the hill climber.
+        -nrestarts <int> : int
+            Number of times to restart the hill climber from a random state.
 
-        /quagmire cipher type (0,1,2,3, or 4)/ -- type 0 is a Vigenere cipher, then 1-4 are Quagmire types
-            1 to 4 as defined by the ACA (https://www.cryptogram.org/resource-area/cipher-types/), type 5 
-            is the Beaufort cipher as defined by the ACA (https://www.cryptogram.org/downloads/aca.info/ciphers/Beaufort.pdf)
+    Constraints (Lengths & Fixed Keywords):
+        -plaintextkeyword <str> : str
+            Fixes the plaintext keyword to a specific string.
+        -ciphertextkeyword <str> : str
+            Fixes the ciphertext keyword to a specific string.
+        -cyclewordlen <int> : int
+            Fixes the cycleword (period) length.
+        -maxcyclewordlen <int> : int
+            Maximum allowable length for the cycleword (if not fixed).
+        -plaintextkeywordlen <int> : int
+            Fixed length for the plaintext keyword.
+        -ciphertextkeywordlen <int> : int
+            Fixed length for the ciphertext keyword.
+        -maxkeywordlen <int> : int
+            Sets both plaintext and ciphertext max keyword lengths.
+        -keywordlen <int> : int
+            Sets both plaintext and ciphertext fixed lengths.
 
-        /ciphertext file/ -- the entire cipher should be on the first line of the file. Subsequent 
-            lines will not be read. 
+    Statistics & Resources:
+        -ngramfile <file> : str
+            Path to the n-gram statistics file.
+        -ngramsize <int> : int
+            The size of the n-grams (e.g., 3 for trigrams, 4 for quadgrams).
 
-        /crib file/ -- uses "_" for unknown chars. Just a single line of the same length
-            as the ciphers contained in the cipher file. For the Kryptos K4 cipher (assuming Sanborn has not 
-            made any enciphering and/or spelling and/or positional mistakes) it should contain
+    Tuning Probabilities & Thresholds:
+        -backtrackprob <float> : float
+            Probability (0.0 - 1.0) of backtracking to the best known solution 
+            instead of a random state during a restart.
+        -keywordpermprob <float> : float
+            Probability (0.0 - 1.0) of permuting the keyword vs the cycleword 
+            (Ignored if -optimalcycle is enabled).
+        -slipprob <float> : float
+            Probability (0.0 - 1.0) of accepting a worse score to escape local maxima.
+        -nsigmathreshold <float> : float
+            Sigma threshold for cycleword length estimation via IoC.
+        -iocthreshold <float> : float
+            Minimum IoC required to consider a cycleword length valid.
+
+    Scoring Weights:
+        -weightngram <float> : float
+            Weight of the n-gram score component.
+        -weightcrib <float> : float
+            Weight of the crib match component.
+        -weightioc <float> : float
+            Weight of the Index of Coincidence component.
+        -weightentropy <float> : float
+            Weight of the entropy component.
+
+    Notes
+    -----
+    Cipher Types:
+        Types 1-4 correspond to ACA standards:
+        https://www.cryptogram.org/resource-area/cipher-types/
+        Type 5 is the Beaufort cipher:
+        https://www.cryptogram.org/downloads/aca.info/ciphers/Beaufort.pdf
+
+    Kryptos K4:
+        This program is optimized for short ciphers like Kryptos K4. 
+        If testing against K4, a potential crib file (assuming standard spelling/encipherment)
+        would look like:
 
         _____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
-    
 
     Performance: 
 
