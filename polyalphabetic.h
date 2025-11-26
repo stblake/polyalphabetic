@@ -1,5 +1,5 @@
-#ifndef QUAGMIRE_H
-#define QUAGMIRE_H
+#ifndef POLYALPHABETIC_H
+#define POLYALPHABETIC_H
 
 #include <stdio.h>
 #include <stdlib.h>

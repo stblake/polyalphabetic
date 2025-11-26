@@ -7,8 +7,9 @@ CC=gcc -Wall -O3
 # CC=gcc -Wall -lm -g -O0 
 
 all:
-	$(CC) quagmire.c -o quagmire
-
+	$(CC) polyalphabetic.c -o polyalphabetic
+	cp polyalphabetic quagmire
+	$(CC) quagdict.c -o quagdict
 clean:
-	rm quagmire *.o
+	rm quagmire quagdict *.o
 

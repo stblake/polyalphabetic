@@ -120,22 +120,9 @@
         Type 5 is the Beaufort cipher:
         https://www.cryptogram.org/downloads/aca.info/ciphers/Beaufort.pdf
 
-    Kryptos K4:
-        This program is optimized for short ciphers like Kryptos K4. 
-        If testing against K4, a potential crib file (assuming standard spelling/encipherment)
-        would look like:
-
-        _____________________EASTNORTHEAST_____________________________BERLINCLOCK_______________________
-
-    Performance: 
-
-        This program is designed for attacks on the final unsolved Kryptos cipher (K4), which is only of 
-        length 97. For longer ciphers a far better approach is to use frequency analysis on each simple 
-        substitution ciphers (once the period has been estimated). Furthermore, if we knew for certain that 
-        the cribs given for K4 were correct we could make additional performance improvements. 
 */
 
-#include "quagmire.h"
+#include "polyalphabetic.h"
 
 void init_config(QuagmireConfig *cfg) {
     // Set Defaults
