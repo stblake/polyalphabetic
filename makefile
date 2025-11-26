@@ -8,8 +8,6 @@ CC=gcc -Wall -O3
 
 all:
 	$(CC) polyalphabetic.c -o polyalphabetic
-	cp polyalphabetic quagmire
-	$(CC) quagdict.c -o quagdict
 clean:
-	rm quagmire quagdict *.o
+	rm polyalphabetic
 
