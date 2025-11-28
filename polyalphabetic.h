@@ -145,8 +145,8 @@ double autokey_dictionary_attack(
     char best_key[], int best_decrypted[],
     bool verbose);
 
-// Quagmire / Hill Climber
-double quagmire_shotgun_hill_climber(
+// Hill Climber
+double shotgun_hill_climber(
     QuagmireConfig *cfg,
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,

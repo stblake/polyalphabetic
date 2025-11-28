@@ -504,7 +504,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
                     if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
                     
                     if ((cfg->cipher_type == VIGENERE || cfg->cipher_type == QUAGMIRE_3) && j != k) continue;
-                    if (cfg->cipher_type == VIGENERE && ! (cycleword_lengths[i] == j && cycleword_lengths[i] == k)) continue;
                     if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
 
                     // Check Crib compatibility
@@ -515,7 +514,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
                     }
 
                     // Run Hill Climber
-                    score = quagmire_shotgun_hill_climber(
+                    score = shotgun_hill_climber(
                         cfg,
                         cipher_indices, cipher_len,
                         crib_indices, crib_positions, n_cribs,
@@ -592,7 +591,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
 
 // Hill Climber
 
-double quagmire_shotgun_hill_climber(
+double shotgun_hill_climber(
     QuagmireConfig *cfg,
     int cipher_indices[], int cipher_len, 
     int crib_indices[], int crib_positions[], int n_cribs,
@@ -611,10 +610,6 @@ double quagmire_shotgun_hill_climber(
     double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
     double ioc, chi, entropy_score;
     bool perturbate_keyword_p, contradiction;
-
-    if (cfg->cipher_type == VIGENERE) {
-        cycleword_len = ALPHABET_SIZE;
-    }
 
     n_iterations = 0;
     n_backtracks = 0;
@@ -637,10 +632,10 @@ double quagmire_shotgun_hill_climber(
             // Initialise random state.
             switch (cfg->cipher_type) {
                 case VIGENERE:
-                    // Vigenere uses the same keyword for PT/CT/Cycle (in this logic model)
-                    random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    vec_copy(current_plaintext_keyword_state, current_cycleword_state, ALPHABET_SIZE);
+                    // Vigenere uses straight alphabets for PT/CT keywords, and the key is the cycleword.
+                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
                     break ;
                 case QUAGMIRE_1:
                     // PT keyword is scrambled, CT is straight.
@@ -735,11 +730,8 @@ double quagmire_shotgun_hill_climber(
 
                 switch (cfg->cipher_type) {
                     case VIGENERE:
-                        // Vigenere isn't really compatible with these flags in the same way, standard perturbation
-                        perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                        vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE); 
-                        vec_copy(local_plaintext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
-                        did_perturb_keyword = true;
+                        // Vigenere now uses straight alphabets (fixed), so only the cycleword is perturbed.
+                        did_perturb_keyword = false;
                         break ; 
                     case QUAGMIRE_1:
                         if (!cfg->user_plaintext_keyword_present) {
@@ -789,12 +781,8 @@ double quagmire_shotgun_hill_climber(
                 did_perturb_keyword = false;
             }
             
-            // ================================================================
-            // NEW BRANCHING LOGIC
-            // ================================================================
-            
+            // Determine optimal cycleword from the keyword. 
             if (cfg->optimal_cycleword) {
-                // --- NEW METHOD: DETERMINISTIC ---
                 // We NEVER perturb the cycleword randomly.
                 // We always mathematically derive the best cycleword for the current keyword.
                 
@@ -833,7 +821,6 @@ double quagmire_shotgun_hill_climber(
                     local_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
 
             } else {
-                // --- OLD METHOD: STOCHASTIC ---
                 // If we decided NOT to perturb the keyword (because it was fixed by user, or stochastic choice),
                 // we perturb the cycleword.
                 if (!did_perturb_keyword) {
