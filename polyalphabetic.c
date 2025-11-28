@@ -174,6 +174,9 @@ int main(int argc, char **argv) {
     char single_ciphertext_buffer[MAX_CIPHER_LENGTH];
     char cribtext[MAX_CIPHER_LENGTH];
 
+    printf("\n\nPOLYALPHABETIC Cipher Solver\n\n");
+    printf("Written by Sam Blake, started 14 July 2023.\n\n");
+
     init_config(&cfg);
     
     // Initialize shared data pointers
@@ -186,22 +189,29 @@ int main(int argc, char **argv) {
     for(i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-type") == 0) {
             cfg.cipher_type = atoi(argv[++i]);
+            printf("-type %d\n", cfg.cipher_type);
         } else if (strcmp(argv[i], "-cipher") == 0) {
             cfg.cipher_present = true;
             strcpy(cfg.ciphertext_file, argv[++i]);
+            printf("-cipher %s\n", cfg.ciphertext_file);
         } else if (strcmp(argv[i], "-batch") == 0) {
             cfg.batch_present = true;
             strcpy(cfg.batch_file, argv[++i]);
+            printf("-batch %s\n", cfg.batch_file);
         } else if (strcmp(argv[i], "-crib") == 0) {
             cfg.crib_present = true;
             strcpy(cfg.crib_file, argv[++i]);
+            printf("-crib %s\n", cfg.crib_file);
         } else if (strcmp(argv[i], "-ngramsize") == 0) {
             cfg.ngram_size = atoi(argv[++i]);
+            printf("-ngramsize %d\n", cfg.ngram_size);
         } else if (strcmp(argv[i], "-ngramfile") == 0) {
             strcpy(cfg.ngram_file, argv[++i]);
+            printf("-ngramfile %s\n", cfg.ngram_file);
         } else if (strcmp(argv[i], "-maxkeywordlen") == 0) {
             cfg.plaintext_keyword_len = atoi(argv[++i]);
             cfg.ciphertext_keyword_len = cfg.plaintext_keyword_len;
+            printf("-maxkeywordlen %d\n", cfg.plaintext_keyword_len);
         } else if (strcmp(argv[i], "-keywordlen") == 0) {
             cfg.plaintext_keyword_len_present = true;
             cfg.ciphertext_keyword_len_present = true;
@@ -210,75 +220,91 @@ int main(int argc, char **argv) {
             cfg.plaintext_max_keyword_len = max(cfg.plaintext_max_keyword_len, 1 + cfg.plaintext_keyword_len);
             cfg.ciphertext_max_keyword_len = max(cfg.ciphertext_max_keyword_len, 1 + cfg.ciphertext_keyword_len);
             cfg.min_keyword_len = cfg.plaintext_keyword_len;
+            printf("-keywordlen %d\n", cfg.plaintext_keyword_len);
         } else if (strcmp(argv[i], "-plaintextkeywordlen") == 0) {
             cfg.plaintext_keyword_len_present = true;
             cfg.plaintext_keyword_len = atoi(argv[++i]);
             cfg.plaintext_max_keyword_len = max(cfg.plaintext_max_keyword_len, 1 + cfg.plaintext_keyword_len);
             cfg.min_keyword_len = cfg.plaintext_keyword_len;
+            printf("-plaintextkeywordlen %d\n", cfg.plaintext_keyword_len);
         } else if (strcmp(argv[i], "-ciphertextkeywordlen") == 0) {
             cfg.ciphertext_keyword_len_present = true;
             cfg.ciphertext_keyword_len = atoi(argv[++i]);
             cfg.ciphertext_max_keyword_len = max(cfg.ciphertext_max_keyword_len, 1 + cfg.ciphertext_keyword_len);
             cfg.min_keyword_len = cfg.ciphertext_keyword_len;
+            printf("-ciphertextkeywordlen %d\n", cfg.ciphertext_keyword_len);
         } else if (strcmp(argv[i], "-plaintextkeyword") == 0) {
             // Explicit Plaintext Keyword
             cfg.user_plaintext_keyword_present = true;
             strcpy(cfg.user_plaintext_keyword, argv[++i]);
-            
             int len = (int)strlen(cfg.user_plaintext_keyword);
             cfg.plaintext_keyword_len = len;
             cfg.plaintext_max_keyword_len = len + 1;
             cfg.plaintext_keyword_len_present = true;
-            printf("\nFixed Plaintext Keyword: %s (Alphabet will be generated)", cfg.user_plaintext_keyword);
-
+            printf("-plaintextkeyword %s\n", cfg.user_plaintext_keyword);
         } else if (strcmp(argv[i], "-ciphertextkeyword") == 0) {
             // Explicit Ciphertext Keyword
             cfg.user_ciphertext_keyword_present = true;
             strcpy(cfg.user_ciphertext_keyword, argv[++i]);
-
             int len = (int)strlen(cfg.user_ciphertext_keyword);
             cfg.ciphertext_keyword_len = len;
             cfg.ciphertext_max_keyword_len = len + 1;
             cfg.ciphertext_keyword_len_present = true;
-            printf("\nFixed Ciphertext Keyword: %s (Alphabet will be generated)", cfg.user_ciphertext_keyword);
-
+            printf("-ciphertextkeyword %s\n", cfg.user_ciphertext_keyword);
         } else if (strcmp(argv[i], "-maxcyclewordlen") == 0) {
             cfg.max_cycleword_len = atoi(argv[++i]);
+            printf("-maxcyclewordlen %d\n", cfg.max_cycleword_len);
         } else if (strcmp(argv[i], "-cyclewordlen") == 0) {
             cfg.cycleword_len_present = true;
             cfg.cycleword_len = atoi(argv[++i]);
             cfg.max_cycleword_len = max(cfg.max_cycleword_len, 1 + cfg.cycleword_len);
+            printf("-cyclewordlen %d\n", cfg.cycleword_len);
         } else if (strcmp(argv[i], "-nsigmathreshold") == 0) {
             cfg.n_sigma_threshold = atof(argv[++i]);
+            printf("-nsigmathreshold %.4f\n", cfg.n_sigma_threshold);
         } else if (strcmp(argv[i], "-nhillclimbs") == 0) {
             cfg.n_hill_climbs = atoi(argv[++i]);
+            printf("-nhillclimbs %d\n", cfg.n_hill_climbs);
         } else if (strcmp(argv[i], "-nrestarts") == 0) {
             cfg.n_restarts = atoi(argv[++i]);
+            printf("-nrestarts %d\n", cfg.n_restarts);
         } else if (strcmp(argv[i], "-backtrackprob") == 0) {
             cfg.backtracking_probability = atof(argv[++i]);
+            printf("-backtrackprob %.6f\n", cfg.backtracking_probability);
         } else if (strcmp(argv[i], "-keywordpermprob") == 0) {
             cfg.keyword_permutation_probability = atof(argv[++i]);
+            printf("-keywordpermprob %.4f\n", cfg.keyword_permutation_probability);
         } else if (strcmp(argv[i], "-slipprob") == 0) {
             cfg.slip_probability = atof(argv[++i]);
+            printf("-slipprob %.6f\n", cfg.slip_probability);
         } else if (strcmp(argv[i], "-iocthreshold") == 0) {
             cfg.ioc_threshold = atof(argv[++i]);
+            printf("-iocthreshold %.4f\n", cfg.ioc_threshold);
         } else if (strcmp(argv[i], "-dictionary") == 0 || strcmp(argv[i], "-dict") == 0) {
             cfg.dictionary_present = true;
             strcpy(cfg.dictionary_file, argv[++i]);
+            printf("-dictionary %s\n", cfg.dictionary_file);
         } else if (strcmp(argv[i], "-weightngram") == 0) { 
             cfg.weight_ngram = atof(argv[++i]);
+            printf("-weightngram %.4f\n", cfg.weight_ngram);
         } else if (strcmp(argv[i], "-weightcrib") == 0) { 
             cfg.weight_crib = atof(argv[++i]);
+            printf("-weightcrib %.4f\n", cfg.weight_crib);
         } else if (strcmp(argv[i], "-weightioc") == 0) { 
             cfg.weight_ioc = atof(argv[++i]);
+            printf("-weightioc %.4f\n", cfg.weight_ioc);
         } else if (strcmp(argv[i], "-weightentropy") == 0) { 
             cfg.weight_entropy = atof(argv[++i]);
+            printf("-weightentropy %.4f\n", cfg.weight_entropy);
         } else if (strcmp(argv[i], "-variant") == 0) { 
             cfg.variant = true;
+            printf("-variant\n");
         } else if (strcmp(argv[i], "-verbose") == 0) {
             cfg.verbose = true;
+            printf("-verbose\n");
         } else if (strcmp(argv[i], "-optimalcycle") == 0) {
             cfg.optimal_cycleword = true;
+            printf("-optimalcycle\n");
         }
     }
 
