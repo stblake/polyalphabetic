@@ -5,9 +5,6 @@ This program is inspired by various explanations of Jim Gillogly's cipher solvin
 
 https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
-
-Here is a detailed algorithmic description of your program, formatted in Markdown.
-
 ## Algorithmic Description of the Polyalphabetic Solver
 
 ### Stochastic Shotgun Hill Climbing Architecture
