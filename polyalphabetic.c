@@ -124,7 +124,7 @@
 
 #include "polyalphabetic.h"
 
-void init_config(QuagmireConfig *cfg) {
+void init_config(PolyalphabeticConfig *cfg) {
     // Set Defaults
     cfg->cipher_type = 3;
     cfg->ngram_size = 0;
@@ -168,7 +168,7 @@ void init_config(QuagmireConfig *cfg) {
 }
 
 int main(int argc, char **argv) {
-    QuagmireConfig cfg;
+    PolyalphabeticConfig cfg;
     SharedData shared;
     int i;
     char single_ciphertext_buffer[MAX_CIPHER_LENGTH];
@@ -305,6 +305,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-optimalcycle") == 0) {
             cfg.optimal_cycleword = true;
             printf("-optimalcycle\n");
+        } else if (strcmp(argv[i], "-stochasticcycle") == 0) {
+            cfg.optimal_cycleword = false;
+            printf("-stochasticcycle\n");
         }
     }
 
@@ -414,11 +417,13 @@ int main(int argc, char **argv) {
     return 1;
 }
 
+
+
 // ============================================================================
 // Core Solver Logic
 // ============================================================================
 
-void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg, SharedData *shared) {
+void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg, SharedData *shared) {
     
     int cipher_len = (int)strlen(ciphertext_str);
     int cipher_indices[MAX_CIPHER_LENGTH];
@@ -429,7 +434,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
     int n_cycleword_lengths, cycleword_lengths[MAX_CIPHER_LENGTH];
     int best_cycleword_length = 0;
 
-    // Variables added to fix compilation error:
     int best_plaintext_keyword_length = 0;
     int best_ciphertext_keyword_length = 0;
 
@@ -517,6 +521,16 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
             min_kw = 1;
             pt_max = 2; 
         }
+        
+        // Porta Cipher Constraint Setup (Fixed, non-keyed alphabets)
+        if (cfg->cipher_type == PORTA) {
+            min_kw = 1;
+            pt_max = 2; // Fixed to run loop once for j=1
+            ct_max = 2; // Fixed to run loop once for k=1
+            cfg->plaintext_keyword_len = 1;
+            cfg->ciphertext_keyword_len = 1;
+        }
+
 
         // Shotgun Loop
         best_score = 0.;
@@ -531,6 +545,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
                     
                     if ((cfg->cipher_type == VIGENERE || cfg->cipher_type == QUAGMIRE_3) && j != k) continue;
                     if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
+                    if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue; // Porta uses fixed PT/CT alphabets
 
                     // Check Crib compatibility
                     if (!cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
@@ -566,6 +581,17 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
 
     // Reporting
 
+    // Final decryption for the best state
+    if (cfg->cipher_type == PORTA) {
+        porta_decrypt(best_decrypted, cipher_indices, cipher_len, 
+                     best_cycleword, best_cycleword_length);
+    } else if (cfg->cipher_type != AUTOKEY) {
+        // Redo decryption for final output for Quagmire/Vigenere/Beaufort if not Autokey
+        quagmire_decrypt(best_decrypted, cipher_indices, cipher_len, 
+                        best_plaintext_keyword, best_ciphertext_keyword, 
+                        best_cycleword, best_cycleword_length, cfg->variant, cfg->beaufort);
+    }
+    
     char plaintext_string[MAX_CIPHER_LENGTH];
     for (int i = 0; i < cipher_len; i++) {
         plaintext_string[i] = best_decrypted[i] + 'A';
@@ -581,15 +607,16 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
     
     print_text(cipher_indices, cipher_len);
     printf("\n");
-    print_text(best_plaintext_keyword, ALPHABET_SIZE);
-    printf("\n");
     
-    if (cfg->cipher_type != AUTOKEY) {
+    if (cfg->cipher_type != AUTOKEY && cfg->cipher_type != PORTA) {
+        print_text(best_plaintext_keyword, ALPHABET_SIZE);
+        printf("\n");
         print_text(best_ciphertext_keyword, ALPHABET_SIZE);
         printf("\n");
-        print_text(best_cycleword, best_cycleword_length);
-        printf("\n");
     }
+    
+    print_text(best_cycleword, best_cycleword_length);
+    printf("\n");
     print_text(best_decrypted, cipher_len);
     printf("\n");
 
@@ -602,14 +629,17 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
     
     print_text(cipher_indices, cipher_len);
     printf(", ");
-    print_text(best_plaintext_keyword, ALPHABET_SIZE);
-    printf(", ");
-    if (cfg->cipher_type != AUTOKEY) {
+    
+    if (cfg->cipher_type != AUTOKEY && cfg->cipher_type != PORTA) {
+        print_text(best_plaintext_keyword, ALPHABET_SIZE);
+        printf(", ");
         print_text(best_ciphertext_keyword, ALPHABET_SIZE);
         printf(", ");
-        print_text(best_cycleword, best_cycleword_length);
-        printf(", ");
     }
+    
+    print_text(best_cycleword, best_cycleword_length);
+    printf(", ");
+    
     print_text(best_decrypted, cipher_len);
     printf("\n");
 }
@@ -618,7 +648,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg,
 // Hill Climber
 
 double shotgun_hill_climber(
-    QuagmireConfig *cfg,
+    PolyalphabeticConfig *cfg,
     int cipher_indices[], int cipher_len, 
     int crib_indices[], int crib_positions[], int n_cribs,
     int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
@@ -717,17 +747,22 @@ double shotgun_hill_climber(
                     vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
                     random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
                     break ; 
+                case PORTA: // <-- ADDED PORTA INITIALIZATION
+                    // Porta uses straight alphabets (fixed) for PT/CT keywords.
+                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break ;
             }
 
             // If in optimal mode, fix the cycleword immediately for the initial random state
             if (cfg->optimal_cycleword) {
-                derive_optimal_cycleword(cipher_indices, cipher_len, 
+                derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
                     current_plaintext_keyword_state, current_ciphertext_keyword_state, 
-                    current_cycleword_state, cycleword_len, 
-                    cfg->variant, cfg->beaufort);
+                    current_cycleword_state, cycleword_len);
             }
 
-            current_score = state_score(cipher_indices, cipher_len, 
+            current_score = state_score(cfg, cipher_indices, cipher_len, 
                 crib_indices, crib_positions, n_cribs, 
                 current_plaintext_keyword_state, current_ciphertext_keyword_state, 
                 current_cycleword_state, cycleword_len, 
@@ -749,14 +784,14 @@ double shotgun_hill_climber(
 
             bool did_perturb_keyword = false; 
 
+            // Decides whether to attempt keyword perturbation
             if (cfg->cipher_type != BEAUFORT && (perturbate_keyword_p || cfg->cipher_type == VIGENERE || frand() < cfg->keyword_permutation_probability)) {
                 
-                // Logic: Only perturb keywords if they were NOT provided by the user.
-                // If the user provided a keyword, it is treated as fixed for that component.
-
+                // Logic: Only perturb keywords if they were NOT provided by the user and are not fixed by the cipher type.
                 switch (cfg->cipher_type) {
                     case VIGENERE:
-                        // Vigenere now uses straight alphabets (fixed), so only the cycleword is perturbed.
+                    case PORTA: // <-- ADDED PORTA CHECK: Prevents keyword perturbation
+                        // Vigenere and Porta use straight alphabets (fixed), so only the cycleword is perturbed later.
                         did_perturb_keyword = false;
                         break ; 
                     case QUAGMIRE_1:
@@ -810,12 +845,10 @@ double shotgun_hill_climber(
             // Determine optimal cycleword from the keyword. 
             if (cfg->optimal_cycleword) {
                 // We NEVER perturb the cycleword randomly.
-                // We always mathematically derive the best cycleword for the current keyword.
                 
-                // If we didn't touch the keyword this turn, and we're in optimal mode,
-                // re-calculating the cycleword for the SAME keyword is useless.
-                // We must force a keyword change to progress.
-                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT) {
+                // Force keyword perturbation if we didn't perturb it this turn (to prevent stagnation).
+                // This does NOT apply to fixed-keyword ciphers (Vigenere, Porta, Beaufort)
+                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) { // <-- ADDED VIGENERE/PORTA CHECK
                     
                     // Force perturbation on valid alphabets
                     if (cfg->cipher_type == QUAGMIRE_3) {
@@ -842,18 +875,25 @@ double shotgun_hill_climber(
                     }
                 }
 
-                derive_optimal_cycleword(cipher_indices, cipher_len, 
+                // Derive the optimal cycleword for the (possibly new) keyword state
+                derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
                     local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                    local_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+                    local_cycleword_state, cycleword_len);
 
             } else {
-                // If we decided NOT to perturb the keyword (because it was fixed by user, or stochastic choice),
-                // we perturb the cycleword.
-                if (!did_perturb_keyword) {
+                // Stochastic Mode: Perturb Keyword OR Cycleword
+                
+                // If it's Vigenere or Porta, we MUST perturb the cycleword if not optimal.
+                if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA) { // <-- ADDED PORTA CHECK
+                     perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                }
+                // If we decided NOT to perturb the keyword (Quagmire), we perturb the cycleword.
+                else if (!did_perturb_keyword) {
                     perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
                 }
 
-                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT) {
+                // Crib Contradiction Check (Only for Quagmire types that can change keywords)
+                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA) { // <-- ADDED PORTA CHECK
                     perturbate_keyword_p = false; 
                     
                     if (did_perturb_keyword) { 
@@ -870,7 +910,7 @@ double shotgun_hill_climber(
                 }
             }
 
-            local_score = state_score(cipher_indices, cipher_len, 
+            local_score = state_score(cfg, cipher_indices, cipher_len, 
                 crib_indices, crib_positions, n_cribs, 
                 local_plaintext_keyword_state, local_ciphertext_keyword_state, 
                 local_cycleword_state, cycleword_len, 
@@ -898,9 +938,16 @@ double shotgun_hill_climber(
                 vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
                 if (cfg->verbose) {
 
-                    quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-                        best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                        best_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+                    // Decryption for verbose output
+                    if (cfg->cipher_type == PORTA) { // <-- ADDED PORTA DECRYPTION
+                        porta_decrypt(decrypted, cipher_indices, cipher_len, 
+                                     best_cycleword_state, cycleword_len);
+                    } else {
+                        quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+                            best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+                            best_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+                    }
+                    
 
                     ioc = index_of_coincidence(decrypted, cipher_len);
                     chi = chi_squared(decrypted, cipher_len);
@@ -924,19 +971,21 @@ double shotgun_hill_climber(
                     print_text(best_ciphertext_keyword_state, ALPHABET_SIZE); printf("\n");
                     print_text(best_cycleword_state, cycleword_len); printf("\n");
                     
-                    // Detailed Tableau Display (Restored)
+                    // Detailed Tableau Display (Only works for Quagmire/Vigenere/Beaufort using CT keyword)
                     printf("\n");
-                    for (k = 0; k < cycleword_len; k++) {
-                        for (j = 0; j < ALPHABET_SIZE; j++) {
-                            if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) {
-                                offset = j;
+                    if (cfg->cipher_type != PORTA) { // <-- DO NOT PRINT TABLEAU FOR PORTA
+                        for (k = 0; k < cycleword_len; k++) {
+                            for (j = 0; j < ALPHABET_SIZE; j++) {
+                                if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) {
+                                    offset = j;
+                                }
                             }
+                            for (j = 0; j < ALPHABET_SIZE; j++) {
+                                indx = (j + offset) % ALPHABET_SIZE;
+                                printf("%c", best_ciphertext_keyword_state[indx] + 'A');
+                            }
+                            printf("\n");
                         }
-                        for (j = 0; j < ALPHABET_SIZE; j++) {
-                            indx = (j + offset) % ALPHABET_SIZE;
-                            printf("%c", best_ciphertext_keyword_state[indx] + 'A');
-                        }
-                        printf("\n");
                     }
                     printf("\n");
 
@@ -952,9 +1001,15 @@ double shotgun_hill_climber(
     vec_copy(best_ciphertext_keyword_state, ciphertext_keyword, ALPHABET_SIZE);
     vec_copy(best_cycleword_state, cycleword, cycleword_len);
 
-    quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-                    best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                    best_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+    // Final decryption for return value.
+    if (cfg->cipher_type == PORTA) {
+        porta_decrypt(decrypted, cipher_indices, cipher_len, 
+                     best_cycleword_state, cycleword_len);
+    } else {
+        quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+                        best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+                        best_cycleword_state, cycleword_len, cfg->variant, cfg->beaufort);
+    }
 
     return best_score;
 }
@@ -962,12 +1017,13 @@ double shotgun_hill_climber(
 
 
 // Solves the cycleword optimally for the given keywords using columnar dot product.
+// The cipher configuration is passed via the cfg pointer.
 
 void derive_optimal_cycleword(
+    PolyalphabeticConfig *cfg, 
     int cipher_indices[], int cipher_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
-    int cycleword_state[], int cycleword_len,
-    bool variant, bool beaufort) {
+    int cycleword_state[], int cycleword_len) {
 
     int col, row, i, shift, best_shift_index;
     int ct_char, pt_char, pt_idx_calc;
@@ -976,7 +1032,7 @@ void derive_optimal_cycleword(
     int char_counts[ALPHABET_SIZE];
     int total_count;
 
-    // 1. Pre-calculate lookup table for ciphertext keyword positions to speed up the loop
+    // Pre-calculate lookup table for ciphertext keyword positions to speed up the loop
     int ct_key_lookup[ALPHABET_SIZE];
     for (i = 0; i < ALPHABET_SIZE; i++) ct_key_lookup[i] = -1;
     for (i = 0; i < ALPHABET_SIZE; i++) {
@@ -984,7 +1040,7 @@ void derive_optimal_cycleword(
         ct_key_lookup[ciphertext_keyword_indices[i]] = i;
     }
 
-    // 2. Iterate over each column of the period
+    // Iterate over each column of the period
     for (col = 0; col < cycleword_len; col++) {
         best_score = -1.0;
         best_shift_index = 0; // This will be the index in the CT keyword
@@ -1007,21 +1063,46 @@ void derive_optimal_cycleword(
                 // If the char isn't in the keyed alphabet (shouldn't happen if full alphabet), skip
                 if (posn_keyword == -1) { row++; continue; }
 
-                // The 'shift' variable acts as 'posn_cycleword'
-                posn_cycleword = shift;
-                if (beaufort) posn_cycleword = ALPHABET_SIZE - posn_cycleword - 1;
+                // The 'shift' variable represents the cycleword character's index (0-25)
+                int key_char_index = shift;
 
-                // Quagmire Decryption Math
-                if (variant) {
-                    pt_idx_calc = (posn_keyword + posn_cycleword) % ALPHABET_SIZE;
+                if (cfg->cipher_type == PORTA) {
+                    // === PORTA CIPHER DECRYPTION LOGIC (ACA Standard) ===
+                    
+                    int pt_val = ct_char; // Ciphertext index is the input
+                    int key_val = key_char_index; 
+                    
+                    // The Porta shift is floor(key_index / 2), from 0 to 12
+                    int porta_shift = key_val / 2;
+
+                    // Porta Decryption (which is reciprocal)
+                    if (pt_val < 13) { 
+                        // CT in A-M (0-12) -> PT in N-Z (13-25). Formula: P = (C + S) mod 13 + 13
+                        pt_char = (pt_val + porta_shift) % 13 + 13;
+                    } else { 
+                        // CT in N-Z (13-25) -> PT in A-M (0-12). Formula: P = (C - 13 - S) mod 13
+                        pt_char = (pt_val - 13 - porta_shift + ALPHABET_SIZE) % 13;
+                    }
                 } else {
-                    pt_idx_calc = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
-                }
-                if (pt_idx_calc < 0) pt_idx_calc += ALPHABET_SIZE;
+                    // === QUAGMIRE / VIGENERE / BEAUFORT DECRYPTION LOGIC ===
+                    
+                    // The 'shift' variable acts as 'posn_cycleword'
+                    posn_cycleword = key_char_index;
 
-                // Map index back to Plaintext Character
-                pt_char = plaintext_keyword_indices[pt_idx_calc];
-                if (beaufort) pt_char = ALPHABET_SIZE - pt_char - 1;
+                    if (cfg->beaufort) posn_cycleword = ALPHABET_SIZE - posn_cycleword - 1;
+
+                    // Quagmire Decryption Math
+                    if (cfg->variant) {
+                        pt_idx_calc = (posn_keyword + posn_cycleword) % ALPHABET_SIZE;
+                    } else {
+                        pt_idx_calc = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
+                    }
+                    if (pt_idx_calc < 0) pt_idx_calc += ALPHABET_SIZE;
+
+                    // Map index back to Plaintext Character
+                    pt_char = plaintext_keyword_indices[pt_idx_calc];
+                    if (cfg->beaufort) pt_char = ALPHABET_SIZE - pt_char - 1;
+                }
 
                 char_counts[pt_char]++;
                 total_count++;
@@ -1245,7 +1326,9 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
     return false;
 }
 
-double state_score(int cipher_indices[], int cipher_len, 
+
+
+double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
             int crib_indices[], int crib_positions[], int n_cribs, 
             int plaintext_keyword_state[], int ciphertext_keyword_state[], 
             int cycleword_state[], int cycleword_len, 
@@ -1256,9 +1339,14 @@ double state_score(int cipher_indices[], int cipher_len,
 
     double score, decrypted_ngram_score, decrypted_crib_score;
 
-    quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-        plaintext_keyword_state, ciphertext_keyword_state, 
-        cycleword_state, cycleword_len, variant, beaufort);
+    if (cfg->cipher_type == PORTA) { 
+        porta_decrypt(decrypted, cipher_indices, cipher_len, 
+                     cycleword_state, cycleword_len);
+    } else {
+        quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
+            plaintext_keyword_state, ciphertext_keyword_state, 
+            cycleword_state, cycleword_len, variant, beaufort);
+    }
 
     decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
     // return decrypted_crib_score; 

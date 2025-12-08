@@ -28,6 +28,7 @@
 #define QUAGMIRE_4 4
 #define BEAUFORT   5
 #define AUTOKEY    6
+#define PORTA      7
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -103,7 +104,7 @@ typedef struct {
 
     bool optimal_cycleword;
 
-} QuagmireConfig;
+} PolyalphabeticConfig;
 
 typedef struct {
     float *ngram_data;
@@ -130,7 +131,12 @@ static double english_monograms[] = {
 };
 
 // Core Logic
-void solve_cipher(char *ciphertext_str, char *cribtext_str, QuagmireConfig *cfg, SharedData *shared);
+void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg, SharedData *shared);
+
+// Porta Cipher
+void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+void porta_encrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 
 // Autokey
 void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
@@ -147,7 +153,7 @@ double autokey_dictionary_attack(
 
 // Hill Climber
 double shotgun_hill_climber(
-    QuagmireConfig *cfg,
+    PolyalphabeticConfig *cfg,
 	int cipher_indices[], int cipher_len, 
 	int crib_indices[], int crib_positions[], int n_cribs,
 	int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
@@ -156,10 +162,10 @@ double shotgun_hill_climber(
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE]);
 
 void derive_optimal_cycleword(
+    PolyalphabeticConfig *cfg, 
     int cipher_indices[], int cipher_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
-    int cycleword_state[], int cycleword_len,
-    bool variant, bool beaufort);
+    int cycleword_state[], int cycleword_len);
 
 // Helpers
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
@@ -179,7 +185,8 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
 	int cycleword_indices[], int cycleword_len, bool variant, bool beaufort);
 
-double state_score(int cipher_indices[], int cipher_len, 
+double state_score(PolyalphabeticConfig *cfg, 
+            int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
 			int cycleword_state[], int cycleword_len,
