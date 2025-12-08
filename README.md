@@ -1,5 +1,5 @@
 # Polyalphabetic Cipher Solver
-A prototype slippery stochastic shotgun-restarted hill climber with backtracking for Vigenere, Beaufort, Quagmire I, II, III, IV ciphers (including variants.) 
+A prototype slippery stochastic shotgun-restarted hill climber with backtracking for Vigenere, Beaufort, Porta, Quagmire I, II, III, IV ciphers (including variants.) 
 
 This program is inspired by various explanations of Jim Gillogly's cipher solving program (that he used for solving the first three ciphers on Kryptos): 
 
@@ -95,6 +95,34 @@ ITISATRUTHUNIVERSALLYACKNOWLEDGEDTHATASINGLEMANINPOSSESSIONOFAGOODFORTUNEMUSTBEI
 ```
 
 Note, there is a small bug here where the cycleword is messed-up, but we successfully extract the plaintext nonetheless.  
+
+## Porta
+
+The Porta cipher is a reciprocal polyalphabetic substitution cipher. We implement the Porta cipher as defined by the ACA (https://www.cryptogram.org/downloads/aca.info/ciphers/Porta.pdf)
+
+```
+./polyalphabetic -type 7 -cipher porta_aca.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 250 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.05 -cyclewordlen 11 -stochasticcycle -verbose
+```
+
+We quickly obtain the decryption:
+
+```
+0.02	[sec]
+1166K	[it/sec]
+12	[backtracks]
+91	[restarts]
+977	[slips]
+0.00	[contradiction pct]
+0.0650	[IOC]
+2.6692	[entropy]
+0.52	[chi-squared]
+10.55	[score]
+OPQSBCJPGEQ
+
+BETWEENSUBTLESHADINGANDTHEABSENCEOFLIGHTLIESTHENUANCEOFIQLUSION
+```
+
+Note that many equivalent cyclewords are possible for Porta ciphers. 
 
 ## Quagmire I
 The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword (indicator word.) 
