@@ -133,10 +133,29 @@ static double english_monograms[] = {
 // Core Logic
 void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg, SharedData *shared);
 
-// Porta Cipher
+// Porta cipher
 void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 void porta_encrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
-void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+
+// Vigenere cipher
+void vigenere_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+    int cycleword_indices[], int cycleword_len, bool variant);
+void vigenere_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+    int cycleword_indices[], int cycleword_len, bool variant);
+
+// Beaufort cipher
+void beaufort_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+    int cycleword_indices[], int cycleword_len);
+void beaufort_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+    int cycleword_indices[], int cycleword_len);
+
+// Quagmire I - IV ciphers
+void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+    int cycleword_indices[], int cycleword_len, bool variant);
+void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+    int cycleword_indices[], int cycleword_len, bool variant);
 
 // Autokey
 void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
@@ -177,20 +196,11 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 	int cycleword_indices[], int cycleword_len,
 	bool variant, bool verbose);
 
-void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
-	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool variant, bool beaufort);
-
-void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
-	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len, bool variant, bool beaufort);
-
 double state_score(PolyalphabeticConfig *cfg, 
             int cipher_indices[], int cipher_len, 
 			int crib_indices[], int crib_positions[], int n_cribs, 
 			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
 			int cycleword_state[], int cycleword_len,
-			bool variant, bool beaufort, 
 			int decrypted[], 
 			float *ngram_data, int ngram_size,
 			float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy);

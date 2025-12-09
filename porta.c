@@ -1,31 +1,51 @@
 // 
-// Porta Cipher Logic 
+// Porta Cipher 
 //
 
-// Started 8 December, 2025. 
-
 /*
-   Porta Cipher Logic (ACA Standard)
+   Porta Cipher: Definition and Logic (ACA Standard)
   
-   The Porta cipher is a reciprocal polyalphabetic substitution cipher,
-   meaning the same process is used for both encryption and decryption.
-   It uses a periodic keyword to determine the shifts.
-   The alphabet is divided into two halves: A-M (0-12) and N-Z (13-25).
-   A key character 'K' (at index 0-25) provides a fixed shift value, S,
-   calculated as S = floor(K / 2). This means that every two key letters
-   (e.g., A/B, C/D, E/F, etc.) use the same substitution pattern.
-   The substitution is always reciprocal and defined by the following formulas,
-   where I is the input index (0-25) and S is the key shift (0-12):
-   1. If Input I is in A-M (0-12):
-   Output O is in N-Z (13-25). Formula: O = (I + S) mod 13 + 13
-   2. If Input I is in N-Z (13-25):
-   Output O is in A-M (0-12). Formula: O = (I - 13 - S) mod 13
-   * This implementation adheres to the existing index-based (0-25) solver framework
-   and is mathematically consistent across decryption and scoring routines.
- */
+   The Porta cipher is a **reciprocal polyalphabetic substitution cipher**, 
+   meaning the encryption and decryption processes use the exact same steps.
+   It relies on a periodic keyword (cycleword) to determine the shift for 
+   each letter.
+   
+   ## Key Shift Determination
+   
+   The full alphabet (A-Z, indices 0-25) is divided into two halves:
+   1. **First Half**: A-M (indices 0-12)
+   2. **Second Half**: N-Z (indices 13-25)
+   
+   A key character K (index $K_{idx} \in [0, 25]$) generates a fixed shift value S 
+   (where $S \in [0, 12]$) using the following rule:
+   
+   $$S = \lfloor \frac{K_{idx}}{2} \rfloor$$
+   
+   This ensures that every pair of key letters (A/B, C/D, E/F, etc.) applies 
+   the same substitution pattern.
+
+   ## Reciprocal Substitution Formulas
+   
+   The substitution is reciprocal (I = Input Index, O = Output Index):
+   
+   **1. If Input I is in the First Half (A-M, $I \in [0, 12]$):**
+      The Output O will be in the Second Half (N-Z).
+      
+      $$O = (I + S) \pmod{13} + 13$$
+      
+   **2. If Input I is in the Second Half (N-Z, $I \in [13, 25]$):**
+      The Output O will be in the First Half (A-M).
+      
+      $$O = (I - 13 - S) \pmod{13}$$
+
+   Since $E=D$, these formulas are applied identically for both encryption and decryption.
+*/
 
 
 #include "polyalphabetic.h"
+
+void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+
 
 void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len) {
     int i, input_val, key_val, shift;
