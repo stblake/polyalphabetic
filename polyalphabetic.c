@@ -1781,6 +1781,60 @@ int compare_candidates(const void *a, const void *b) {
     return 0;
 }
 
+/*
+   estimate_cycleword_lengths
+
+   Estimates the most probable cycleword lengths (periods) by analyzing the 
+   Index of Coincidence (IoC) of the ciphertext columns for various trial lengths.
+
+   ## Mathematical Model
+
+   The routine tests trial periods $L$ from $1$ to $L_{max}$. For a given $L$, 
+   the ciphertext $C$ is treated as $L$ interleaved Caesar ciphers (columns).
+
+   ### Columnar Index of Coincidence
+   
+   For a specific trial period $L$, we calculate the average IoC across all 
+   $L$ columns. Let $IC_k$ be the Index of Coincidence for the $k$-th column 
+   ($0 \le k < L$). The metric for period $L$ is:
+
+   $$ \overline{IC}_L = \frac{1}{L} \sum_{k=0}^{L-1} IC_k $$
+
+   where the standard definition of IoC for a column of length $N$ with character 
+   counts $f_i$ is:
+   
+   $$ IC = \frac{\sum_{i=A}^{Z} f_i (f_i - 1)}{N(N-1)} $$
+
+   ### Statistical Normalization (Z-Score)
+   
+   To identify statistically significant periods, we normalize the $\overline{IC}_L$ 
+   values against the population of all trial lengths.
+   
+   First, calculate the population mean ($\mu$) and standard deviation ($\sigma$) 
+   of the calculated IoCs:
+   
+   $$ \mu = \frac{1}{L_{max}} \sum_{L=1}^{L_{max}} \overline{IC}_L $$
+   $$ \sigma = \sqrt{ \frac{1}{L_{max}} \sum_{L=1}^{L_{max}} (\overline{IC}_L - \mu)^2 } $$
+
+   Then, compute the Z-score (Standard Score) for each period $L$:
+   
+   $$ Z_L = \frac{\overline{IC}_L - \mu}{\sigma} $$
+
+   ### Selection Criteria
+   
+   A candidate period $L$ is accepted if it satisfies two conditions:
+   
+   1.  **Significance**: The Z-score exceeds the user-defined sigma threshold ($\tau_\sigma$).
+       $$ Z_L > \tau_\sigma $$
+       
+   2.  **Magnitude**: The raw IoC exceeds the minimum IoC threshold ($\tau_{ioc}$), typically 
+       set near the random text threshold ($\approx 0.038$) or English threshold ($\approx 0.066$).
+       $$ \overline{IC}_L > \tau_{ioc} $$
+       
+   The resulting list of valid lengths is sorted by score (or processed to find local maxima) 
+   and returned to the solver.
+*/
+
 void estimate_cycleword_lengths(
     int text[], 
     int len, 
