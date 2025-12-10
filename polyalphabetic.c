@@ -758,7 +758,7 @@ double shotgun_hill_climber(
                     vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
                     random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
                     break ; 
-                case PORTA: // <-- ADDED PORTA INITIALIZATION
+                case PORTA: 
                     // Porta uses straight alphabets (fixed) for PT/CT keywords.
                     straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
                     straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
@@ -1036,8 +1036,80 @@ double shotgun_hill_climber(
 
 
 
-// Solves the cycleword optimally for the given keywords using columnar dot product.
-// The cipher configuration is passed via the cfg pointer.
+/*
+   derive_optimal_cycleword
+   ========================
+
+   Determines the statistically most likely cycleword (key) for a given set of 
+   plaintext and ciphertext alphabets using a "Shotgun-Hill-Climb" hybrid approach. 
+   Instead of perturbing the cycleword stochastically, this routine deterministically 
+   solves for the optimal key character for each column of the period.
+
+   ## Mathematical Model
+
+   Let $L$ be the period (cycleword length) and $C$ be the ciphertext message 
+   of length $N$. We partition $C$ into $L$ columns, where the $k$-th column 
+   $C^{(k)}$ consists of all characters $C_i$ such that $i \equiv k \pmod L$.
+
+   For each column $k \in \{0, \dots, L-1\}$, we seek the key character $K_k$ 
+   that maximizes the correlation between the decrypted column's frequency 
+   distribution and the expected English letter frequencies.
+
+   ## Optimization Problem
+
+   For every possible key shift index $s \in \{0, \dots, 25\}$ (representing a 
+   candidate character from the Ciphertext Keyword):
+
+   1. **Decryption**: Generate a candidate plaintext vector $\mathbf{P}_s$ by 
+      decrypting every character $c \in C^{(k)}$ using shift $s$. The decryption 
+      function $D(c, s)$ depends on the cipher type (Quagmire, Beaufort, Porta, etc.):
+      
+      $$P = D(c, s)$$
+
+   2. **Frequency Analysis**: Compute the frequency count vector $\mathbf{f}^{(s)}$ 
+      for the candidate plaintext $\mathbf{P}_s$, where $f^{(s)}_i$ is the count 
+      of the $i$-th letter of the alphabet.
+
+   3. **Scoring (Dot Product)**: Calculate the fitness score $S_s$ using the 
+      dot product of the candidate frequencies and standard English monogram 
+      probabilities $\mathbf{E}$:
+      
+      $$S_s = \mathbf{f}^{(s)} \cdot \mathbf{E} = \sum_{i=0}^{25} f^{(s)}_i \times E_i$$
+
+   4. **Selection**: The optimal key character $K_k$ for column $k$ is the one 
+      that maximizes the score:
+      
+      $$K_k = \text{argmax}_{s} (S_s)$$
+
+   ## Decryption Functions $D(c, s)$
+
+   The relationship between Plaintext ($P$), Ciphertext ($C$), and Key Shift ($s$) 
+   varies by cipher type. Let $idx(x)$ denote the alphabet index of character $x$:
+
+   * **Vigenère / Beaufort**:
+       Standard arithmetic modulo 26.
+       $$D_{vig}(c, s) = (c - s) \pmod{26}$$
+       $$D_{beau}(c, s) = (s - c) \pmod{26}$$
+
+   * **Porta**:
+       The shift $S$ is determined by $\lfloor s/2 \rfloor$. The alphabet is 
+       split into halves $H_1=[0,12]$ and $H_2=[13,25]$.
+       $$D_{porta}(c, s) = \begin{cases} 
+       (c + \lfloor s/2 \rfloor) \pmod{13} + 13 & \text{if } c \in H_1 \\ 
+       (c - 13 - \lfloor s/2 \rfloor) \pmod{13} & \text{if } c \in H_2 
+       \end{cases}$$
+
+   * **Quagmire (I-IV)**:
+       Uses keyed alphabets. Let $A_{pt}$ and $A_{ct}$ be the plaintext and 
+       ciphertext alphabet permutation arrays. The shift $s$ represents the 
+       offset of the sliding $A_{ct}$ relative to $A_{pt}$.
+       
+       First, find the position $p_{kw}$ of the ciphertext char in $A_{ct}$.
+       Then, calculate the target index $i$:
+       $$i = (p_{kw} - s) \pmod{26}$$
+       Finally, map back to the plaintext character:
+       $$P = A_{pt}[i]$$
+*/
 
 void derive_optimal_cycleword(
     PolyalphabeticConfig *cfg, 
@@ -1694,52 +1766,107 @@ int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int ma
     return n_matches;
 }
 
+typedef struct {
+    int len;
+    double ioc;
+    double z_score;
+} PeriodCandidate;
+
+int compare_candidates(const void *a, const void *b) {
+    PeriodCandidate *cA = (PeriodCandidate *)a;
+    PeriodCandidate *cB = (PeriodCandidate *)b;
+    // Sort Descending by IoC
+    if (cA->ioc < cB->ioc) return 1;
+    if (cA->ioc > cB->ioc) return -1;
+    return 0;
+}
+
 void estimate_cycleword_lengths(
     int text[], 
     int len, 
     int max_cycleword_len, 
     double n_sigma_threshold,
-    double ioc_threshold,
+    double ioc_threshold, 
     int *n_cycleword_lengths, 
     int cycleword_lengths[], 
     bool verbose) {
 
-    int i, j, caesar_column[MAX_CIPHER_LENGTH]; 
-    double mu, std, max_ioc, current_ioc, 
-        mu_ioc[MAX_CYCLEWORD_LEN], mu_ioc_normalised[MAX_CYCLEWORD_LEN];
-    bool threshold;
+    int i, length_candidate;
+    int caesar_column[MAX_CIPHER_LENGTH]; 
+    double raw_iocs[MAX_CYCLEWORD_LEN];
+    double z_scores[MAX_CYCLEWORD_LEN];
+    
+    // Statistics variables.
+    double sum = 0.0, sum_sq = 0.0;
+    double mean, std_dev;
 
-    for (i = 1; i <= max_cycleword_len; i++) mu_ioc[i - 1] = mean_ioc(text, len, i, caesar_column);
+    // Calculate raw IoCs for all periods.
+    for (length_candidate = 1; length_candidate <= max_cycleword_len; length_candidate++) {
+        // Calculate IoC for this period length.
+        raw_iocs[length_candidate - 1] = mean_ioc(text, len, length_candidate, caesar_column);
+        
+        sum += raw_iocs[length_candidate - 1];
+        sum_sq += raw_iocs[length_candidate - 1] * raw_iocs[length_candidate - 1];
+    }
 
-    mu = vec_mean(mu_ioc, max_cycleword_len);
-    std = vec_stddev(mu_ioc, max_cycleword_len);
+    // Calculate statistics.
+    mean = sum / max_cycleword_len;
+    double variance = (sum_sq / max_cycleword_len) - (mean * mean);
+    std_dev = sqrt(variance > 0 ? variance : 0);
 
-    if (verbose) printf("\ncycleword mu,std = %.3f, %.6f\n", mu, std);
-
-    for (i = 0; i < max_cycleword_len; i++) mu_ioc_normalised[i] = (mu_ioc[i] - mu)/std;
-
-    *n_cycleword_lengths = 0;
-    current_ioc = 1.e6;
+    // Calculate Z-Scores for all periods. 
     for (i = 0; i < max_cycleword_len; i++) {
-        threshold = false;
-        max_ioc = 0.;
-        for (j = 0; j < max_cycleword_len; j++) {
-            if (mu_ioc_normalised[j] > n_sigma_threshold && mu_ioc[j] > ioc_threshold && mu_ioc_normalised[j] > max_ioc && mu_ioc_normalised[j] < current_ioc) {
-                threshold = true;
-                max_ioc = mu_ioc_normalised[j];
-                cycleword_lengths[i] = j + 1;
-            }
+        z_scores[i] = (std_dev > 0) ? (raw_iocs[i] - mean) / std_dev : 0.0;
+    }
+
+    // Display all periods. 
+    if (verbose) {
+        printf("\nCycleword Stats: Mean IoC = %.4f, StdDev = %.6f\n", mean, std_dev);
+        printf("len\tIOC\tZ-Score\n");
+        for (i = 0; i < max_cycleword_len; i++) {
+            printf("%d\t%.4f\t%.2f\n", i + 1, raw_iocs[i], z_scores[i]);
         }
-        current_ioc = max_ioc;
-        if (threshold) (*n_cycleword_lengths)++;
     }
 
     if (verbose) {
-        printf("\nlen\tmean IOC\n");
-        for (i = 0; i < max_cycleword_len; i++) printf("%d\t%.4f\n", i + 1, mu_ioc[i]);
-        printf("\ncycleword_lengths =\t");
-        for (i = 0; i < *n_cycleword_lengths; i++) printf("%d\t", cycleword_lengths[i]);
-        printf("\n\n");
+        printf("\nCycleword Stats: Mean IoC = %.4f, StdDev = %.6f\n", mean, std_dev);
+    }
+
+    // Filter candidates.
+    PeriodCandidate candidates[MAX_CYCLEWORD_LEN];
+    int count = 0;
+
+    for (i = 0; i < max_cycleword_len; i++) {
+        length_candidate = i + 1;
+        double current_ioc = raw_iocs[i];
+        double z_score = (std_dev > 0) ? (current_ioc - mean) / std_dev : 0.0;
+
+        // Condition: Must meet Sigma Threshold AND Absolute IoC Threshold
+        if (z_score >= n_sigma_threshold && current_ioc >= ioc_threshold) {
+            candidates[count].len = length_candidate;
+            candidates[count].ioc = current_ioc;
+            candidates[count].z_score = z_score;
+            count++;
+        }
+    }
+
+    // Sort candidates (Highest IoC first.)
+    qsort(candidates, count, sizeof(PeriodCandidate), compare_candidates);
+
+    // Output results.
+    *n_cycleword_lengths = count;
+    
+    if (verbose) printf("\nlen\tIOC\tZ-Score\n");
+    
+    for (i = 0; i < count; i++) {
+        cycleword_lengths[i] = candidates[i].len;
+        if (verbose) {
+            printf("%d\t%.4f\t%.2f\n", candidates[i].len, candidates[i].ioc, candidates[i].z_score);
+        }
+    }
+    
+    if (verbose) {
+        printf("\nSelected %d candidate lengths.\n\n", count);
     }
 }
 
