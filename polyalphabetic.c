@@ -130,7 +130,7 @@
 
 void init_config(PolyalphabeticConfig *cfg) {
     // Set Defaults
-    cfg->cipher_type = 3;
+    cfg->cipher_type = -1;
     cfg->ngram_size = 0;
     cfg->n_hill_climbs = 1000;
     cfg->n_restarts = 1;
@@ -322,6 +322,10 @@ int main(int argc, char **argv) {
     }
 
     // --- Validation ---
+    if (cfg.cipher_type == -1) {
+        printf("\n\nERROR: missing cipher type. Use -type /integer code/. \n\n");
+        return 0;
+    }
 
     if (!cfg.cipher_present && !cfg.batch_present) {
         printf("\n\nERROR: No cipher input specified. Use -cipher or -batch.\n\n");
