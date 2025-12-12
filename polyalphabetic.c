@@ -3,7 +3,7 @@
 //
 
 // A stochastic, shotgun-restarted hill climber with backtracking for solving 
-// Vigenere, Beaufort, and Quagmire I - IV with variants. 
+// Vigenere, Beaufort, Porta, and Quagmire I - IV ciphers with variants. 
 
 // Written by Sam Blake, started 14 July 2023. 
 
