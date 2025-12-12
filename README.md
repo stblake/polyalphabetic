@@ -8,7 +8,7 @@ https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 ## Algorithmic Description of the Polyalphabetic Solver
 
 ### Stochastic Shotgun Hill Climbing Architecture
-The core engine of this program is a **Shotgun Hill Climber**, a heuristic search algorithm designed to navigate the rugged energy landscapes typical of polyalphabetic substitution ciphers. Unlike brute-force methods, which are computationally infeasible for alphabetic permutations ($26!$), this approach relies on iterative improvement.
+The core engine of this program is a **Shotgun Hill Climber**, a heuristic search algorithm designed to navigate the rugged energy landscapes typical of polyalphabetic substitution ciphers. Unlike brute-force methods, which are computationally infeasible for (poly-)alphabetic permutations, this approach relies on iterative improvement.
 
 The "Shotgun" aspect refers to the initialization strategy: the solver performs $N$ distinct **Restarts**, each initializing the state with a completely random permutation of keywords and cyclewords. This prevents the solver from becoming permanently trapped in a local maximum—a common pitfall where a solution scores well relative to its neighbors but is not the true plaintext.
 
