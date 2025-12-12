@@ -5,6 +5,8 @@ This program is inspired by various explanations of Jim Gillogly's cipher solvin
 
 https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
+The effort to make this program as efficient as possible was inspired by the homophonic solver in [AZDecrypt](https://github.com/doranchak/azdecrypt). 
+
 ## Algorithmic Description of the Polyalphabetic Solver
 
 ### Stochastic Shotgun Hill Climbing Architecture
