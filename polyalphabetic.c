@@ -53,6 +53,9 @@
             6 : Autokey
         -variant : flag
             Enable the Quagmire variant (which swaps decryption for encryption.)
+        -samekey : flag
+            Forces the cycleword (indicator word) to be the same as the plaintext / ciphertext 
+            keyword.
 
     Optimization Strategy:
         -optimalcycle : flag (default true)
@@ -169,7 +172,10 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->weight_entropy = 0.0;
 
     cfg->optimal_cycleword = true;
+    cfg->same_key_cycle = false; 
 }
+
+
 
 int main(int argc, char **argv) {
     PolyalphabeticConfig cfg;
@@ -312,6 +318,8 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-stochasticcycle") == 0) {
             cfg.optimal_cycleword = false;
             printf("-stochasticcycle\n");
+        } else if (strcmp(argv[i], "-samekey") == 0) {
+            cfg.same_key_cycle = true;
         }
     }
 
@@ -770,6 +778,11 @@ double shotgun_hill_climber(
                     break ;
             }
 
+            if (cfg->same_key_cycle) {
+                vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+                vec_copy(current_ciphertext_keyword_state, current_cycleword_state, ALPHABET_SIZE);
+            }
+
             // If in optimal mode, fix the cycleword immediately for the initial random state
             if (cfg->optimal_cycleword) {
                 derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
@@ -922,6 +935,11 @@ double shotgun_hill_climber(
                         }
                     }
                 }
+            }
+
+            if (cfg->same_key_cycle) {
+                vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                vec_copy(local_ciphertext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
             }
 
             local_score = state_score(cfg, cipher_indices, cipher_len, 

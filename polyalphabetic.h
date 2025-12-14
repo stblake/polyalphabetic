@@ -103,6 +103,7 @@ typedef struct {
     bool beaufort;
 
     bool optimal_cycleword;
+    bool same_key_cycle;
 
 } PolyalphabeticConfig;
 
