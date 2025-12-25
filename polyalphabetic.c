@@ -525,11 +525,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     else if (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) {
         // Case 2: Autokey (Aperiodic) - IoC estimation will FAIL.
         // We must brute-force a range of likely primer lengths.
-        // Defaulting to range 1 to 15.
-        int max_primer_scan = min(cfg->max_cycleword_len, 25);
-        
-        if (cfg->verbose) printf("Autokey detected: Skipping IoC estimation. Testing primer lengths 1-%d.\n", max_primer_scan);
-        
+        int max_primer_scan = cfg->max_cycleword_len;        
         n_cycleword_lengths = 0;
         for (int len = 1; len <= max_primer_scan; len++) {
             cycleword_lengths[n_cycleword_lengths++] = len;
