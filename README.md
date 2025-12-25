@@ -126,6 +126,36 @@ BETWEENSUBTLESHADINGANDTHEABSENCEOFLIGHTLIESTHENUANCEOFIQLUSION
 
 Note that many equivalent cyclewords are possible for Porta ciphers. 
 
+## Autokey 
+
+Below we solve an autokey cipher (using a straight alphabet, or Vigenere tableau.) 
+
+```
+$ ./polyalphabetic -type 7 -cipher autokey_len97_wl21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 21 -verbose
+```
+
+And we obtain the solution: 
+
+```
+1.46	[sec]
+545K	[it/sec]
+138	[backtracks]
+794	[restarts]
+392	[slips]
+0.00	[contradiction pct]
+0.0612	[IOC]
+2.8111	[entropy]
+0.24	[chi-squared]
+10.55	[score]
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+JAMESHERBERTSANBORNJR
+
+CIAMARKERONTHEGROUNDSEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKTHENFOLLOWMARKERDIRECTION
+```
+
+So the primer (or indicator) is `JAMESHERBERTSANBORNJR`. 
+
 ## Quagmire I
 The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword (indicator word.) 
 
