@@ -351,6 +351,7 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Autokey cipher (Quagmire IV tableau.)\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
+        return 0;
     }
 
 
