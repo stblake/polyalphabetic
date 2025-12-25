@@ -122,10 +122,9 @@
     Notes
     -----
     Cipher Types:
-        Types 1-4 correspond to ACA standards:
+        Ciphers are as defined by the American Cryptogram Association. 
         https://www.cryptogram.org/resource-area/cipher-types/
-        Type 5 is the Beaufort cipher:
-        https://www.cryptogram.org/downloads/aca.info/ciphers/Beaufort.pdf
+
 
 */
 
