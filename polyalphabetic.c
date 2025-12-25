@@ -325,6 +325,35 @@ int main(int argc, char **argv) {
 
     printf("\n\n");
 
+    if (cfg.cipher_type == VIGENERE) {
+        printf("\nAttacking a Vigenere cipher.\n\n");
+    } else if (cfg.cipher_type == QUAGMIRE_1) {
+        printf("\nAttacking a Quagmire I cipher.\n\n");
+    } else if (cfg.cipher_type == QUAGMIRE_2) {
+        printf("\nAttacking a Quagmire II cipher.\n\n");
+    } else if (cfg.cipher_type == QUAGMIRE_3) {
+        printf("\nAttacking a Quagmire III cipher.\n\n");
+    } else if (cfg.cipher_type == QUAGMIRE_4) {
+        printf("\nAttacking a Quagmire IV cipher.\n\n");
+    } else if (cfg.cipher_type == BEAUFORT) {
+        printf("\nAttacking a Beaufort cipher.\n\n");
+    } else if (cfg.cipher_type == PORTA) {
+        printf("\nAttacking a Porta cipher.\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_0) {
+        printf("\nAttacking a Autokey cipher (Vigenere tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_1) {
+        printf("\nAttacking a Autokey cipher (Quagmire I tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_2) {
+        printf("\nAttacking a Autokey cipher (Quagmire II tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_3) {
+        printf("\nAttacking a Autokey cipher (Quagmire III tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_4) {
+        printf("\nAttacking a Autokey cipher (Quagmire IV tableau.)\n\n");
+    } else {
+        printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
+    }
+
+
     if (cfg.cipher_type == BEAUFORT) {
         cfg.beaufort = true;
     }
@@ -462,7 +491,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     int best_plaintext_keyword[ALPHABET_SIZE]; 
     int best_ciphertext_keyword[ALPHABET_SIZE]; 
     int best_cycleword[ALPHABET_SIZE];
-    char best_key_str[MAX_CIPHER_LENGTH]; // For autokey
 
     double score, best_score = 0.0;
     int n_words_found = 0;
@@ -485,33 +513,31 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
             }
         }
     }
+    
+    
+    // --- CYCLEWORD / PRIMER LENGTH SETUP ---
 
-    // Attack Logic
-    if (cfg->cipher_type == AUTOKEY) {
-
-        if (!cfg->dictionary_present || shared->dict == NULL) {
-            printf("ERROR: Autokey attack requires dictionary.\n");
-            return;
-        }
-
-        best_score = autokey_dictionary_attack(
-            cipher_indices, cipher_len,
-            shared,
-            cfg->ngram_size,
-            crib_indices, crib_positions, n_cribs,
-            cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy,
-            best_key_str, best_decrypted,
-            cfg->verbose
-        );
-
-        // Normalize results for printing
-        ord(best_key_str, best_plaintext_keyword);
-        best_cycleword_length = 0;
-
-    } else {
-        // Quagmire / Hill Climber
+    if (cfg->cycleword_len_present) {
+        // Case 1: User explicitly set length (e.g. -cyclewordlen 6)
+        n_cycleword_lengths = 1;
+        cycleword_lengths[0] = cfg->cycleword_len;
+    } 
+    else if (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) {
+        // Case 2: Autokey (Aperiodic) - IoC estimation will FAIL.
+        // We must brute-force a range of likely primer lengths.
+        // Defaulting to range 1 to 15.
+        int max_primer_scan = min(cfg->max_cycleword_len, 25);
         
-        // Estimate Cycleword
+        if (cfg->verbose) printf("Autokey detected: Skipping IoC estimation. Testing primer lengths 1-%d.\n", max_primer_scan);
+        
+        n_cycleword_lengths = 0;
+        for (int len = 1; len <= max_primer_scan; len++) {
+            cycleword_lengths[n_cycleword_lengths++] = len;
+        }
+    } 
+    else {
+        // Case 3: Periodic Cipher (Vigenere, Quagmire, Beaufort, Porta)
+        // Use IoC to estimate the period.
         estimate_cycleword_lengths(
             cipher_indices, 
             cipher_len, 
@@ -521,76 +547,118 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
             &n_cycleword_lengths, 
             cycleword_lengths, 
             cfg->verbose);
-
-        if (cfg->cycleword_len_present) {
-            n_cycleword_lengths = 1;
-            cycleword_lengths[0] = cfg->cycleword_len;
+            
+        // Fallback: If IoC failed to find ANYTHING, default to a safe range 
+        // to prevent the "immediate exit" bug.
+        if (n_cycleword_lengths == 0) {
+            if (cfg->verbose) printf("Warning: No periodicities found above threshold. Falling back to lengths 1-15.\n");
+            for (int len = 1; len <= 15; len++) {
+                cycleword_lengths[n_cycleword_lengths++] = len;
+            }
         }
+    }
 
-        // Keyword constraints
-        int min_kw = cfg->min_keyword_len;
-        int pt_max = cfg->plaintext_max_keyword_len;
-        int ct_max = cfg->ciphertext_max_keyword_len;
+    // Keyword constraints.
+    int min_kw = cfg->min_keyword_len;
+    int pt_max = cfg->plaintext_max_keyword_len;
+    int ct_max = cfg->ciphertext_max_keyword_len;
 
-        if (cfg->cipher_type == VIGENERE) min_kw = 1;
-        if (cfg->cipher_type == BEAUFORT) {
-            min_kw = 1;
-            pt_max = 2; 
-        }
-        
-        // Porta Cipher Constraint Setup (Fixed, non-keyed alphabets)
-        if (cfg->cipher_type == PORTA) {
-            min_kw = 1;
-            pt_max = 2; // Fixed to run loop once for j=1
-            ct_max = 2; // Fixed to run loop once for k=1
-            cfg->plaintext_keyword_len = 1;
-            cfg->ciphertext_keyword_len = 1;
-        }
+    // 1. Force min_kw to 1 ONLY for ciphers that use a Straight Alphabet (Length 1)
+    //    Fixed: Changed range to <= AUTOKEY_2. A3 and A4 should typically start at len 5.
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT || 
+        cfg->cipher_type == PORTA ||
+        (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_2) ||
+        cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2) {
+        min_kw = 1;
+    }
 
+    // 2. Set Max Limits AND Correct Target Lengths for fixed straight alphabets
+    //    Fix: Explicitly set the cfg->...keyword_len to 1. This prevents command-line 
+    //    flags (like -keywordlen 8) from killing the loop when k=1.
+    
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0) {
+        pt_max = 2; 
+        ct_max = 2;
+        cfg->plaintext_keyword_len = 1;
+        cfg->ciphertext_keyword_len = 1; 
+    } else if (cfg->cipher_type == BEAUFORT) {
+        pt_max = 2; 
+        cfg->plaintext_keyword_len = 1; // Treat as length 1 for loop checks
+    } else if (cfg->cipher_type == PORTA) {
+        pt_max = 2; 
+        ct_max = 2; 
+        cfg->plaintext_keyword_len = 1;
+        cfg->ciphertext_keyword_len = 1;
+    } else if (cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == AUTOKEY_1) {
+        // Q1/A1: Plaintext varies, Ciphertext is Straight (Fixed to 1)
+        ct_max = 2;
+        cfg->ciphertext_keyword_len = 1; // FORCE this to 1
+    } else if (cfg->cipher_type == QUAGMIRE_2 || cfg->cipher_type == AUTOKEY_2) {
+        // Q2/A2: Plaintext is Straight (Fixed to 1), Ciphertext varies
+        pt_max = 2;
+        cfg->plaintext_keyword_len = 1; // FORCE this to 1
+    }
+    // Shotgun Loop
+    best_score = 0.;
 
-        // Shotgun Loop
-        best_score = 0.;
+    for (int i = 0; i < n_cycleword_lengths; i++) {
+        printf("\ncycleword length = %d\n", cycleword_lengths[i]);
+        for (int j = min(min_kw, cfg->plaintext_keyword_len); j < pt_max; j++) {
+            for (int k = min(min_kw, cfg->ciphertext_keyword_len); k < ct_max; k++) {
+                printf("\npt/ct keyword len = %d, %d\n", j,k);
+                // Skip invalid combos based on flags
+                if (cfg->plaintext_keyword_len_present && j != cfg->plaintext_keyword_len) continue;
+                if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
+                
+                if (cfg->cipher_type == QUAGMIRE_3 && j != k) continue;
+                if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == VIGENERE && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue; // Porta uses fixed PT/CT alphabets
 
-        for (int i = 0; i < n_cycleword_lengths; i++) {
-            for (int j = min(min_kw, cfg->plaintext_keyword_len); j < pt_max; j++) {
-                for (int k = min(min_kw, cfg->ciphertext_keyword_len); k < ct_max; k++) {
+                // Autokey 0: Both Fixed (Vigenere)
+                if (cfg->cipher_type == AUTOKEY_0 && ! (j == 1 && k == 1)) continue;
 
-                    // Skip invalid combos based on flags
-                    if (cfg->plaintext_keyword_len_present && j != cfg->plaintext_keyword_len) continue;
-                    if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
-                    
-                    if (cfg->cipher_type == QUAGMIRE_3 && j != k) continue;
-                    if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
-                    if (cfg->cipher_type == VIGENERE && ! (j == 1 && k == 1)) continue;
-                    if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue; // Porta uses fixed PT/CT alphabets
+                // Autokey 1: CT is Straight (Fixed), PT varies (Quagmire I)
+                if (cfg->cipher_type == AUTOKEY_1 && k != 1) continue;
 
-                    // Check Crib compatibility
+                // Autokey 2: PT is Straight (Fixed), CT varies. (Quagmire II)
+                if (cfg->cipher_type == AUTOKEY_2 && j != 1) continue;
+
+                // Autokey 3: PT and CT lengths must match (Same key.) (Quagmire III) 
+                if (cfg->cipher_type == AUTOKEY_3 && j != k) continue;
+
+                // Check Crib compatibility.
+                if (cfg->cipher_type != AUTOKEY_0 && 
+                    cfg->cipher_type != AUTOKEY_1 && 
+                    cfg->cipher_type != AUTOKEY_2 && 
+                    cfg->cipher_type != AUTOKEY_3 && 
+                    cfg->cipher_type != AUTOKEY_4) {
                     if (!cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
                         #if CRIB_CHECK
                         continue;
                         #endif
                     }
+                }
 
-                    // Run Hill Climber
-                    score = shotgun_hill_climber(
-                        cfg,
-                        cipher_indices, cipher_len,
-                        crib_indices, crib_positions, n_cribs,
-                        cycleword_lengths[i], j, k,
-                        shared->ngram_data,
-                        decrypted, plaintext_keyword, ciphertext_keyword, cycleword
-                    );
+                // Run Hill Climber
+                score = shotgun_hill_climber(
+                    cfg,
+                    cipher_indices, cipher_len,
+                    crib_indices, crib_positions, n_cribs,
+                    cycleword_lengths[i], j, k,
+                    shared->ngram_data,
+                    decrypted, plaintext_keyword, ciphertext_keyword, cycleword
+                );
 
-                    if (score > best_score) {
-                        best_score = score;
-                        best_cycleword_length = cycleword_lengths[i];
-                        best_plaintext_keyword_length = j;
-                        best_ciphertext_keyword_length = k;
-                        vec_copy(decrypted, best_decrypted, cipher_len);
-                        vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
-                        vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
-                        vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
-                    }
+                if (score > best_score) {
+                    best_score = score;
+                    best_cycleword_length = cycleword_lengths[i];
+                    best_plaintext_keyword_length = j;
+                    best_ciphertext_keyword_length = k;
+                    vec_copy(decrypted, best_decrypted, cipher_len);
+                    vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
+                    vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
+                    vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
                 }
             }
         }
@@ -603,13 +671,20 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         porta_decrypt(best_decrypted, cipher_indices, cipher_len, 
                      best_cycleword, best_cycleword_length);
     } else if (cfg->cipher_type == BEAUFORT) {
-        // Beaufort is a simple reciprocal, fixed alphabet case.
         beaufort_decrypt(best_decrypted, cipher_indices, cipher_len, 
                      best_cycleword, best_cycleword_length);
     } else if (cfg->cipher_type == VIGENERE) { 
         vigenere_decrypt(best_decrypted, cipher_indices, cipher_len, 
                          best_cycleword, best_cycleword_length, cfg->variant);
-    } else if (cfg->cipher_type != AUTOKEY) {
+    } else if (cfg->cipher_type == AUTOKEY_0 || 
+               cfg->cipher_type == AUTOKEY_1 || 
+               cfg->cipher_type == AUTOKEY_2 || 
+               cfg->cipher_type == AUTOKEY_3 || 
+               cfg->cipher_type == AUTOKEY_4) {
+        autokey_decrypt(best_decrypted, cipher_indices, cipher_len, 
+                        best_plaintext_keyword, best_ciphertext_keyword,
+                        best_cycleword, best_cycleword_length);
+    } else {
         quagmire_decrypt(best_decrypted, cipher_indices, cipher_len, 
                         best_plaintext_keyword, best_ciphertext_keyword, 
                         best_cycleword, best_cycleword_length, cfg->variant);
@@ -631,7 +706,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     print_text(cipher_indices, cipher_len);
     printf("\n");
     
-    if (cfg->cipher_type != AUTOKEY && cfg->cipher_type != PORTA) {
+    if (cfg->cipher_type != PORTA) {
         print_text(best_plaintext_keyword, ALPHABET_SIZE);
         printf("\n");
         print_text(best_ciphertext_keyword, ALPHABET_SIZE);
@@ -653,7 +728,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     print_text(cipher_indices, cipher_len);
     printf(", ");
     
-    if (cfg->cipher_type != AUTOKEY && cfg->cipher_type != PORTA) {
+    if (cfg->cipher_type != PORTA) {
         print_text(best_plaintext_keyword, ALPHABET_SIZE);
         printf(", ");
         print_text(best_ciphertext_keyword, ALPHABET_SIZE);
@@ -689,6 +764,8 @@ double shotgun_hill_climber(
     double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
     double ioc, chi, entropy_score;
     bool perturbate_keyword_p, contradiction;
+
+    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4);
 
     n_iterations = 0;
     n_backtracks = 0;
@@ -776,7 +853,56 @@ double shotgun_hill_climber(
                     straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
                     random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
                     break ;
-            }
+                case AUTOKEY_0:
+                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
+                case AUTOKEY_1:
+                    // Keyed PT, Straight CT
+                    if (cfg->user_plaintext_keyword_present) {
+                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+                    } else {
+                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                    }
+                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
+                case AUTOKEY_2:
+                    // Straight PT, Keyed CT
+                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    if (cfg->user_ciphertext_keyword_present) {
+                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+                    } else {
+                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                    }
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
+                case AUTOKEY_3:
+                    // Same keyed PT & CT
+                    if (cfg->user_plaintext_keyword_present) {
+                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+                    } else {
+                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                    }
+                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
+                case AUTOKEY_4:
+                    // Diff keyed PT & CT
+                    if (cfg->user_plaintext_keyword_present) {
+                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+                    } else {
+                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                    }
+                    if (cfg->user_ciphertext_keyword_present) {
+                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+                    } else {
+                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                    }
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
+                }
 
             if (cfg->same_key_cycle) {
                 vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
@@ -784,7 +910,7 @@ double shotgun_hill_climber(
             }
 
             // If in optimal mode, fix the cycleword immediately for the initial random state
-            if (cfg->optimal_cycleword) {
+            if (cfg->optimal_cycleword && ! is_autokey) {
                 derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
                     current_plaintext_keyword_state, current_ciphertext_keyword_state, 
                     current_cycleword_state, cycleword_len);
@@ -810,14 +936,15 @@ double shotgun_hill_climber(
             vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
             bool did_perturb_keyword = false; 
-
-            // Decides whether to attempt keyword perturbation
-            if (cfg->cipher_type != BEAUFORT && (perturbate_keyword_p || cfg->cipher_type == VIGENERE || frand() < cfg->keyword_permutation_probability)) {
+            
+            // Decides whether to attempt keyword perturbation.
+            if (cfg->cipher_type != BEAUFORT && cfg->cipher_type != AUTOKEY_0 && (perturbate_keyword_p || 
+                    cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability)) {
                 
                 // Logic: Only perturb keywords if they were NOT provided by the user and are not fixed by the cipher type.
                 switch (cfg->cipher_type) {
                     case VIGENERE:
-                    case PORTA: // <-- ADDED PORTA CHECK: Prevents keyword perturbation
+                    case PORTA: 
                         // Vigenere and Porta use straight alphabets (fixed), so only the cycleword is perturbed later.
                         did_perturb_keyword = false;
                         break ; 
@@ -863,19 +990,57 @@ double shotgun_hill_climber(
                             }
                             did_perturb_keyword = true;
                         }
-                        break ;
+                        break ;              
+                    case AUTOKEY_1:
+                         // Only perturb PT
+                         if (!cfg->user_plaintext_keyword_present) {
+                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             did_perturb_keyword = true;
+                         }
+                         break;
+                    case AUTOKEY_2:
+                         // Only perturb CT
+                         if (!cfg->user_ciphertext_keyword_present) {
+                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             did_perturb_keyword = true;
+                         }
+                         break;
+                    case AUTOKEY_3:
+                         // Perturb PT and copy to CT
+                         if (!cfg->user_plaintext_keyword_present) {
+                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                             did_perturb_keyword = true;
+                         }
+                         break;
+                    case AUTOKEY_4:
+                         // Perturb either (logic same as Q4)
+                         if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
+                             did_perturb_keyword = false;
+                         } else if (cfg->user_plaintext_keyword_present) {
+                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             did_perturb_keyword = true;
+                         } else if (cfg->user_ciphertext_keyword_present) {
+                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             did_perturb_keyword = true;
+                         } else {
+                             if (frand() < 0.5) perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             else perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             did_perturb_keyword = true;
+                         }
+                         break;
                 }
             } else {
                 did_perturb_keyword = false;
             }
             
             // Determine optimal cycleword from the keyword. 
-            if (cfg->optimal_cycleword) {
+            if (cfg->optimal_cycleword && ! is_autokey) {
                 // We NEVER perturb the cycleword randomly.
                 
                 // Force keyword perturbation if we didn't perturb it this turn (to prevent stagnation).
                 // This does NOT apply to fixed-keyword ciphers (Vigenere, Porta, Beaufort)
-                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) { // <-- ADDED VIGENERE/PORTA CHECK
+                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) { 
                     
                     // Force perturbation on valid alphabets
                     if (cfg->cipher_type == QUAGMIRE_3) {
@@ -911,7 +1076,7 @@ double shotgun_hill_climber(
                 // Stochastic Mode: Perturb Keyword OR Cycleword
                 
                 // If it's Vigenere or Porta, we MUST perturb the cycleword if not optimal.
-                if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA) { // <-- ADDED PORTA CHECK
+                if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) { 
                      perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
                 }
                 // If we decided NOT to perturb the keyword (Quagmire), we perturb the cycleword.
@@ -920,7 +1085,7 @@ double shotgun_hill_climber(
                 }
 
                 // Crib Contradiction Check (Only for Quagmire types that can change keywords)
-                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA) { // <-- ADDED PORTA CHECK
+                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) { 
                     perturbate_keyword_p = false; 
                     
                     if (did_perturb_keyword) { 
@@ -972,10 +1137,14 @@ double shotgun_hill_climber(
                     // Decryption for verbose output
                     if (cfg->cipher_type == PORTA) { 
                         porta_decrypt(decrypted, cipher_indices, cipher_len, 
-                                     best_cycleword_state, cycleword_len);
+                            best_cycleword_state, cycleword_len);
                     } else if (cfg->cipher_type == BEAUFORT) {
                         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
-                        best_cycleword_state, cycleword_len);
+                            best_cycleword_state, cycleword_len);
+                    } else if (is_autokey) {
+                        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+                            best_plaintext_keyword_state, best_ciphertext_keyword_state, 
+                            best_cycleword_state, cycleword_len);
                     } else {
                         quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
                             best_plaintext_keyword_state, best_ciphertext_keyword_state, 
@@ -1007,9 +1176,9 @@ double shotgun_hill_climber(
                     }
                     print_text(best_cycleword_state, cycleword_len); printf("\n");
                     
-                    // Detailed Tableau Display (Only works for Quagmire/Vigenere/Beaufort using CT keyword)
+                    // Detailed tableau display.
                     printf("\n");
-                    if (cfg->cipher_type != PORTA) { // <-- DO NOT PRINT TABLEAU FOR PORTA
+                    if (cfg->cipher_type != PORTA) { 
                         for (k = 0; k < cycleword_len; k++) {
                             for (j = 0; j < ALPHABET_SIZE; j++) {
                                 if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) {
@@ -1043,6 +1212,10 @@ double shotgun_hill_climber(
                      best_cycleword_state, cycleword_len);
     } else if (cfg->cipher_type == BEAUFORT) { 
         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
+                    best_cycleword_state, cycleword_len);
+    } else if (is_autokey) {
+        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+                    best_plaintext_keyword_state, best_ciphertext_keyword_state, 
                     best_cycleword_state, cycleword_len);
     } else if (cfg->cipher_type == VIGENERE) { 
         vigenere_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -1266,82 +1439,6 @@ void derive_optimal_cycleword(
     }
 }
 
-
-
-// Performs a dictionary attack on an Autokey cipher.
-double autokey_dictionary_attack(
-    int cipher_indices[], int cipher_len,
-    SharedData *shared,
-    int ngram_size,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy,
-    char best_key[], int best_decrypted[],
-    bool verbose) {
-
-    double score, best_score = 0.; 
-    int decrypted[MAX_CIPHER_LENGTH];
-
-    if (verbose) {
-        printf("Running attack using %d loaded dictionary words.\n", shared->n_dict_words);
-    }
-
-    for (int i = 0; i < shared->n_dict_words; i++) {
-        char *current_key_str = shared->dict[i];
-        int current_key_len = strlen(current_key_str);
-        int current_key_indices[MAX_KEYWORD_LEN];
-        if (current_key_len > MAX_KEYWORD_LEN) continue; 
-
-        ord(current_key_str, current_key_indices);
-        autokey_decrypt(decrypted, cipher_indices, cipher_len, current_key_indices, current_key_len);
-        
-        double decrypted_ngram_score = ngram_score(decrypted, cipher_len, shared->ngram_data, ngram_size);
-        double decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
-        
-        if (n_cribs > 0) {
-            score = weight_ngram * decrypted_ngram_score + 
-                weight_crib * decrypted_crib_score;
-            score /= weight_ngram + weight_crib; 
-        } else {
-            score = decrypted_ngram_score;
-        }
-
-        if (score > best_score) {
-            best_score = score;
-            strcpy(best_key, current_key_str);
-            vec_copy(decrypted, best_decrypted, cipher_len);
-            
-            if (verbose) {
-                printf("\nNew best score: %.4f with key: %s\n", best_score, best_key);
-                print_text(best_decrypted, cipher_len);
-                printf("\n");
-            }
-        }
-    }
-    
-    return best_score;
-}
-
-void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
-    int key_indices[], int key_len) {
-    
-    int key_stream[MAX_CIPHER_LENGTH + MAX_KEYWORD_LEN];
-    int key_stream_len = key_len;
-    int i;
-
-    for (i = 0; i < key_len; i++) {
-        key_stream[i] = key_indices[i];
-    }
-
-    for (i = 0; i < cipher_len; i++) {
-        int c_val = cipher_indices[i];
-        int k_val = key_stream[i];
-        int p_val = (c_val - k_val + ALPHABET_SIZE) % ALPHABET_SIZE;
-        decrypted[i] = p_val;
-        key_stream[key_stream_len] = p_val;
-        key_stream_len++;
-    }
-}
-
 bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
     int crib_positions[], int n_cribs, int cycleword_len, bool verbose) {
 
@@ -1470,6 +1567,7 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
             float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy) {
 
     double score, decrypted_ngram_score, decrypted_crib_score;
+    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4);
 
     if (cfg->cipher_type == PORTA) { 
         porta_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -1477,6 +1575,10 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     } else if (cfg->cipher_type == BEAUFORT) { 
         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
                      cycleword_state, cycleword_len);
+    } else if (is_autokey) {
+        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+            plaintext_keyword_state, ciphertext_keyword_state,
+            cycleword_state, cycleword_len);
     } else if (cfg->cipher_type == VIGENERE) { 
         vigenere_decrypt(decrypted, cipher_indices, cipher_len, 
                          cycleword_state, cycleword_len, cfg->variant);

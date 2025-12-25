@@ -27,8 +27,12 @@
 #define QUAGMIRE_3 3
 #define QUAGMIRE_4 4
 #define BEAUFORT   5
-#define AUTOKEY    6
-#define PORTA      7
+#define PORTA      6
+#define AUTOKEY_0  7 
+#define AUTOKEY_1  8 
+#define AUTOKEY_2  9 
+#define AUTOKEY_3  10
+#define AUTOKEY_4  11
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -160,16 +164,8 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 
 // Autokey
 void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+    int plaintext_keyword[], int ciphertext_keyword[],
     int key_indices[], int key_len);
-
-double autokey_dictionary_attack(
-    int cipher_indices[], int cipher_len,
-    SharedData *shared,
-    int ngram_size,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy,
-    char best_key[], int best_decrypted[],
-    bool verbose);
 
 // Hill Climber
 double shotgun_hill_climber(
