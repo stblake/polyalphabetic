@@ -319,6 +319,9 @@ int main(int argc, char **argv) {
             printf("-stochasticcycle\n");
         } else if (strcmp(argv[i], "-samekey") == 0) {
             cfg.same_key_cycle = true;
+        } else {
+            printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
+            return 0;
         }
     }
 
