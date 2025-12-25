@@ -47,29 +47,29 @@ The fitness of a candidate state is evaluated using a weighted sum of four metri
 ## Vigenère
 The Vigenère cipher is a method of encrypting alphabetic text by using a keyword to shift each letter of the plaintext. Each letter in the keyword determines the shift for the corresponding letter in the plaintext, resulting in a polyalphabetic substitution cipher that is more resistant to frequency analysis than monoalphabetic ciphers.
 
-Here we solve a simple K4-like Vigenère cipher:
+Here we solve a simple Vigenère cipher:
 
-```$ ./quagmire_NOCRIBCHECK -type 0 -cipher cipher_vigenere.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -keywordlen 7 -cyclewordlen 7 -verbose```
+```$ ./polyalphabetic -type 0 -cipher cipher_vigenere.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
 
 ```
-0.04	[sec]
-386K	[it/sec]
-3	[backtracks]
-32	[restarts]
-453	[iterations]
-9	[slips]
+0.00	[sec]
+8K	[it/sec]
+0	[backtracks]
+0	[restarts]
+0	[slips]
 0.00	[contradiction pct]
-0.0642	[IOC]
-2.7714	[entropy]
-0.12	[chi-squared]
-1.00	[score]
-KRYPTOSABCDEFGHIJLMNQUVWXZ
-KRYPTOSABCDEFGHIJLMNQUVWXZ
-KRYPTOSABCDEFGHIJLMNQUVWXZ
-MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWILLSEEFURTHERINFORM
+0.0643	[IOC]
+2.8469	[entropy]
+0.09	[chi-squared]
+11.32	[score]
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+POLYALPHABETIC
+
+ITISATRUTHUNIVERSALLYACKNOWLEDGEDTHATASINGLEMANINPOSSESSIONOFAGOODFORTUNEMUSTBEINWANTOFAWIFEHOWEVERLITTLEKNOWNTHEFEELINGSORVIEWSOFSUCHAMANMAYBEONHISFIRSTENTERINGANEIGHBOURHOODTHISTRUTHISSOWELLFIXEDINTHEMINDSOFTHESURROUNDINGFAMILIESTHATHEISCONSIDEREDTHERIGHTFULPROPERTYOFSOMEONEOROTHEROFTHEIRDAUGHTERS
 ```
 
-So the (plaintext, ciphertext, and cycleword) keyword is `KRYPTOS`. (TODO: Look into why I had to use the _NOCRIBCHECK version of quagmire for this example.)
+So the cycleword (indicator) is `POLYALPHABETIC`. 
 
 ## Beaufort
 The Beaufort cipher is a polyalphabetic substitution cipher that encrypts text by pairing each letter of the plaintext with a key and performing modular subtraction. It’s similar to the Vigenère cipher but uses subtraction instead of addition, making it its own reciprocal—encryption and decryption are performed with the same process.
