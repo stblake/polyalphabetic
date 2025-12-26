@@ -1,0 +1,4 @@
+#!/bin/bash
+
+./polyalphabetic -type 0 -cipher kryptos_model_cipher_insertion_1.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose
+
