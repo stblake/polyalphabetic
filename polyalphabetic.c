@@ -550,10 +550,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         // Fallback: If IoC failed to find ANYTHING, default to a safe range 
         // to prevent the "immediate exit" bug.
         if (n_cycleword_lengths == 0) {
-            if (cfg->verbose) printf("Warning: No periodicities found above threshold. Falling back to lengths 1-15.\n");
-            for (int len = 1; len <= 15; len++) {
-                cycleword_lengths[n_cycleword_lengths++] = len;
-            }
+            if (cfg->verbose) printf("No periodicities found above threshold. Not running the hillclimber and exiting.\n");
+            return ;
         }
     }
 
@@ -1042,27 +1040,35 @@ double shotgun_hill_climber(
                 if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) { 
                     
                     // Force perturbation on valid alphabets
-                    if (cfg->cipher_type == QUAGMIRE_3) {
+                    if (cfg->cipher_type == QUAGMIRE_3 && !(cfg->user_plaintext_keyword_present || cfg->user_ciphertext_keyword_present)) {
                          perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
                          vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
                          did_perturb_keyword = true;
                     } 
-                    else if (cfg->cipher_type == QUAGMIRE_1) {
+                    else if (cfg->cipher_type == QUAGMIRE_1 && !cfg->user_plaintext_keyword_present) {
                         perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
                         did_perturb_keyword = true;
                     }
-                    else if (cfg->cipher_type == QUAGMIRE_2) {
+                    else if (cfg->cipher_type == QUAGMIRE_2 && !cfg->user_ciphertext_keyword_present) {
                         perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
                         did_perturb_keyword = true;
                     }
                     else if (cfg->cipher_type == QUAGMIRE_4) {
                         // Random force
-                        if (frand() < 0.5) {
+                        if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
+                            if (frand() < 0.5) {
+                                perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                            } else {
+                                perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                            }
+                            did_perturb_keyword = true;
+                        } else if (!cfg->user_plaintext_keyword_present) {
                              perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                        } else {
+                             did_perturb_keyword = true;
+                        } else if (!cfg->user_ciphertext_keyword_present) {
                              perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             did_perturb_keyword = true;
                         }
-                        did_perturb_keyword = true;
                     }
                 }
 
