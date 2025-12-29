@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
             // Explicit Plaintext Keyword
             cfg.user_plaintext_keyword_present = true;
             strcpy(cfg.user_plaintext_keyword, argv[++i]);
-            int len = (int)strlen(cfg.user_plaintext_keyword);
+            int len = unique_len(cfg.user_plaintext_keyword);
             cfg.plaintext_keyword_len = len;
             cfg.plaintext_max_keyword_len = len + 1;
             cfg.plaintext_keyword_len_present = true;
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
             // Explicit Ciphertext Keyword
             cfg.user_ciphertext_keyword_present = true;
             strcpy(cfg.user_ciphertext_keyword, argv[++i]);
-            int len = (int)strlen(cfg.user_ciphertext_keyword);
+            int len = unique_len(cfg.user_ciphertext_keyword);
             cfg.ciphertext_keyword_len = len;
             cfg.ciphertext_max_keyword_len = len + 1;
             cfg.ciphertext_keyword_len_present = true;
@@ -661,6 +661,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         }
     }
 
+    if (best_cycleword_length == 0) {
+        printf("\n\nERROR: No valid configuration found. Check your length constraints.\n");
+        printf("Debug: Type=%d, PT_Len=%d, CT_Len=%d\n", 
+               cfg->cipher_type, cfg->plaintext_keyword_len, cfg->ciphertext_keyword_len);
+        return;
+    }
+
     // Reporting
 
     // Final decryption for the best state
@@ -879,6 +886,9 @@ double shotgun_hill_climber(
                     // Same keyed PT & CT
                     if (cfg->user_plaintext_keyword_present) {
                         make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+                    } else if (cfg->user_ciphertext_keyword_present) {
+                         // FIX: Allow ciphertext keyword to set the shared key state
+                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
                     } else {
                         random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
                     }
@@ -987,7 +997,7 @@ double shotgun_hill_climber(
                             }
                             did_perturb_keyword = true;
                         }
-                        break ;              
+                        break ;          
                     case AUTOKEY_1:
                          // Only perturb PT
                          if (!cfg->user_plaintext_keyword_present) {
@@ -1003,8 +1013,8 @@ double shotgun_hill_climber(
                          }
                          break;
                     case AUTOKEY_3:
-                         // Perturb PT and copy to CT
-                         if (!cfg->user_plaintext_keyword_present) {
+                         // Perturb PT and copy to CT. Check BOTH flags. If either is present, the key is fixed.
+                         if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
                              perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
                              vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
                              did_perturb_keyword = true;
@@ -1602,7 +1612,6 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     if (n_cribs > 0) {
         score = weight_ngram * decrypted_ngram_score + weight_crib * decrypted_crib_score;
         score /= weight_ngram + weight_crib;
-        score /= 3.55; 
     } else {
         score = decrypted_ngram_score;
     }
@@ -2065,6 +2074,26 @@ double mean_ioc(int text[], int len, int len_cycleword, int *caesar_column) {
         weighted_ioc += index_of_coincidence(caesar_column, i);
     }
     return weighted_ioc/len_cycleword;
+}
+
+int unique_len(char *str) {
+    int len = 0;
+    int seen[ALPHABET_SIZE];
+    int i, idx;
+
+    // Initialise seen array.
+    for (i = 0; i < ALPHABET_SIZE; i++) seen[i] = 0;
+
+    for (i = 0; str[i] != '\0'; i++) {
+        idx = toupper(str[i]) - 'A';
+        if (idx >= 0 && idx < ALPHABET_SIZE) {
+            if (!seen[idx]) {
+                seen[idx] = 1;
+                len++;
+            }
+        }
+    }
+    return len;
 }
 
 double vec_mean(double vec[], int len) {

@@ -237,6 +237,7 @@ double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
 
 // Utils
+int unique_len(char *str);
 void vec_print(int vec[], int len);
 void print_text(int indices[], int len);
 void ord(char *text, int indices[]);
