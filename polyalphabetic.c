@@ -2,8 +2,8 @@
 //  Polyalphabetic cipher solver
 //
 
-// A stochastic, shotgun-restarted hill climber with backtracking for solving 
-// Vigenere, Beaufort, Porta, and Quagmire I - IV ciphers with variants. 
+// A stochastic, slippery shotgun-restarted hill climber with backtracking for solving 
+// Vigenere, Beaufort, Porta, Quagmire I - IV, and Autokey ciphers with variants. 
 
 // Written by Sam Blake, started 14 July 2023. 
 
