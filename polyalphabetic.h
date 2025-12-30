@@ -8,6 +8,7 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <strings.h>
 
 #define KRYPTOS 0
 #define CRIB_CHECK 0
@@ -237,6 +238,7 @@ double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
 
 // Utils
+int parse_cipher_type(const char *arg);
 int unique_len(char *str);
 void vec_print(int vec[], int len);
 void print_text(int indices[], int len);
