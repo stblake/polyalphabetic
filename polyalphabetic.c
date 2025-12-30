@@ -44,18 +44,18 @@
     Cipher Configuration:
         -type <int> : int
             The cipher algorithm to solve:
-            0  : Vigenere
-            1  : Quagmire I
-            2  : Quagmire II
-            3  : Quagmire III
-            4  : Quagmire IV
-            5  : Beaufort
-            6  : Porta
-            7  : Autokey (Vigenere tableau)
-            8  : Autokey (Quagmire I tableau)
-            9  : Autokey (Quagmire II tableau)
-            10 : Autokey (Quagmire III tableau)
-            11 : Autokey (Quagmire IV tableau)
+            vigenere, vig, 0  : Vigenere
+            quagmire1, quag1, q1, 1  : Quagmire I
+            quagmire2, quag2, q2, 2  : Quagmire II
+            quagmire3, quag3, q3, 3  : Quagmire III
+            quagmire4, quag4, q4, 4  : Quagmire IV
+            beaufort, beau, 5        : Beaufort
+            porta, 6                 : Porta
+            auto, autokey, 7         : Autokey (Vigenere tableau)
+            auto1, autokey1, 8       : Autokey (Quagmire I tableau)
+            auto2, autokey2, 9       : Autokey (Quagmire II tableau)
+            auto3, autokey3, 10      : Autokey (Quagmire III tableau)
+            auto4, autokey4, 11      : Autokey (Quagmire IV tableau)
         -variant : flag
             Enable the Quagmire variant (which swaps decryption for encryption.)
         -samekey : flag
