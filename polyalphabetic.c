@@ -1659,28 +1659,20 @@ void perturbate_keyword(int state[], int len, int keyword_len) {
     int i, j, k, l, temp;
 
     if (frand() < 0.2) { 
-#if KRYPTOS_PT_SCRAMBLE
-        i = rand_int(7, keyword_len);
-        j = rand_int(7, keyword_len);
-#else
+        // Swap two letters of the key.
         i = rand_int(0, keyword_len);
         j = rand_int(0, keyword_len);
-#endif
         temp = state[i];
         state[i] = state[j];
         state[j] = temp;
     } else {
-#if KRYPTOS_PT_SCRAMBLE
-        i = rand_int(7, len);   
-        j = rand_int(7, len);   
-#else
+        // Swap a letter from the key with an alphabet letter. 
 #if FREQUENCY_WEIGHTED_SELECTION
         i = rand_int_frequency_weighted(state, 0, keyword_len);
         j = rand_int_frequency_weighted(state, keyword_len, len);
 #else
         i = rand_int(0, keyword_len);
         j = rand_int(keyword_len, len);
-#endif
 #endif
         temp = state[i];
         state[i] = state[j];

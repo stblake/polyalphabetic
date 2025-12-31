@@ -13,15 +13,6 @@
 #define KRYPTOS 0
 #define CRIB_CHECK 0
 
-// Flags for specific known-plaintext scenarios (disabled by default)
-#define KRYPTOS_PT 0
-#define KOMITET_PT 0
-#define SOLUBLE_PT 0
-#define KRYPTOS_CT 0
-#define KOMITET_CT 0
-#define SOLUBLE_CT 0
-#define KRYPTOS_PT_SCRAMBLE 0
-
 #define VIGENERE 0
 #define QUAGMIRE_1 1
 #define QUAGMIRE_2 2
