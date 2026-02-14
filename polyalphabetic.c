@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
             cfg.batch_present = true;
             strcpy(cfg.batch_file, argv[++i]);
             printf("-batch %s\n", cfg.batch_file);
-        } else if (strcmp(argv[i], "-crib") == 0) {
+        } else if (strcmp(argv[i], "-crib") == 0 || strcmp(argv[i], "-cribs") == 0) {
             cfg.crib_present = true;
             strcpy(cfg.crib_file, argv[++i]);
             printf("-crib %s\n", cfg.crib_file);
@@ -494,10 +494,10 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     int best_decrypted[MAX_CIPHER_LENGTH];
     int plaintext_keyword[ALPHABET_SIZE]; 
     int ciphertext_keyword[ALPHABET_SIZE]; 
-    int cycleword[ALPHABET_SIZE];
+    int cycleword[MAX_CYCLEWORD_LEN];
     int best_plaintext_keyword[ALPHABET_SIZE]; 
     int best_ciphertext_keyword[ALPHABET_SIZE]; 
-    int best_cycleword[ALPHABET_SIZE];
+    int best_cycleword[MAX_CYCLEWORD_LEN];
 
     double score, best_score = 0.0;
     int n_words_found = 0;
@@ -579,8 +579,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0) {
         pt_max = 2; 
         ct_max = 2;
-        cfg->plaintext_keyword_len = 1;
-        cfg->ciphertext_keyword_len = 1; 
+        cfg->plaintext_keyword_len = 0;
+        cfg->ciphertext_keyword_len = 0; 
     } else if (cfg->cipher_type == BEAUFORT) {
         pt_max = 2; 
         cfg->plaintext_keyword_len = 1; // Treat as length 1 for loop checks
@@ -590,11 +590,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         cfg->plaintext_keyword_len = 1;
         cfg->ciphertext_keyword_len = 1;
     } else if (cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == AUTOKEY_1) {
-        // Q1/A1: Plaintext varies, Ciphertext is Straight (Fixed to 1)
+        // Q1/A1: Plaintext varies, Ciphertext is Straight (Fixed to 0)
         ct_max = 2;
         cfg->ciphertext_keyword_len = 1; // FORCE this to 1
     } else if (cfg->cipher_type == QUAGMIRE_2 || cfg->cipher_type == AUTOKEY_2) {
-        // Q2/A2: Plaintext is Straight (Fixed to 1), Ciphertext varies
+        // Q2/A2: Plaintext is Straight (Fixed to 0), Ciphertext varies
         pt_max = 2;
         cfg->plaintext_keyword_len = 1; // FORCE this to 1
     }
@@ -658,7 +658,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                     vec_copy(decrypted, best_decrypted, cipher_len);
                     vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
                     vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
-                    vec_copy(cycleword, best_cycleword, ALPHABET_SIZE);
+                    vec_copy(cycleword, best_cycleword, cycleword_lengths[i]);
                 }
             }
         }
@@ -671,9 +671,9 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         return;
     }
 
-    // Reporting
+    // Reporting.
 
-    // Final decryption for the best state
+    // Final decryption for the best state. 
     if (cfg->cipher_type == PORTA) {
         porta_decrypt(best_decrypted, cipher_indices, cipher_len, 
                      best_cycleword, best_cycleword_length);
@@ -724,6 +724,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     printf("\n");
     print_text(best_decrypted, cipher_len);
     printf("\n");
+    printf("%s\n\n", cribtext_str);
 
     // One-liner summary
     if (cfg->dictionary_present) {
@@ -759,7 +760,7 @@ double shotgun_hill_climber(
     int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
     float *ngram_data,
     int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
-    int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE]) {
+    int ciphertext_keyword[ALPHABET_SIZE], int cycleword[MAX_CYCLEWORD_LEN]) {
 
     int i, j, k, n, indx, offset, n_iterations, n_backtracks, n_explore, n_contradictions;
     int local_plaintext_keyword_state[ALPHABET_SIZE], current_plaintext_keyword_state[ALPHABET_SIZE]; 
