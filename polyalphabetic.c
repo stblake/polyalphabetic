@@ -610,10 +610,14 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     best_score = 0.;
 
     for (int i = 0; i < n_cycleword_lengths; i++) {
-        printf("\ncycleword length = %d\n", cycleword_lengths[i]);
+        if (cfg->verbose) {
+            printf("\ncycleword length = %d\n", cycleword_lengths[i]);
+        }
         for (int j = min(min_kw, cfg->plaintext_keyword_len); j < pt_max; j++) {
             for (int k = min(min_kw, cfg->ciphertext_keyword_len); k < ct_max; k++) {
-                printf("\npt/ct keyword len = %d, %d\n", j,k);
+                if (cfg->verbose) {
+                    printf("\npt/ct keyword len = %d, %d\n", j,k);
+                }
                 // Skip invalid combos based on flags
                 if (cfg->plaintext_keyword_len_present && j != cfg->plaintext_keyword_len) continue;
                 if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
