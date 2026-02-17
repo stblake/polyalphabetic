@@ -357,6 +357,10 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Autokey cipher (Quagmire III tableau.)\n\n");
     } else if (cfg.cipher_type == AUTOKEY_4) {
         printf("\nAttacking a Autokey cipher (Quagmire IV tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_BEAU) {
+        printf("\nAttacking a Autokey cipher (Beaufort tableau.)\n\n");
+    } else if (cfg.cipher_type == AUTOKEY_PORTA) {
+        printf("\nAttacking a Autokey cipher (Porta tableau.)\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -529,7 +533,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         n_cycleword_lengths = 1;
         cycleword_lengths[0] = cfg->cycleword_len;
     } 
-    else if (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) {
+    else if ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
         // Case 2: Autokey (Aperiodic) - IoC estimation will FAIL.
         // We must brute-force a range of likely primer lengths.
         n_cycleword_lengths = 0;
@@ -568,7 +573,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     if (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT || 
         cfg->cipher_type == PORTA ||
         (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_2) ||
-        cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2) {
+        cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2 || 
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
         min_kw = 1;
     }
 
@@ -576,14 +582,15 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     //    Fix: Explicitly set the cfg->...keyword_len to 1. This prevents command-line 
     //    flags (like -keywordlen 8) from killing the loop when k=1.
     
-    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0) {
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0 || 
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
         pt_max = 2; 
         ct_max = 2;
         cfg->plaintext_keyword_len = 0;
         cfg->ciphertext_keyword_len = 0; 
     } else if (cfg->cipher_type == BEAUFORT) {
         pt_max = 2; 
-        cfg->plaintext_keyword_len = 1; // Treat as length 1 for loop checks
+        cfg->plaintext_keyword_len = 1; // Treat as length 1 for loop checks.
     } else if (cfg->cipher_type == PORTA) {
         pt_max = 2; 
         ct_max = 2; 
@@ -598,7 +605,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         pt_max = 2;
         cfg->plaintext_keyword_len = 1; // FORCE this to 1
     }
-    // Shotgun Loop
+
+    // Shotgun Loop.
     best_score = 0.;
 
     for (int i = 0; i < n_cycleword_lengths; i++) {
@@ -627,12 +635,20 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                 // Autokey 3: PT and CT lengths must match (Same key.) (Quagmire III) 
                 if (cfg->cipher_type == AUTOKEY_3 && j != k) continue;
 
+                // Autokey Beaufort
+                if (cfg->cipher_type == AUTOKEY_BEAU && ! (j == 1 && k == 1)) continue;
+
+                // Autokey Porta
+                if (cfg->cipher_type == AUTOKEY_PORTA && ! (j == 1 && k == 1)) continue;
+
                 // Check Crib compatibility.
                 if (cfg->cipher_type != AUTOKEY_0 && 
                     cfg->cipher_type != AUTOKEY_1 && 
                     cfg->cipher_type != AUTOKEY_2 && 
                     cfg->cipher_type != AUTOKEY_3 && 
-                    cfg->cipher_type != AUTOKEY_4) {
+                    cfg->cipher_type != AUTOKEY_4 && 
+                    cfg->cipher_type != AUTOKEY_BEAU && 
+                    cfg->cipher_type != AUTOKEY_PORTA) {
                     if (!cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
                         #if CRIB_CHECK
                         continue;
@@ -687,8 +703,10 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                cfg->cipher_type == AUTOKEY_1 || 
                cfg->cipher_type == AUTOKEY_2 || 
                cfg->cipher_type == AUTOKEY_3 || 
-               cfg->cipher_type == AUTOKEY_4) {
-        autokey_decrypt(best_decrypted, cipher_indices, cipher_len, 
+               cfg->cipher_type == AUTOKEY_4 || 
+               cfg->cipher_type == AUTOKEY_BEAU || 
+               cfg->cipher_type == AUTOKEY_PORTA) {
+        autokey_decrypt(cfg, best_decrypted, cipher_indices, cipher_len, 
                         best_plaintext_keyword, best_ciphertext_keyword,
                         best_cycleword, best_cycleword_length);
     } else {
@@ -773,7 +791,8 @@ double shotgun_hill_climber(
     double ioc, chi, entropy_score;
     bool perturbate_keyword_p, contradiction;
 
-    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4);
+    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) ||
+                      (cfg->cipher_type == AUTOKEY_BEAU) || (cfg->cipher_type == AUTOKEY_PORTA);
 
     n_iterations = 0;
     n_backtracks = 0;
@@ -913,6 +932,16 @@ double shotgun_hill_climber(
                     }
                     random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
                     break;
+                case AUTOKEY_BEAU:
+                case AUTOKEY_PORTA:
+                    plaintext_keyword_len = ALPHABET_SIZE;
+                    ciphertext_keyword_len = ALPHABET_SIZE;
+                    // Both use standard straight alphabets for the underlying tableau.
+                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    // The "cycleword" here is actually the primer.
+                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    break;
                 }
 
             if (cfg->same_key_cycle) {
@@ -949,13 +978,17 @@ double shotgun_hill_climber(
             bool did_perturb_keyword = false; 
             
             // Decides whether to attempt keyword perturbation.
-            if (cfg->cipher_type != BEAUFORT && cfg->cipher_type != AUTOKEY_0 && (perturbate_keyword_p || 
-                    cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability)) {
+            if (perturbate_keyword_p || 
+                    cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability) {
                 
                 // Logic: Only perturb keywords if they were NOT provided by the user and are not fixed by the cipher type.
                 switch (cfg->cipher_type) {
                     case VIGENERE:
-                    case PORTA: 
+                    case PORTA:
+                    case BEAUFORT:
+                    case AUTOKEY_0:
+                    case AUTOKEY_BEAU:
+                    case AUTOKEY_PORTA:
                         // Vigenere and Porta use straight alphabets (fixed), so only the cycleword is perturbed later.
                         did_perturb_keyword = false;
                         break ; 
@@ -1161,7 +1194,7 @@ double shotgun_hill_climber(
                         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
                             best_cycleword_state, cycleword_len);
                     } else if (is_autokey) {
-                        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+                        autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
                             best_plaintext_keyword_state, best_ciphertext_keyword_state, 
                             best_cycleword_state, cycleword_len);
                     } else {
@@ -1233,7 +1266,7 @@ double shotgun_hill_climber(
         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
                     best_cycleword_state, cycleword_len);
     } else if (is_autokey) {
-        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+        autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
                     best_plaintext_keyword_state, best_ciphertext_keyword_state, 
                     best_cycleword_state, cycleword_len);
     } else if (cfg->cipher_type == VIGENERE) { 
@@ -1586,7 +1619,8 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
             float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy) {
 
     double score, decrypted_ngram_score, decrypted_crib_score;
-    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4);
+    bool is_autokey = ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA);
 
     if (cfg->cipher_type == PORTA) { 
         porta_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -1595,7 +1629,7 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
         beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
                      cycleword_state, cycleword_len);
     } else if (is_autokey) {
-        autokey_decrypt(decrypted, cipher_indices, cipher_len, 
+        autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
             plaintext_keyword_state, ciphertext_keyword_state,
             cycleword_state, cycleword_len);
     } else if (cfg->cipher_type == VIGENERE) { 
@@ -1609,7 +1643,6 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     }
 
     decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
-    // return decrypted_crib_score; 
 
     decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
 

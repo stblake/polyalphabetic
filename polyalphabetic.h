@@ -25,6 +25,8 @@
 #define AUTOKEY_2  9 
 #define AUTOKEY_3  10
 #define AUTOKEY_4  11
+#define AUTOKEY_BEAU 12
+#define AUTOKEY_PORTA 13
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -155,8 +157,8 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant);
 
 // Autokey
-void autokey_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
-    int plaintext_keyword[], int ciphertext_keyword[],
+void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[], 
+    int cipher_len, int plaintext_keyword[], int ciphertext_keyword[],
     int key_indices[], int key_len);
 
 // Hill Climber
@@ -167,7 +169,7 @@ double shotgun_hill_climber(
 	int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
 	float *ngram_data,
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
-	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[ALPHABET_SIZE]);
+	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[MAX_CYCLEWORD_LEN]);
 
 void derive_optimal_cycleword(
     PolyalphabeticConfig *cfg, 

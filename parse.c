@@ -54,6 +54,14 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "auto3") || str_eq(arg, "autokey3")) return AUTOKEY_3;
     if (str_eq(arg, "auto4") || str_eq(arg, "autokey4")) return AUTOKEY_4;
 
+    // Autokey with Beaufort and Porta tableau
+	if (str_eq(arg, "abeau") || str_eq(arg, "autobeau") || str_eq(arg, "autobeaufort")) return AUTOKEY_BEAU;
+	if (str_eq(arg, "aporta") || str_eq(arg, "autoporta")) return AUTOKEY_PORTA;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }
+
+
+
+
