@@ -156,6 +156,54 @@ CIAMARKERONTHEGROUNDSEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKTHENFO
 
 So the primer (or indicator) is `JAMESHERBERTSANBORNJR`. 
 
+We can also solve Autokey ciphers that use a Beaufort tableau (with `-type autobeau`): 
+
+```
+./polyalphabetic -type autobeau -cipher cipher_autokey_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 --cyclewordlen 7 -verbose
+```
+
+And almost instantly we get the following solution:
+
+```
+0.01	[sec]
+415K	[it/sec]
+0	[backtracks]
+4	[restarts]
+2	[slips]
+0.00	[contradiction pct]
+0.0599	[IOC]
+2.8191	[entropy]
+0.25	[chi-squared]
+10.58	[score]
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+GIRASOL
+
+CIAMARKERONTHEGROUNDEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKANDFOLLOWMARKERDIRECTION
+```
+
+Similarly, we can solve an autokey cipher that uses a Porta tableau (with `-type autoporta`)
+
+```
+0.00	[sec]
+399K	[it/sec]
+0	[backtracks]
+1	[restarts]
+1	[slips]
+0.00	[contradiction pct]
+0.0601	[IOC]
+2.8170	[entropy]
+0.25	[chi-squared]
+10.60	[score]
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+EIRATOL
+
+DIAMARKERONTHEGROUNDEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKANDFOLLOWMARKERDIRECTION
+```
+
+We get out the solution, and the primer word is close to the correct primer `GIRASOL`. 
+
 ## Quagmire I
 The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword (indicator word.) 
 
