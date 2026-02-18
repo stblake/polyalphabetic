@@ -204,6 +204,30 @@ DIAMARKERONTHEGROUNDEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKANDFOLL
 
 We get out the solution, and the primer word is close to the correct primer `GIRASOL`. 
 
+Solving autokey ciphers that use a Quagmire I-IV tableau are much harder to solve as the multidimensional search space is rugged. If we can guess the key for the keyed alphabet, then we can solve these ciphers as quickly as we did previously for the Vigenere, Beaufort, and Porta tableau - encrypted autokey ciphers. For example, the following is an autokey cipher that uses a Quagmire III tableau. We have guessed the key for the keyed alphabet is KRYPTOS. 
+
+```
+./polyalphabetic -type auto3 -cipher cipher_autokey_quag3.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -verbose -cyclewordlen 7 -plaintextkeyword KRYPTOS
+```
+
+```
+0.01	[sec]
+353K	[it/sec]
+0	[backtracks]
+3	[restarts]
+0	[slips]
+0.00	[contradiction pct]
+0.0599	[IOC]
+2.8191	[entropy]
+0.25	[chi-squared]
+10.58	[score]
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+KRYPTOSABCDEFGHIJLMNQUVWXZ
+GIRASOL
+
+CIAMARKERONTHEGROUNDEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORYBERLINCLOCKANDFOLLOWMARKERDIRECTION
+```
+
 ## Quagmire I
 The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`ABCDEFGHIJKLMNOPQRSTUVWXYZ`), and a cycleword (indicator word.) 
 
