@@ -49,7 +49,7 @@ The Vigenère cipher is a method of encrypting alphabetic text by using a keywor
 
 Here we solve a simple Vigenère cipher:
 
-```$ ./polyalphabetic -type 0 -cipher cipher_vigenere.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
+```$ ./polyalphabetic -type vig -cipher cipher_vigenere.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
 
 ```
 0.00	[sec]
@@ -76,7 +76,7 @@ The Beaufort cipher is a polyalphabetic substitution cipher that encrypts text b
 
 For example, we solve a beaufort cipher which contains the famous opening line from _Pride and Prejudice_ by Jane Austen.
 
-```$ ./polyalphabetic -type 5 -cipher cipher_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 7 -verbose```
+```$ ./polyalphabetic -type beaufort -cipher cipher_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 7 -verbose```
 
 ```
 0.01	[sec]
@@ -103,7 +103,7 @@ Note, there is a small bug here where the cycleword is messed-up, but we success
 The Porta cipher is a reciprocal polyalphabetic substitution cipher. We implement the Porta cipher as defined by the ACA (https://www.cryptogram.org/downloads/aca.info/ciphers/Porta.pdf)
 
 ```
-./polyalphabetic -type 6 -cipher porta_aca.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 250 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.05 -cyclewordlen 11 -stochasticcycle -verbose
+./polyalphabetic -type porta -cipher porta_aca.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 250 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.05 -cyclewordlen 11 -stochasticcycle -verbose
 ```
 
 We quickly obtain the decryption:
@@ -131,7 +131,7 @@ Note that many equivalent cyclewords are possible for Porta ciphers.
 Below we solve an autokey cipher (using a straight alphabet, or Vigenere tableau.) 
 
 ```
-$ ./polyalphabetic -type 7 -cipher autokey_len97_wl21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 21 -verbose
+$ ./polyalphabetic -type autokey -cipher autokey_len97_wl21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 21 -verbose
 ```
 
 And we obtain the solution: 
@@ -161,7 +161,7 @@ The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`A
 
 For example, we solve a length 370 Quagmire I cipher (which we store in `cipher_quagmire_1_longer.txt`) with a length 5 plaintext keyword, and a length 7 cycleword.
 
-```$ ./polyalphabetic -type 1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
+```$ ./polyalphabetic -type quag1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
 
 We quickly obtain the following decryption: 
 
@@ -190,7 +190,7 @@ The Quagmire II cipher uses a straight plaintext alphabet, a ciphertext keyword,
 
 Similarly to the previous cipher, we can solve a Quagmire II cipher as follows:
 
-```$ ./polyalphabetic -type 2 -cipher cipher_quagmire_2_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -ciphertextkeywordlen 6 -cyclewordlen 7```
+```$ ./polyalphabetic -type quag2 -cipher cipher_quagmire_2_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -ciphertextkeywordlen 6 -cyclewordlen 7```
 
 ```
 8.27	[sec]
@@ -225,7 +225,7 @@ with the following cribs (which we store in `cribs.txt`)
 
 We use a dataset of 5-grams English letter frequencies (`english_quintgrams.txt`) and fix the (plaintext and ciphertext) keyword lengths to 7:
 
-```$ ./polyalphabetic -type 3 -cipher cipher.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -plaintextkeywordlen 7 -nsigmathreshold 1. -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 7 -cyclewordlen 7 -verbose```
+```$ ./polyalphabetic -type quag3 -cipher cipher.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -plaintextkeywordlen 7 -nsigmathreshold 1. -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 7 -cyclewordlen 7 -verbose```
 
 After about 2 seconds we arrive at the following decryption: 
 
@@ -284,7 +284,7 @@ Quagmire IV ciphers use a plaintext keyword, a ciphertext keyword, and a cyclewo
 
 Here we solve a relatively easy Quagmire IV cipher, with a plaintext keyword of length 7, a ciphertext keyword of length 3, and a cycleword of length 3. 
 
-```$ ./polyalphabetic -type 4 -cipher cipher_quagmire_4_easier.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 3 -cyclewordlen 3```
+```$ ./polyalphabetic -type quag4 -cipher cipher_quagmire_4_easier.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 3 -cyclewordlen 3```
 
 ```
 15.81	[sec]
@@ -308,70 +308,39 @@ The keywords are `KRYPTOS`, `CIA`, and `USA`.
 
 The following cipher is significantly harder for this program to solve: 
 
-```$ ./polyalphabetic -type 4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
+```$ ./polyalphabetic -type quag4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
 
-After around 5 minutes we get the following partial solution (keywords should be `WIL[L]IAM`, `WEBST[E]R`, and `ENIGMA`): 
-
-```
-261.06	[sec]
-81K	[it/sec]
-597	[backtracks]
-4195	[restarts]
-679	[iterations]
-10555	[slips]
-0.00	[contradiction pct]
-0.0632	[IOC]
-2.9092	[entropy]
-1.45	[chi-squared]
-0.52	[score]
-
-ILAMBCDEFGHJKNOPQRSTUVWXYZ
-WECSTRABDFGHIJKLMNOPQUVXYZ
-COJHNB
-
-CSTRABDFGHIJKLMNOPQUVXYZWE
-KLMNOPQUVXYZWECSTRABDFGHIJ
-FGHIJKLMNOPQUVXYZWECSTRABD
-BDFGHIJKLMNOPQUVXYZWECSTRA
-JKLMNOPQUVXYZWECSTRABDFGHI
-ECSTRABDFGHIJKLMNOPQUVXYZW
-
-CTZASTOTALLXCNVISVBLEHOZSTHATPOSSIBLETHEXUSEDTHEEARTHSMAGNETCCFIELDWTHEVNFOWMATIONZASGATHEREDANDTRANSMCTTEDUNDEWGRUUNDTOANPNKNOZNLOCATIONWDOESLANGLEXKNOZABOUTTHISTPEXSHOULDITSBPWIEDOPTTHERESOMEZHEREWZHOKNOZSTHEEWACTLOCATIONONLXZZTHISZASHISLASTMESSAGEWTHIRTXECGHTDEGREESFCFTXSEVENMINUTESSVWHOINTFIVESEIONDSNORTHSEVENTXSEVENDEGREESECGHTMVNUTESFORTXFOURSECONDSZESTWLAXERTZO
-```
-
-Re-running `quagmire` on this cipher highlighted the stochastic nature of this program, and we obtained a much better solution is half the compute time: 
+After around a minutes we get the following solution (keywords should be `WIL[L]IAM`, `WEBST[E]R`, and `ENIGMA`): 
 
 ```
-197.75	[sec]
-71K	[it/sec]
-406	[backtracks]
-2798	[restarts]
-1856	[iterations]
-6872	[slips]
+43.57	[sec]
+19K	[it/sec]
+30	[backtracks]
+169	[restarts]
+414	[slips]
 0.00	[contradiction pct]
 0.0656	[IOC]
 2.8699	[entropy]
 0.24	[chi-squared]
-0.75	[score]
+10.48	[score]
 WILAMBCDEFGHJKNOPQRSTUVXYZ
 WEBSTRACDFGHIJKLMNOPQUVXYZ
 ENIGMA
 
-TRACDFGHIJKLMNOPQUVXYZWEBS
-JKLMNOPQUVXYZWEBSTRACDFGHI
-DFGHIJKLMNOPQUVXYZWEBSTRAC
-ACDFGHIJKLMNOPQUVXYZWEBSTR
+EBSTRACDFGHIJKLMNOPQUVXYZW
+NOPQUVXYZWEBSTRACDFGHIJKLM
 IJKLMNOPQUVXYZWEBSTRACDFGH
-WEBSTRACDFGHIJKLMNOPQUVXYZ
+GHIJKLMNOPQUVXYZWEBSTRACDF
+MNOPQUVXYZWEBSTRACDFGHIJKL
+ACDFGHIJKLMNOPQUVXYZWEBSTR
 
 ITWASTOTALLYINVISIBLEHOWSTHATPOSSIBLETHEYUSEDTHEEARTHSMAGNETICFIELDXTHEINFORMATIONWASGATHEREDANDTRANSMITTEDUNDERGRUUNDTOANUNKNOWNLOCATIONXDOESLANGLEYKNOWABOUTTHISTHEYSHOULDITSBURIEDOUTTHERESOMEWHEREXWHOKNOWSTHEEXACTLOCATIONONLYWWTHISWASHISLASTMESSAGEXTHIRTYEIGHTDEGREESFIFTYSEVENMINUTESSIXPOINTFIVESECONDSNORTHSEVENTYSEVENDEGREESEIGHTMINUTESFORTYFOURSECONDSWESTXLAYERTWO
 ```
 
-
 ## Variants
 We can solve Quagmire-type variant ciphers (where the encryption and decryption steps are swapped.) For example, we use the `-variant` flag to solve a variant Quagmire-3 cipher: 
 
-```$ ./polyalphabetic -type 3 -variant -cipher cipher_variant.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 7 -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
+```$ ./polyalphabetic -type quag3 -variant -cipher cipher_variant.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 7 -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
 
 ```
 19.34	[sec]
@@ -394,7 +363,7 @@ MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWIL
 ## Indicator keys
 We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. You need to do your own search for the cycleword, as we do not use a dictionary search for any of the keywords. 
 
-```$ ./polyalphabetic -type 1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
+```$ ./polyalphabetic -type quag1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
 
 ```
 8.89	[sec]
