@@ -4,7 +4,6 @@
 
 #include "polyalphabetic.h"
 
-
 void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[], int cipher_len, 
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
     int primer_indices[], int primer_len) {
@@ -24,7 +23,7 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
         int p_val;
 
         if (cfg->cipher_type == AUTOKEY_BEAU) { 
-            // Beaufort Autokey: P = K - C (mod 26)
+            // Beaufort Autokey (Reciprocal): P = K - C (mod 26)
             p_val = (k_char - ct_char + ALPHABET_SIZE) % ALPHABET_SIZE;
         } 
         else if (cfg->cipher_type == AUTOKEY_PORTA) { 
@@ -54,7 +53,15 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
                 }
             }
 
-            int indx = (posn_keyword - posn_key_char) % ALPHABET_SIZE;
+            int indx;
+            if (cfg->variant) {
+                // Variant: P = C + K (mod 26)
+                indx = (posn_keyword + posn_key_char) % ALPHABET_SIZE;
+            } else {
+                // Standard: P = C - K (mod 26)
+                indx = (posn_keyword - posn_key_char) % ALPHABET_SIZE;
+            }
+            
             if (indx < 0) indx += ALPHABET_SIZE;
             p_val = plaintext_keyword_indices[indx];
         }
@@ -63,4 +70,3 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
         key_stream[key_stream_len++] = p_val; // Extend stream with plaintext
     }
 }
-
