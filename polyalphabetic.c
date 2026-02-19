@@ -731,6 +731,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                         best_cycleword, best_cycleword_length, cfg->variant);
     }
     
+
+    if (cfg->transperoffset_present) {
+        transperoffset(best_decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
+    }
+    
     if (cfg->transperoffset_present) {
         printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
     }
@@ -1304,6 +1309,10 @@ double shotgun_hill_climber(
         quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
                         best_plaintext_keyword_state, best_ciphertext_keyword_state, 
                         best_cycleword_state, cycleword_len, cfg->variant);
+    }
+
+    if (cfg->transperoffset_present) {
+        transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
     }
 
     return best_score;
