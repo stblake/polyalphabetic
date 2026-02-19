@@ -177,6 +177,10 @@ void init_config(PolyalphabeticConfig *cfg) {
 
     cfg->optimal_cycleword = true;
     cfg->same_key_cycle = false; 
+
+    cfg->transperoffset_present = false;
+    cfg->trans_offset = 0;
+    cfg->trans_period = 1;
 }
 
 
@@ -325,6 +329,13 @@ int main(int argc, char **argv) {
             printf("-stochasticcycle\n");
         } else if (strcmp(argv[i], "-samekey") == 0) {
             cfg.same_key_cycle = true;
+        } else if (strcmp(argv[i], "-transperiodoffset") == 0 || 
+                strcmp(argv[i], "-transperoffset") == 0 || 
+                strcmp(argv[i], "-transperoff") == 0) {
+            cfg.trans_offset = atoi(argv[++i]);
+            cfg.trans_period = atoi(argv[++i]);
+            cfg.transperoffset_present = true;
+            printf("-transperiodoffset %d %d\n", cfg.trans_offset, cfg.trans_period);
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -534,8 +545,9 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         cycleword_lengths[0] = cfg->cycleword_len;
     } 
     else if ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
-        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
-        // Case 2: Autokey (Aperiodic) - IoC estimation will FAIL.
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA || 
+        cfg->transperoffset_present) {
+        // Case 2: Autokey (Aperiodic) or polyalphabetic + transposition - IoC estimation will FAIL.
         // We must brute-force a range of likely primer lengths.
         n_cycleword_lengths = 0;
         for (int len = 1; len <= cfg->max_cycleword_len; len++) {
@@ -719,6 +731,10 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                         best_cycleword, best_cycleword_length, cfg->variant);
     }
     
+    if (cfg->transperoffset_present) {
+        printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
+    }
+
     char plaintext_string[MAX_CIPHER_LENGTH];
     for (int i = 0; i < cipher_len; i++) {
         plaintext_string[i] = best_decrypted[i] + 'A';
@@ -749,10 +765,18 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     printf("%s\n\n", cribtext_str);
 
     // One-liner summary
-    if (cfg->dictionary_present) {
-        printf(">>> %.2f, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+    if (cfg->transperoffset_present) {
+        if (cfg->dictionary_present) {
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        } else {
+            printf(">>> %.2f, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }
     } else {
-        printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        if (cfg->dictionary_present) {
+            printf(">>> %.2f, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        } else {
+            printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }        
     }
     
     print_text(cipher_indices, cipher_len);
@@ -1504,7 +1528,9 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
     if (n_cribs == 0) return true;
 
     for (j = 0; j < cycleword_len; j++) {
-        if (verbose) printf("\nCOLUMN = %d \n", j);
+        if (verbose) {
+            printf("\nCOLUMN = %d \n", j);
+        }
 
         k = 0;
         while (cycleword_len*k + j < cipher_len) {
@@ -1523,7 +1549,9 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
         for (i = 0; i < n_cribs; i++) {
             for (k = 0; k < column_length; k++) {
                 if (crib_positions[i] == ciphertext_column_indices[k]) {
-                    if (verbose) printf("CT = %c, PT = %c\n", ciphertext_column[k] + 'A', crib_indices[i] + 'A');
+                    if (verbose) {
+                        printf("CT = %c, PT = %c\n", ciphertext_column[k] + 'A', crib_indices[i] + 'A');
+                    }
                     
                     crib_frequencies[crib_indices[i]][ciphertext_column[k]] = 1;
 
@@ -1532,7 +1560,9 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
                         for (jj = 0; jj < ALPHABET_SIZE; jj++) {
                             total += crib_frequencies[ii][jj];
                             if (total > 1) {
-                                printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                if (verbose) {
+                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                }
                                 return false;
                             }
                         }
@@ -1543,7 +1573,9 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
                         for (ii = 0; ii < ALPHABET_SIZE; ii++) {
                             total += crib_frequencies[ii][jj];
                             if (total > 1) {
-                                printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                if (verbose) {
+                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                }
                                 return false;
                             }
                         }
@@ -1626,6 +1658,8 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     bool is_autokey = ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
         cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA);
 
+    // Decrypt polyalphabetic.
+
     if (cfg->cipher_type == PORTA) { 
         porta_decrypt(decrypted, cipher_indices, cipher_len, 
                      cycleword_state, cycleword_len);
@@ -1644,6 +1678,12 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
         quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
             plaintext_keyword_state, ciphertext_keyword_state, 
             cycleword_state, cycleword_len, cfg->variant);
+    }
+
+    // Apply transposition. 
+
+    if (cfg->transperoffset_present) {
+        transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
     }
 
     decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);

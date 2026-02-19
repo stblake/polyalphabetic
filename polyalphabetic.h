@@ -103,6 +103,11 @@ typedef struct {
     bool optimal_cycleword;
     bool same_key_cycle;
 
+    // Transpositions.
+    bool transperoffset_present;
+    int trans_offset;
+    int trans_period;
+
 } PolyalphabeticConfig;
 
 typedef struct {
@@ -160,6 +165,9 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
 void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[], 
     int cipher_len, int plaintext_keyword[], int ciphertext_keyword[],
     int key_indices[], int key_len);
+
+// Transposition
+void transperoffset(int plaintext[], int len, int d, int n);
 
 // Hill Climber
 double shotgun_hill_climber(
@@ -231,6 +239,7 @@ double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
 
 // Utils
+int gcd(int a, int b);
 int parse_cipher_type(const char *arg);
 int unique_len(char *str);
 void vec_print(int vec[], int len);

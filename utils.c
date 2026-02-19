@@ -5,6 +5,12 @@
 #include "polyalphabetic.h"
 
 
+int gcd(int a, int b) {
+    while (b) { a %= b; int t = a; a = b; b = t; }
+    return a;
+}
+
+
 double entropy(int text[], int len) {
     int frequencies[ALPHABET_SIZE];
     double entropy = 0., freq;
