@@ -25,7 +25,7 @@
 
 /* Usage
     -----
-    $ ./quagmire [options]
+    $ ./polyalphabetic [options]
 
     Parameters
     ----------
@@ -735,7 +735,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     if (cfg->transperoffset_present) {
         transperoffset(best_decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
     }
-    
+
     if (cfg->transperoffset_present) {
         printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
     }
