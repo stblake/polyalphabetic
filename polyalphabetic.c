@@ -19,8 +19,6 @@
     GNU General Public License for more details.
 */
 
-// TODO:    - remove decryption from state_score. 
-
 // Reference for n-gram data: http://practicalcryptography.com/cryptanalysis/letter-frequencies-various-languages/english-letter-frequencies/
 
 /* Usage
@@ -989,12 +987,15 @@ double shotgun_hill_climber(
                     current_cycleword_state, cycleword_len);
             }
 
-            current_score = state_score(cfg, cipher_indices, cipher_len, 
-                crib_indices, crib_positions, n_cribs, 
+            decrypt_state(cfg, cipher_indices, cipher_len, 
                 current_plaintext_keyword_state, current_ciphertext_keyword_state, 
-                current_cycleword_state, cycleword_len, 
-                decrypted, ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+                current_cycleword_state, cycleword_len, decrypted);
+
+            current_score = state_score(decrypted, cipher_len, 
+                crib_indices, crib_positions, n_cribs, 
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib,
+                cfg->weight_ioc, cfg->weight_entropy);
         }
 
         perturbate_keyword_p = true;
@@ -1192,12 +1193,15 @@ double shotgun_hill_climber(
                 vec_copy(local_ciphertext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
             }
 
-            local_score = state_score(cfg, cipher_indices, cipher_len, 
-                crib_indices, crib_positions, n_cribs, 
+            decrypt_state(cfg, cipher_indices, cipher_len, 
                 local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                local_cycleword_state, cycleword_len, 
-                decrypted, ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+                local_cycleword_state, cycleword_len, decrypted);
+
+            local_score = state_score(decrypted, cipher_len, 
+                crib_indices, crib_positions, n_cribs, 
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib,
+                cfg->weight_ioc, cfg->weight_entropy);
 
             if (local_score > current_score) {
                 current_score = local_score;
@@ -1654,20 +1658,13 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 }
 
 
-
-double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
-            int crib_indices[], int crib_positions[], int n_cribs, 
-            int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-            int cycleword_state[], int cycleword_len, 
-            int decrypted[], 
-            float *ngram_data, int ngram_size, 
-            float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy) {
-
-    double score, decrypted_ngram_score, decrypted_crib_score;
+void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
+                   int plaintext_keyword_state[], int ciphertext_keyword_state[], 
+                   int cycleword_state[], int cycleword_len, 
+                   int decrypted[]) {
+                   
     bool is_autokey = ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
         cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA);
-
-    // Decrypt polyalphabetic.
 
     if (cfg->cipher_type == PORTA) { 
         porta_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -1690,13 +1687,22 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     }
 
     // Apply transposition. 
-
     if (cfg->transperoffset_present) {
         transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
     }
+}
+
+
+
+double state_score(int decrypted[], int cipher_len, 
+            int crib_indices[], int crib_positions[], int n_cribs, 
+            float *ngram_data, int ngram_size, 
+            float weight_ngram, float weight_crib, 
+            float weight_ioc, float weight_entropy) {
+
+    double score, decrypted_ngram_score, decrypted_crib_score;
 
     decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
-
     decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
 
     if (n_cribs > 0) {
@@ -1708,6 +1714,8 @@ double state_score(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
 
     return score;
 }
+
+
 
 double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs) {
     if (n_cribs == 0) return 0.;

@@ -195,14 +195,16 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 	int cycleword_indices[], int cycleword_len,
 	bool variant, bool verbose);
 
-double state_score(PolyalphabeticConfig *cfg, 
-            int cipher_indices[], int cipher_len, 
-			int crib_indices[], int crib_positions[], int n_cribs, 
-			int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-			int cycleword_state[], int cycleword_len,
-			int decrypted[], 
-			float *ngram_data, int ngram_size,
-			float weight_ngram, float weight_crib, float weight_ioc, float weight_entropy);
+void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
+                   int plaintext_keyword_state[], int ciphertext_keyword_state[], 
+                   int cycleword_state[], int cycleword_len, 
+                   int decrypted[]);
+
+double state_score(int decrypted[], int cipher_len, 
+            int crib_indices[], int crib_positions[], int n_cribs, 
+            float *ngram_data, int ngram_size, 
+            float weight_ngram, float weight_crib, 
+            float weight_ioc, float weight_entropy);
 
 void straight_alphabet(int keyword[], int len);
 void make_keyed_alphabet(char *keyword_str, int *output_indices); // NEW
