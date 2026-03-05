@@ -7,7 +7,7 @@ void transperoffset(int plaintext[], int len, int d, int n) {
 
     if (d == 1 && n == 0) return; // Identity transformation.
 
-    int temp[MAX_CIPHER_LENGTH];
+    int indx, temp[MAX_CIPHER_LENGTH];
     
     // Periodic decimation.
     for (int i = 0; i < len; i++) {
@@ -16,7 +16,11 @@ void transperoffset(int plaintext[], int len, int d, int n) {
 
     // Rotation (Offset.)
     for (int i = 0; i < len; i++) {
-        plaintext[i] = temp[(i + n) % len];
+    	indx = (i + n) % len;
+    	if (indx < 0) {
+    		indx += len;
+    	}
+        plaintext[i] = temp[indx];
     }
     return ;
 }

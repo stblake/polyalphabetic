@@ -1240,6 +1240,10 @@ double shotgun_hill_climber(
                             best_cycleword_state, cycleword_len, cfg->variant);
                     }
                     
+                    // Apply transposition. 
+                    if (cfg->transperoffset_present) {
+                        transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
+                    }
 
                     ioc = index_of_coincidence(decrypted, cipher_len);
                     chi = chi_squared(decrypted, cipher_len);
