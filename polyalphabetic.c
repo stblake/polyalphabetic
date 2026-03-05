@@ -56,6 +56,11 @@
             auto4, autokey4, 11      : Autokey (Quagmire IV tableau)
             auto5, autobeau          : Autokey (Beaufort tableau)
             auto6, autoporta         : Autokey (Porta tableau)
+        -transperiodoffset <int> <int> : int, int
+            Applies a periodic decimation and rotation to the decrypted text.
+            The first integer specifies the offset (rotation), and the second 
+            integer specifies the period (decimation step). 
+            Aliases: -transperoffset, -transperoff
         -variant : flag
             Enable the Quagmire variant (which swaps decryption for encryption.)
         -samekey : flag
