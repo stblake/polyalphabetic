@@ -54,6 +54,8 @@
             auto2, autokey2, 9       : Autokey (Quagmire II tableau)
             auto3, autokey3, 10      : Autokey (Quagmire III tableau)
             auto4, autokey4, 11      : Autokey (Quagmire IV tableau)
+            auto5, autobeau          : Autokey (Beaufort tableau)
+            auto6, autoporta         : Autokey (Porta tableau)
         -variant : flag
             Enable the Quagmire variant (which swaps decryption for encryption.)
         -samekey : flag
