@@ -186,14 +186,16 @@ void derive_optimal_cycleword(
     int cycleword_state[], int cycleword_len);
 
 // Helpers
-bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
-	int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
+int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len);
 
-bool constrain_cycleword(int cipher_indices[], int cipher_len, 
-	int crib_indices[], int crib_positions[], int n_cribs, 
-	int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-	int cycleword_indices[], int cycleword_len,
-	bool variant, bool verbose);
+bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
+    int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
+
+bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
+    int crib_indices[], int crib_positions[], int n_cribs, 
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+    int cycleword_indices[], int cycleword_len,
+    bool variant, bool verbose);
 
 void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
                    int plaintext_keyword_state[], int ciphertext_keyword_state[], 

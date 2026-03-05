@@ -663,7 +663,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                     cfg->cipher_type != AUTOKEY_4 && 
                     cfg->cipher_type != AUTOKEY_BEAU && 
                     cfg->cipher_type != AUTOKEY_PORTA) {
-                    if (!cribs_satisfied_p(cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
+                    if (!cribs_satisfied_p(cfg, cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
                         #if CRIB_CHECK
                         continue;
                         #endif
@@ -1159,7 +1159,7 @@ double shotgun_hill_climber(
                     local_cycleword_state, cycleword_len);
 
             } else {
-                // Stochastic Mode: Perturb Keyword OR Cycleword
+                // Stochastic Mode: Perturb Keyword OR Cycleword.
                 
                 // If it's Vigenere or Porta, we MUST perturb the cycleword if not optimal.
                 if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) { 
@@ -1170,12 +1170,12 @@ double shotgun_hill_climber(
                     perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
                 }
 
-                // Crib Contradiction Check (Only for Quagmire types that can change keywords)
+                // Crib Contradiction Check (Only for Quagmire types that can change keywords.)
                 if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) { 
                     perturbate_keyword_p = false; 
                     
                     if (did_perturb_keyword) { 
-                        contradiction = constrain_cycleword(cipher_indices, cipher_len, crib_indices, 
+                        contradiction = constrain_cycleword(cfg, cipher_indices, cipher_len, crib_indices, 
                             crib_positions, n_cribs, 
                             local_plaintext_keyword_state, local_ciphertext_keyword_state, 
                             local_cycleword_state, cycleword_len, cfg->variant, cfg->verbose);
@@ -1536,13 +1536,32 @@ void derive_optimal_cycleword(
     }
 }
 
-bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[], 
+
+
+int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len) {
+    if (!cfg->transperoffset_present) {
+        return crib_pos;
+    }
+    int indx = (crib_pos + cfg->trans_offset) % cipher_len;
+    if (indx < 0) indx += cipher_len;
+    return (cfg->trans_period * indx) % cipher_len;
+}
+
+
+
+bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
     int crib_positions[], int n_cribs, int cycleword_len, bool verbose) {
 
     int i, j, k, ii, jj, total, column_length, ciphertext_column_indices[MAX_CIPHER_LENGTH], 
         ciphertext_column[MAX_CIPHER_LENGTH], crib_frequencies[ALPHABET_SIZE][ALPHABET_SIZE];
+    int mapped_crib_positions[MAX_CIPHER_LENGTH];
 
     if (n_cribs == 0) return true;
+
+    // Map crib positions to their original ciphertext positions
+    for (i = 0; i < n_cribs; i++) {
+        mapped_crib_positions[i] = map_crib_to_cipher_pos(cfg, crib_positions[i], cipher_len);
+    }
 
     for (j = 0; j < cycleword_len; j++) {
         if (verbose) {
@@ -1565,7 +1584,8 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
 
         for (i = 0; i < n_cribs; i++) {
             for (k = 0; k < column_length; k++) {
-                if (crib_positions[i] == ciphertext_column_indices[k]) {
+                // Use mapped_crib_positions here instead of crib_positions
+                if (mapped_crib_positions[i] == ciphertext_column_indices[k]) {
                     if (verbose) {
                         printf("CT = %c, PT = %c\n", ciphertext_column[k] + 'A', crib_indices[i] + 'A');
                     }
@@ -1604,14 +1624,16 @@ bool cribs_satisfied_p(int cipher_indices[], int cipher_len, int crib_indices[],
     return true;
 }
 
-bool constrain_cycleword(int cipher_indices[], int cipher_len, 
+
+
+bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
     int crib_indices[], int crib_positions[], int n_cribs, 
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
     int cycleword_indices[], int cycleword_len, 
     bool variant, bool verbose) {
 
     int i, j, k, crib_char, ciphertext_char, posn_keyword, posn_cycleword, 
-        indx, crib_cyclewords[MAX_CYCLEWORD_LEN];
+        indx, crib_cyclewords[MAX_CYCLEWORD_LEN], mapped_pos;
 
     if (n_cribs == 0) return false; 
 
@@ -1619,9 +1641,13 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
 
     for (i = 0; i < cycleword_len; i++) {
         for (j = 0; j < n_cribs; j++) {
-            if (crib_positions[j]%cycleword_len == i) {
+            
+            mapped_pos = map_crib_to_cipher_pos(cfg, crib_positions[j], cipher_len);
+            
+            // Check against the mapped ciphertext position
+            if (mapped_pos % cycleword_len == i) {
                 crib_char = crib_indices[j];
-                ciphertext_char = cipher_indices[crib_positions[j]];
+                ciphertext_char = cipher_indices[mapped_pos];
                 
                 for (k = 0; k < ALPHABET_SIZE; k++) {
                     if (ciphertext_keyword_indices[k] == ciphertext_char) {
@@ -1637,19 +1663,18 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
                 }
 
                 if (variant) {
-                    indx = (posn_cycleword - posn_keyword)%ALPHABET_SIZE;
+                    indx = (posn_cycleword - posn_keyword) % ALPHABET_SIZE;
                 } else {
-                    indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
+                    indx = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
                 }
                 
                 if (indx < 0) indx += ALPHABET_SIZE;                    
 
                 if (crib_cyclewords[i] == INACTIVE) {
-                    if (false) printf("cycleword char %c at %d\n", ciphertext_keyword_indices[indx] + 'A', i);
                     crib_cyclewords[i] = ciphertext_keyword_indices[indx];
                     cycleword_indices[i] = ciphertext_keyword_indices[indx]; 
                 } else if (crib_cyclewords[i] != ciphertext_keyword_indices[indx]) { 
-                    if (false) {
+                    if (verbose) {
                         printf("\n\nContradiction at crib %c, posn %d; rejecting keyword ", 
                             crib_indices[j] + 'A', crib_positions[j]);
                     }
@@ -1660,6 +1685,7 @@ bool constrain_cycleword(int cipher_indices[], int cipher_len,
     }
     return false;
 }
+
 
 
 void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
