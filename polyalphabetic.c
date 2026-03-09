@@ -173,7 +173,7 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->ioc_threshold = 0.047;
     cfg->backtracking_probability = 0.15;
     cfg->keyword_permutation_probability = 0.95;
-    cfg->slip_probability = 0.01;
+    cfg->slip_probability = 0.001;
 
     cfg->weight_ngram = 12.0;
     cfg->weight_crib = 36.0;
