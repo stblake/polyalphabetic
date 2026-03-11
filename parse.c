@@ -46,13 +46,13 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "porta")) return PORTA;
 
     // Autokey (Vigenere Tableau)
-    if (str_eq(arg, "auto") || str_eq(arg, "autokey") || str_eq(arg, "auto0")) return AUTOKEY_0;
+    if (str_eq(arg, "auto") || str_eq(arg, "autokey") || str_eq(arg, "auto0") || str_eq(arg, "autovig")) return AUTOKEY_0;
 
     // Autokey Variants
-    if (str_eq(arg, "auto1") || str_eq(arg, "autokey1")) return AUTOKEY_1;
-    if (str_eq(arg, "auto2") || str_eq(arg, "autokey2")) return AUTOKEY_2;
-    if (str_eq(arg, "auto3") || str_eq(arg, "autokey3")) return AUTOKEY_3;
-    if (str_eq(arg, "auto4") || str_eq(arg, "autokey4")) return AUTOKEY_4;
+    if (str_eq(arg, "auto1") || str_eq(arg, "autokey1") || str_eq(arg, "autoquag1")) return AUTOKEY_1;
+    if (str_eq(arg, "auto2") || str_eq(arg, "autokey2") || str_eq(arg, "autoquag2")) return AUTOKEY_2;
+    if (str_eq(arg, "auto3") || str_eq(arg, "autokey3") || str_eq(arg, "autoquag3")) return AUTOKEY_3;
+    if (str_eq(arg, "auto4") || str_eq(arg, "autokey4") || str_eq(arg, "autoquag4")) return AUTOKEY_4;
 
     // Autokey with Beaufort and Porta tableau
 	if (str_eq(arg, "auto5") || str_eq(arg, "abeau") || str_eq(arg, "autobeau") || str_eq(arg, "autobeaufort")) return AUTOKEY_BEAU;
