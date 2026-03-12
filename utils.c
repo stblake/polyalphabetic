@@ -4,6 +4,7 @@
 
 #include "polyalphabetic.h"
 
+uint32_t rng_state = 123456789;
 
 int gcd(int a, int b) {
     while (b) { a %= b; int t = a; a = b; b = t; }
@@ -142,7 +143,9 @@ void shuffle(int *array, size_t n) {
     if (n > 1) {
         size_t i;
         for (i = 0; i < n - 1; i++) {
-          size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          // size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          size_t range = n - i;
+          size_t j = i + rand_bounded(range);
           int t = array[j];
           array[j] = array[i];
           array[i] = t;
@@ -167,16 +170,3 @@ int int_pow(int base, int exp) {
     }
     return result;
 }
-
-
-
-int rand_int(int min, int max) {
-   return min + rand() % (max - min);
-}
-
-
-
-double frand() {
-  return ((double) rand())/((double) RAND_MAX);
-}
-

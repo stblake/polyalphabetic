@@ -9,6 +9,8 @@
 #include <math.h>
 #include <time.h>
 #include <strings.h>
+#include <unistd.h>
+#include <stdint.h>
 
 #define KRYPTOS 0
 #define CRIB_CHECK 0
@@ -229,9 +231,7 @@ void perturbate_keyword(int state[], int len, int keyword_len);
 void random_keyword(int keyword[], int len, int keyword_len);
 void random_cycleword(int cycleword[], int max, int keyword_len);
 void perturbate_cycleword(int state[], int max, int len);
-int rand_int(int min, int max);
 int rand_int_frequency_weighted(int state[], int min_index, int max_index);
-double frand();
 void shuffle(int *array, size_t n);
 
 // Stats
@@ -243,6 +243,9 @@ double vec_mean(double vec[], int len);
 double vec_stddev(double vec[], int len);
 
 // Utils
+static inline uint32_t fast_rand(void);
+static inline void seed_fast_rand(uint32_t seed);
+static inline uint32_t fast_rand_bounded(uint32_t range);
 int gcd(int a, int b);
 int parse_cipher_type(const char *arg);
 int unique_len(char *str);
@@ -254,5 +257,38 @@ void tally(int plaintext[], int len, int frequencies[], int n_frequencies);
 bool file_exists(const char * filename);
 void vec_copy(int src[], int dest[], int len);
 int int_pow(int base, int exp);
+
+extern uint32_t rng_state;
+
+// Fast inline Xorshift32 generator
+static inline uint32_t fast_rand(void) {
+    uint32_t x = rng_state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    return rng_state = x;
+}
+
+// Function to seed the PRNG
+static inline void seed_rand(uint32_t seed) {
+    if (seed == 0) seed = 1; // State cannot be 0
+    rng_state = seed;
+}
+
+// Lemire's method to map the 32-bit random integer to a specific range [0, range)
+static inline uint32_t rand_bounded(uint32_t range) {
+    return (uint32_t)(((uint64_t)fast_rand() * range) >> 32);
+}
+
+static inline int rand_int(int min, int max) {
+    if (min >= max) return min; 
+    uint32_t range = (uint32_t)(max - min);
+    return min + (int)rand_bounded(range);
+}
+
+static inline double frand(void) {
+    // Divided by 2^32 to ensure the result is strictly < 1.0
+    return (double)fast_rand() / 4294967296.0; 
+}
 
 #endif

@@ -200,6 +200,9 @@ int main(int argc, char **argv) {
     printf("\n\nPOLYALPHABETIC Cipher Solver\n\n");
     printf("Written by Sam Blake, started 14 July 2023.\n\n");
 
+    // Seed the PRNG with the current Unix time (seconds since Epoch)
+    seed_rand((uint32_t)time(NULL));
+
     init_config(&cfg);
     
     // Initialize shared data pointers.
@@ -1881,15 +1884,28 @@ void random_cycleword(int cycleword[], int max, int keyword_len) {
 }
 
 int rand_int_frequency_weighted(int state[], int min_index, int max_index) {
-    double total, rnd, cumsum;
-    total = 0.;
-    for (int i = min_index; i < max_index; i++) total += english_monograms[state[i]];
-    rnd = frand();
-    cumsum = 0.;
+    double total = 0.0;
+    double cumsum = 0.0;
+
     for (int i = min_index; i < max_index; i++) {
-        cumsum += english_monograms[state[i]]/total;
-        if (cumsum > rnd) return i;
+        total += english_monograms[state[i]];
     }
+
+    if (total == 0.0) {
+        return rand_int(min_index, max_index - 1); 
+    }
+
+    // Multiply the random float [0.0, 1.0) by the total weight.
+    double target = frand() * total; 
+
+    // Accumulate raw weights.
+    for (int i = min_index; i < max_index; i++) {
+        cumsum += english_monograms[state[i]];
+        if (cumsum >= target) {
+            return i;
+        }
+    }
+
     return max_index - 1;
 }
 
