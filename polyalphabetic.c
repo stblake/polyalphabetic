@@ -61,6 +61,11 @@
             The first integer specifies the offset (rotation), and the second 
             integer specifies the period (decimation step). 
             Aliases: -transperoffset, -transperoff
+        -transmatrix <int> <int> <str> : int, int, str
+            Applies a double matrix transposition (like Kryptos K3).
+            The first integer is the initial grid width (w1), the second is 
+            the subsequent grid width (w2). The string specifies the rotation 
+            direction: 'cw' (clockwise) or 'ccw' (anti-clockwise).
         -variant : flag
             Enable the Quagmire variant (which swaps decryption for encryption.)
         -samekey : flag
@@ -186,6 +191,11 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->transperoffset_present = false;
     cfg->trans_offset = 0;
     cfg->trans_period = 1;
+
+    cfg->transmatrix_present = false;
+    cfg->trans_w1 = 0;
+    cfg->trans_w2 = 0;
+    cfg->trans_clockwise = 1; // Default to clockwise
 }
 
 
@@ -344,6 +354,22 @@ int main(int argc, char **argv) {
             cfg.trans_period = atoi(argv[++i]);
             cfg.transperoffset_present = true;
             printf("-transperiodoffset %d %d\n", cfg.trans_offset, cfg.trans_period);
+        } else if (strcmp(argv[i], "-transmatrix") == 0) {
+            cfg.transmatrix_present = true;
+            cfg.trans_w1 = atoi(argv[++i]);
+            cfg.trans_w2 = atoi(argv[++i]);
+            
+            char *dir_arg = argv[++i];
+            // Flexible parsing for clockwise vs anti-clockwise
+            if (strcasecmp(dir_arg, "cw") == 0 || strcasecmp(dir_arg, "clockwise") == 0 || strcmp(dir_arg, "1") == 0) {
+                cfg.trans_clockwise = 1;
+            } else if (strcasecmp(dir_arg, "ccw") == 0 || strcasecmp(dir_arg, "anticlockwise") == 0 || strcmp(dir_arg, "0") == 0) {
+                cfg.trans_clockwise = 0;
+            } else {
+                printf("\n\nERROR: Invalid direction '%s' for -transmatrix. Use 'cw' or 'ccw'.\n\n", dir_arg);
+                return 0;
+            }
+            printf("-transmatrix %d %d %s\n", cfg.trans_w1, cfg.trans_w2, cfg.trans_clockwise ? "cw" : "ccw");
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -744,8 +770,16 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         transperoffset(best_decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
     }
 
+    if (cfg->transmatrix_present) {
+        transmatrix(best_decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
+    }
+
     if (cfg->transperoffset_present) {
         printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
+    }
+
+    if (cfg->transmatrix_present) {
+        printf("\ntransmatrix: w1 = %d, w2 = %d, direction = %s\n", cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise ? "cw" : "ccw");
     }
 
     char plaintext_string[MAX_CIPHER_LENGTH];
@@ -781,6 +815,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     if (cfg->transperoffset_present) {
         if (cfg->dictionary_present) {
             printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        } else {
+            printf(">>> %.2f, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }
+    } else if (cfg->transmatrix_present) {
+        if (cfg->dictionary_present) {
+            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
             printf(">>> %.2f, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
@@ -1255,6 +1295,10 @@ double shotgun_hill_climber(
                         transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
                     }
 
+                    if (cfg->transmatrix_present) {
+                        transmatrix(decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
+                    }
+
                     ioc = index_of_coincidence(decrypted, cipher_len);
                     chi = chi_squared(decrypted, cipher_len);
                     entropy_score = entropy(decrypted, cipher_len);
@@ -1331,6 +1375,10 @@ double shotgun_hill_climber(
 
     if (cfg->transperoffset_present) {
         transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
+    }
+
+    if (cfg->transmatrix_present) {
+        transmatrix(decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
     }
 
     return best_score;
@@ -1547,14 +1595,56 @@ void derive_optimal_cycleword(
 }
 
 
+int get_matrix_rotate_old_idx(int target_idx, int len, int width, int clockwise) {
+    if (width <= 1 || width >= len) return target_idx;
+    
+    int R = (len + width - 1) / width;
+    int W = width;
+    int current_idx = 0;
+
+    if (clockwise) {
+        // Trace left-to-right, bottom-to-top
+        for (int c = 0; c < W; c++) {
+            for (int r = R - 1; r >= 0; r--) {
+                int old_idx = r * W + c;
+                if (old_idx < len) {
+                    if (current_idx == target_idx) return old_idx;
+                    current_idx++;
+                }
+            }
+        }
+    } else {
+        // Trace right-to-left, top-to-bottom
+        for (int c = W - 1; c >= 0; c--) {
+            for (int r = 0; r < R; r++) {
+                int old_idx = r * W + c;
+                if (old_idx < len) {
+                    if (current_idx == target_idx) return old_idx;
+                    current_idx++;
+                }
+            }
+        }
+    }
+    return target_idx;
+}
 
 int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len) {
-    if (!cfg->transperoffset_present) {
-        return crib_pos;
+    int pos = crib_pos;
+
+    // Un-map transmatrix (in reverse order of decryption: w2, then w1)
+    if (cfg->transmatrix_present) {
+        pos = get_matrix_rotate_old_idx(pos, cipher_len, cfg->trans_w2, cfg->trans_clockwise);
+        pos = get_matrix_rotate_old_idx(pos, cipher_len, cfg->trans_w1, cfg->trans_clockwise);
     }
-    int indx = (crib_pos + cfg->trans_offset) % cipher_len;
-    if (indx < 0) indx += cipher_len;
-    return (cfg->trans_period * indx) % cipher_len;
+
+    // Un-map transperoffset.
+    if (cfg->transperoffset_present) {
+        pos = (pos + cfg->trans_offset) % cipher_len;
+        if (pos < 0) pos += cipher_len;
+        pos = (cfg->trans_period * pos) % cipher_len;
+    }
+
+    return pos;
 }
 
 
@@ -1729,6 +1819,10 @@ void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_l
     // Apply transposition. 
     if (cfg->transperoffset_present) {
         transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
+    }
+
+    if (cfg->transmatrix_present) {
+        transmatrix(decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
     }
 }
 

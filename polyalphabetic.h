@@ -110,6 +110,11 @@ typedef struct {
     int trans_offset;
     int trans_period;
 
+    bool transmatrix_present;
+    int trans_w1;
+    int trans_w2;
+    int trans_clockwise; // 1 for clockwise, 0 for anti-clockwise
+
 } PolyalphabeticConfig;
 
 typedef struct {
@@ -170,6 +175,8 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
 
 // Transposition
 void transperoffset(int plaintext[], int len, int d, int n);
+void matrix_rotate(int text[], int len, int width, int clockwise);
+void transmatrix(int text[], int len, int w1, int w2, int clockwise);
 
 // Hill Climber
 double shotgun_hill_climber(
@@ -189,6 +196,7 @@ void derive_optimal_cycleword(
 
 // Helpers
 int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len);
+int get_matrix_rotate_old_idx(int target_idx, int len, int width, int clockwise);
 
 bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
     int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
