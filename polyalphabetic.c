@@ -535,9 +535,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     int n_cycleword_lengths, cycleword_lengths[MAX_CIPHER_LENGTH];
     int best_cycleword_length = 0;
 
-    int best_plaintext_keyword_length = 0;
-    int best_ciphertext_keyword_length = 0;
-
     // Result buffers
     int decrypted[MAX_CIPHER_LENGTH];
     int best_decrypted[MAX_CIPHER_LENGTH];
@@ -719,8 +716,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                 if (score > best_score) {
                     best_score = score;
                     best_cycleword_length = cycleword_lengths[i];
-                    best_plaintext_keyword_length = j;
-                    best_ciphertext_keyword_length = k;
                     vec_copy(decrypted, best_decrypted, cipher_len);
                     vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
                     vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
@@ -809,7 +804,20 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     printf("\n");
     print_text(best_decrypted, cipher_len);
     printf("\n");
-    printf("%s\n\n", cribtext_str);
+    printf("%s\n", cribtext_str);
+
+    if (PARTIAL_CRIB_MATCH) {
+        for (int i = 0; i < cipher_len; i++) {
+            if (crib_indices[i] == -1) {
+                printf("_"); // No crib defined for this position.
+            } else if (abs(best_decrypted[i] - crib_indices[i]) < 10) {
+                printf("%d", abs(best_decrypted[i] - crib_indices[i]));
+            } else {
+                printf("*"); 
+            }
+        }
+    }
+    printf("\n\n");
 
     // One-liner summary
     if (cfg->transperoffset_present) {
@@ -1774,10 +1782,11 @@ bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int ci
                     crib_cyclewords[i] = ciphertext_keyword_indices[indx];
                     cycleword_indices[i] = ciphertext_keyword_indices[indx]; 
                 } else if (crib_cyclewords[i] != ciphertext_keyword_indices[indx]) { 
+                    /*
                     if (verbose) {
                         printf("\n\nContradiction at crib %c, posn %d; rejecting keyword ", 
                             crib_indices[j] + 'A', crib_positions[j]);
-                    }
+                    } */
                     return true; 
                 }
             }
@@ -1834,10 +1843,15 @@ double state_score(int decrypted[], int cipher_len,
             float weight_ngram, float weight_crib, 
             float weight_ioc, float weight_entropy) {
 
-    double score, decrypted_ngram_score, decrypted_crib_score;
+    double score, decrypted_ngram_score = 0., decrypted_crib_score = 0.;
 
-    decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
-    decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
+    if (weight_crib > 1.e-4) {
+        decrypted_crib_score = crib_score(decrypted, cipher_len, crib_indices, crib_positions, n_cribs);
+    }
+
+    if (weight_ngram > 1.e-4) {
+        decrypted_ngram_score = ngram_score(decrypted, cipher_len, ngram_data, ngram_size);
+    }
 
     if (n_cribs > 0) {
         score = weight_ngram * decrypted_ngram_score + weight_crib * decrypted_crib_score;
@@ -1853,6 +1867,19 @@ double state_score(int decrypted[], int cipher_len,
 
 double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs) {
     if (n_cribs == 0) return 0.;
+#if PARTIAL_CRIB_MATCH
+    int diff;
+    double score = 0.;
+    for (int i = 0; i < n_cribs; i++) {
+        diff = abs(text[crib_positions[i]] - crib_indices[i]);
+        if (diff == 0) {
+            score += 1.;
+        } else {
+            score += 1./(1. + diff * diff);
+        }
+    }
+    return score / ((double) n_cribs);
+#else
     int n_matches = 0;
     for (int i = 0; i < n_cribs; i++) {
         if (text[crib_positions[i]] == crib_indices[i]) {
@@ -1860,6 +1887,7 @@ double crib_score(int text[], int len, int crib_indices[], int crib_positions[],
         }
     }
     return ((double) n_matches)/((double) n_cribs);
+#endif
 }
 
 double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size) {

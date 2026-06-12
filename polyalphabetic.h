@@ -14,6 +14,7 @@
 
 #define KRYPTOS 0
 #define CRIB_CHECK 0
+#define PARTIAL_CRIB_MATCH 1
 
 #define VIGENERE 0
 #define QUAGMIRE_1 1
