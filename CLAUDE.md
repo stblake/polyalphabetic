@@ -120,13 +120,18 @@ the periodic key (sequence of shifts).
   `-transmatrix <w1> <w2> <cw|ccw>`. Crib positions are un-mapped back through it via
   `map_crib_to_cipher_pos` so cribs still line up.
 
-## Known issues (unfixed — verify before trusting output)
+## Fixed issues (end-to-end tests in `ciphers/tests/bugfixes/`)
 
-- The trailing partial-crib match line (the `_`/digit/`*` row) indexes the packed
-  `crib_indices` array positionally and is **garbage**; real crib scoring is fine.
-- The `-transmatrix` `>>>` summary (no-dictionary branch) prints period/offset instead
-  of `w1`/`w2`.
-- `load_ngrams` uses `while(!feof(fp))` (last line read twice; harmless here).
+- The trailing partial-crib match line (the `_`/digit/`*` row) used to index the
+  packed `crib_indices` array positionally (testing an uninitialized `-1`), printing
+  garbage at every position. Now indexed by cipher position via `cribtext_str`.
+  Test: `bug1_partial_crib.sh`.
+- The `-transmatrix` `>>>` summary (no-dictionary branch) printed period/offset
+  instead of `w1`/`w2`/`clockwise`. Fixed to match the dictionary branch.
+  Test: `bug2_transmatrix_summary.sh`.
+- `load_ngrams` looped on `while(!feof(fp))`, re-reading the final line and
+  mis-assigning a stale `freq` on any trailing/malformed line. Now loops on
+  `fscanf(...) == 2`. Test: `bug3_ngram_load.sh`.
 
 ## Working agreements
 
