@@ -806,14 +806,20 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     printf("\n");
     printf("%s\n", cribtext_str);
 
-    if (PARTIAL_CRIB_MATCH) {
+    if (PARTIAL_CRIB_MATCH && n_cribs > 0) {
+        // Index the crib by cipher position via cribtext_str ('_' = no crib),
+        // not the positionally-packed crib_indices array. 0 = exact match,
+        // a small digit = near miss, '*' = far (>= 10) from the crib char.
         for (int i = 0; i < cipher_len; i++) {
-            if (crib_indices[i] == -1) {
+            if (cribtext_str[i] == '_') {
                 printf("_"); // No crib defined for this position.
-            } else if (abs(best_decrypted[i] - crib_indices[i]) < 10) {
-                printf("%d", abs(best_decrypted[i] - crib_indices[i]));
             } else {
-                printf("*"); 
+                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                if (diff < 10) {
+                    printf("%d", diff);
+                } else {
+                    printf("*");
+                }
             }
         }
     }
@@ -830,7 +836,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         if (cfg->dictionary_present) {
             printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
     } else {
         if (cfg->dictionary_present) {
@@ -2043,8 +2049,10 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
     for (i = 0; i < n_ngrams; i++) ngram_data[i] = 0.;
 
     fp = fopen(ngram_file, "r");
-    while(!feof (fp)) {
-        fscanf(fp, "%s\t%d", ngram, &freq);
+    // Loop on the parse succeeding (both fields read), not on feof: !feof is
+    // still false after the last good line, so feof-looping re-reads the final
+    // line and would mis-assign on any trailing/malformed line.
+    while (fscanf(fp, "%s\t%d", ngram, &freq) == 2) {
         indx = ngram_index_str(ngram, ngram_size);
         ngram_data[indx] = freq;
     }
