@@ -30,10 +30,13 @@
 #define AUTOKEY_4  11
 #define AUTOKEY_BEAU 12
 #define AUTOKEY_PORTA 13
+#define TRANSMATRIX    14
+#define TRANSPEROFFSET 15
+#define TRANSPOSITION  16
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
-#define MAX_FILENAME_LEN 100
+#define MAX_FILENAME_LEN 4096   // must hold absolute paths; main() strcpy's CLI args in unbounded
 #define MAX_KEYWORD_LEN 26
 #define MAX_CYCLEWORD_LEN 300
 #define MAX_NGRAM_SIZE 8
@@ -86,6 +89,7 @@ typedef struct {
     float weight_crib;
     float weight_ioc;
     float weight_entropy;
+    float weight_structure; // general transposition: reward regular (columnar) key steps
 
     // Files
     char ciphertext_file[MAX_FILENAME_LEN];
@@ -178,6 +182,29 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
 void transperoffset(int plaintext[], int len, int d, int n);
 void matrix_rotate(int text[], int len, int width, int clockwise);
 void transmatrix(int text[], int len, int w1, int w2, int clockwise);
+
+// Transposition solvers (optimization over the transform parameters)
+void solve_transposition(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[],
+    int *best_p1, int *best_p2, int *best_p3);
+
+// General transposition solver (AZDecrypt-style permutation-key hill climber)
+void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[], int best_key[]);
 
 // Hill Climber
 double shotgun_hill_climber(

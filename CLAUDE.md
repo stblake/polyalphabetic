@@ -71,9 +71,27 @@ ciphertext from the current working directory.
 Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-ngramsize`, and `-ngramfile`. Everything else has defaults (see `init_config`).
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
-`porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta` (full
-list in `parse.c`; codes in `polyalphabetic.h`). Output is a human-readable block
-followed by a `>>> ...` one-line CSV summary that batch runs grep/sort.
+`porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
+`transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16` (full list in `parse.c`;
+codes in `polyalphabetic.h`). Output is a human-readable block followed by a `>>> ...`
+one-line CSV summary that batch runs grep/sort.
+
+Three **pure transposition** cipher types bypass the keyword/cycleword/period machinery
+and are solved by optimization instead (all isolated from the polyalphabetic pipeline by
+an early branch in `solve_cipher`):
+- `transmatrix`/`transperoffset` → `solve_transposition()` +
+  `shotgun_transposition_climber()`: optimize the transform's own small parameter vector
+  (`transmatrix` → `w1,w2,direction`; `transperoffset` → `period d, offset n`) with the
+  shotgun/slip hill climber and n-gram scoring.
+- `transposition` → `solve_general_transposition()` + `shotgun_permutation_climber()`: an
+  AZDecrypt-style solver that hill-climbs the **full permutation key** (`decrypted[i] =
+  cipher[key[i]]`). Restarts are seeded from columnar layouts; a periodic-redundancy
+  structure term (`key_structure_score`, weight `-weightstructure`, default 4) guards
+  against n-gram-gaming; simulated-annealing acceptance; and a period-targeted column-swap
+  move reorders whole columns. Stochastic — run more restarts/iterations for hard ciphers.
+
+These `-type` values are distinct from the `-transmatrix`/`-transperoffset` *post-decrypt
+stage* flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
 
 ## How the solver works (mental model)
 
@@ -132,6 +150,14 @@ the periodic key (sequence of shifts).
 - `load_ngrams` looped on `while(!feof(fp))`, re-reading the final line and
   mis-assigning a stale `freq` on any trailing/malformed line. Now loops on
   `fscanf(...) == 2`. Test: `bug3_ngram_load.sh`.
+- A cipher/ngram/crib path longer than `MAX_FILENAME_LEN` overflowed the fixed
+  `char[]` in `PolyalphabeticConfig` (`main()` `strcpy`s the CLI arg in unbounded),
+  corrupting the struct and crashing with SIGILL — any absolute path past the old
+  100-byte limit triggered it. `MAX_FILENAME_LEN` raised to 4096.
+  Test: `bug4_long_path.sh`.
+- `int_pow` did a final `base *= base` after the result was already accumulated;
+  `int_pow(26, ngram_size)` overflowed signed `int` (e.g. `26^4` squared). The UB
+  was benign at `-O0` but `-O3` could exploit it. Now skips the unused final squaring.
 
 ## Working agreements
 

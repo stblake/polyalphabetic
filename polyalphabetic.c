@@ -56,6 +56,12 @@
             auto4, autokey4, 11      : Autokey (Quagmire IV tableau)
             auto5, autobeau          : Autokey (Beaufort tableau)
             auto6, autoporta         : Autokey (Porta tableau)
+            transmatrix, tmatrix, 14 : Transposition - double grid rotation (K3-style),
+                                       solved by optimizing (w1, w2, direction).
+            transperoffset, tpo, 15  : Transposition - periodic decimation + rotation,
+                                       solved by optimizing (period d, offset n).
+            transposition, trans, 16 : General transposition (columnar / route) - hill
+                                       climbs the full permutation key (AZDecrypt-style).
         -transperiodoffset <int> <int> : int, int
             Applies a periodic decimation and rotation to the decrypted text.
             The first integer specifies the offset (rotation), and the second 
@@ -133,6 +139,9 @@
             Weight of the Index of Coincidence component.
         -weightentropy <float> : float
             Weight of the entropy component.
+        -weightstructure <float> : float
+            (General transposition only.) Weight of the columnar-structure reward
+            that biases the permutation key toward regular (periodic) layouts.
 
     Notes
     -----
@@ -184,6 +193,7 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->weight_crib = 36.0;
     cfg->weight_ioc = 0.0;
     cfg->weight_entropy = 0.0;
+    cfg->weight_structure = 4.0;
 
     cfg->optimal_cycleword = true;
     cfg->same_key_cycle = false; 
@@ -330,9 +340,12 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-weightioc") == 0) { 
             cfg.weight_ioc = atof(argv[++i]);
             printf("-weightioc %.4f\n", cfg.weight_ioc);
-        } else if (strcmp(argv[i], "-weightentropy") == 0) { 
+        } else if (strcmp(argv[i], "-weightentropy") == 0) {
             cfg.weight_entropy = atof(argv[++i]);
             printf("-weightentropy %.4f\n", cfg.weight_entropy);
+        } else if (strcmp(argv[i], "-weightstructure") == 0) {
+            cfg.weight_structure = atof(argv[++i]);
+            printf("-weightstructure %.4f\n", cfg.weight_structure);
         } else if (strcmp(argv[i], "-variant") == 0) { 
             cfg.variant = true;
             printf("-variant\n");
@@ -406,6 +419,12 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Autokey cipher (Beaufort tableau.)\n\n");
     } else if (cfg.cipher_type == AUTOKEY_PORTA) {
         printf("\nAttacking a Autokey cipher (Porta tableau.)\n\n");
+    } else if (cfg.cipher_type == TRANSMATRIX) {
+        printf("\nAttacking a transmatrix (double grid rotation) transposition cipher.\n\n");
+    } else if (cfg.cipher_type == TRANSPEROFFSET) {
+        printf("\nAttacking a transperoffset (periodic decimation + rotation) transposition cipher.\n\n");
+    } else if (cfg.cipher_type == TRANSPOSITION) {
+        printf("\nAttacking a general transposition cipher (permutation-key hill climber).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -566,8 +585,23 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
             }
         }
     }
-    
-    
+
+
+    // --- TRANSPOSITION CIPHERS ---
+    // These are pure transpositions solved by optimization over the transform
+    // parameters, not via the keyword/cycleword/period machinery below.
+    if (cfg->cipher_type == TRANSMATRIX || cfg->cipher_type == TRANSPEROFFSET) {
+        solve_transposition(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == TRANSPOSITION) {
+        solve_general_transposition(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+
+
     // --- CYCLEWORD / PRIMER LENGTH SETUP ---
 
     if (cfg->cycleword_len_present) {
@@ -862,6 +896,506 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     print_text(best_decrypted, cipher_len);
     printf("\n");
 }
+
+
+
+// Transposition cipher solvers
+//
+// Pure transposition ciphers (transmatrix, transperoffset) are cracked by
+// optimizing the small parameter vector of the transform itself, rather than
+// enumerating every configuration. The search reuses the same shotgun /
+// slippery hill-climbing engine and n-gram scoring as the polyalphabetic path.
+//   - TRANSMATRIX    : params (p1,p2,p3) = (w1, w2, clockwise)
+//   - TRANSPEROFFSET : params (p1,p2)    = (period d, offset n)
+
+// Apply a candidate transform to a fresh copy of the ciphertext.
+static void apply_transposition(PolyalphabeticConfig *cfg, int cipher_indices[],
+    int cipher_len, int p1, int p2, int p3, int decrypted[]) {
+
+    vec_copy(cipher_indices, decrypted, cipher_len);
+    if (cfg->cipher_type == TRANSMATRIX) {
+        transmatrix(decrypted, cipher_len, p1, p2, p3); // p1=w1, p2=w2, p3=clockwise
+    } else { // TRANSPEROFFSET
+        transperoffset(decrypted, cipher_len, p1, p2);  // p1=period(d), p2=offset(n)
+    }
+}
+
+// Pick a random valid parameter triple for the current transposition type.
+static void random_transposition_params(PolyalphabeticConfig *cfg, int cipher_len,
+    int *p1, int *p2, int *p3) {
+
+    if (cfg->cipher_type == TRANSMATRIX) {
+        // Valid grid widths are [2, len-1]; matrix_rotate is identity outside.
+        *p1 = rand_int(2, cipher_len);
+        *p2 = rand_int(2, cipher_len);
+        *p3 = rand_int(0, 2);            // clockwise in {0,1}
+    } else { // TRANSPEROFFSET
+        // The decimation step d must be coprime to len for a bijection.
+        do {
+            *p1 = rand_int(1, cipher_len);
+        } while (gcd(*p1, cipher_len) != 1);
+        *p2 = rand_int(0, cipher_len);   // offset n in [0, len-1]
+        *p3 = 0;                         // unused
+    }
+}
+
+// Perturb a single parameter (one local neighbour move).
+static void perturbate_transposition_params(PolyalphabeticConfig *cfg, int cipher_len,
+    int *p1, int *p2, int *p3) {
+
+    if (cfg->cipher_type == TRANSMATRIX) {
+        int which = rand_int(0, 3);
+        if (which == 2) {
+            *p3 = 1 - *p3;               // flip direction
+        } else {
+            int *w = (which == 0) ? p1 : p2;
+            if (cipher_len > 4 && frand() < 0.5) {
+                // Local +/-1 step, clamped to [2, len-1].
+                *w += (frand() < 0.5) ? -1 : 1;
+                if (*w < 2) *w = 2;
+                if (*w > cipher_len - 1) *w = cipher_len - 1;
+            } else {
+                *w = rand_int(2, cipher_len);
+            }
+        }
+    } else { // TRANSPEROFFSET
+        if (frand() < 0.5) {
+            // Local rotation step: aligns the wrap boundary / any crib.
+            *p2 += (frand() < 0.5) ? -1 : 1;
+            *p2 = ((*p2 % cipher_len) + cipher_len) % cipher_len;
+        } else {
+            // d is non-smooth, so re-randomise among coprime values.
+            do {
+                *p1 = rand_int(1, cipher_len);
+            } while (gcd(*p1, cipher_len) != 1);
+        }
+    }
+}
+
+double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[],
+    int *best_p1, int *best_p2, int *best_p3) {
+
+    int decrypted[MAX_CIPHER_LENGTH];
+    int cur_p1, cur_p2, cur_p3, loc_p1, loc_p2, loc_p3;
+    double best_score = 0., current_score = 0., local_score;
+    bool have_best = false;
+
+    for (int n = 0; n < cfg->n_restarts; n++) {
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            // Backtrack to the best known state.
+            cur_p1 = *best_p1; cur_p2 = *best_p2; cur_p3 = *best_p3;
+            current_score = best_score;
+        } else {
+            random_transposition_params(cfg, cipher_len, &cur_p1, &cur_p2, &cur_p3);
+            apply_transposition(cfg, cipher_indices, cipher_len, cur_p1, cur_p2, cur_p3, decrypted);
+            current_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+        }
+
+        for (int i = 0; i < cfg->n_hill_climbs; i++) {
+            loc_p1 = cur_p1; loc_p2 = cur_p2; loc_p3 = cur_p3;
+            perturbate_transposition_params(cfg, cipher_len, &loc_p1, &loc_p2, &loc_p3);
+
+            apply_transposition(cfg, cipher_indices, cipher_len, loc_p1, loc_p2, loc_p3, decrypted);
+            local_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+
+            // Accept if better, or slip to a worse state to escape local maxima.
+            if (local_score > current_score || frand() < cfg->slip_probability) {
+                cur_p1 = loc_p1; cur_p2 = loc_p2; cur_p3 = loc_p3;
+                current_score = local_score;
+            }
+
+            if (!have_best || current_score > best_score) {
+                best_score = current_score;
+                *best_p1 = cur_p1; *best_p2 = cur_p2; *best_p3 = cur_p3;
+                have_best = true;
+            }
+        }
+    }
+
+    // Recompute the best decrypted text for the caller.
+    apply_transposition(cfg, cipher_indices, cipher_len, *best_p1, *best_p2, *best_p3, best_decrypted);
+    return best_score;
+}
+
+void solve_transposition(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    int best_decrypted[MAX_CIPHER_LENGTH];
+    int best_p1 = 0, best_p2 = 0, best_p3 = 0;
+    double best_score;
+    int n_words_found = 0;
+
+    if (cipher_len < 3) {
+        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
+        return ;
+    }
+
+    best_score = shotgun_transposition_climber(cfg, cipher_indices, cipher_len,
+        crib_indices, crib_positions, n_cribs,
+        shared->ngram_data, best_decrypted, &best_p1, &best_p2, &best_p3);
+
+    // Parameter report line.
+    if (cfg->cipher_type == TRANSMATRIX) {
+        printf("\ntransmatrix: w1 = %d, w2 = %d, direction = %s\n",
+            best_p1, best_p2, best_p3 ? "cw" : "ccw");
+    } else {
+        printf("\ntransperiodoffset: period = %d, offset = %d\n", best_p1, best_p2);
+    }
+
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    plaintext_string[cipher_len] = '\0';
+
+    if (cfg->dictionary_present && shared->dict != NULL) {
+        n_words_found = find_dictionary_words(plaintext_string, shared->dict,
+            shared->n_dict_words, shared->max_dict_word_len);
+    }
+
+    // Results output.
+    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+
+    print_text(cipher_indices, cipher_len);
+    printf("\n");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+    printf("%s\n", cribtext_str);
+
+    if (PARTIAL_CRIB_MATCH && n_cribs > 0) {
+        // Indexed by cipher position via cribtext_str (same scheme as solve_cipher).
+        for (int i = 0; i < cipher_len; i++) {
+            if (cribtext_str[i] == '_') {
+                printf("_");
+            } else {
+                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                if (diff < 10) printf("%d", diff); else printf("*");
+            }
+        }
+    }
+    printf("\n\n");
+
+    // One-liner summary. Field order matches the existing transmatrix /
+    // transperoffset summaries, minus the keyword/cycleword fields (a pure
+    // transposition has none).
+    if (cfg->cipher_type == TRANSMATRIX) {
+        if (cfg->dictionary_present) {
+            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", best_score, n_words_found,
+                cfg->cipher_type, best_p1, best_p2, best_p3,
+                cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        } else {
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score,
+                cfg->cipher_type, best_p1, best_p2, best_p3,
+                cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }
+    } else {
+        if (cfg->dictionary_present) {
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, n_words_found,
+                cfg->cipher_type, best_p1, best_p2,
+                cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        } else {
+            printf(">>> %.2f, %d, %d, %d, %s, ", best_score,
+                cfg->cipher_type, best_p1, best_p2,
+                cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }
+    }
+
+    print_text(cipher_indices, cipher_len);
+    printf(", ");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+}
+
+
+
+// General transposition solver (AZDecrypt-style)
+//
+// Solves an arbitrary columnar / route transposition by hill-climbing the full
+// permutation key directly, rather than the fixed parameters of a specific
+// transform family. The key is an array key[i] = source position, so the
+// candidate plaintext is decrypted[i] = ciphertext[key[i]]. Neighbour moves
+// (swap, segment reverse, block move) all preserve the permutation; scoring,
+// slip, backtracking and restarts reuse the program's standard machinery.
+
+// Apply a permutation key: decrypted[i] = cipher[key[i]].
+static void apply_permutation(int cipher_indices[], int key[], int len, int decrypted[]) {
+    for (int i = 0; i < len; i++) decrypted[i] = cipher_indices[key[i]];
+}
+
+// Structural regularity of a permutation key, in [0,1]. Columnar / route
+// transpositions are periodic: for the period p (the column count), plaintext
+// positions i and i+p sit in the same column one row apart, so their ciphertext
+// positions differ by a constant stride. We scan candidate periods and, for
+// each, histogram the strides key[i+p]-key[i]; the best (most concentrated)
+// period gives the score = fraction of pairs in the single modal stride.
+// English-looking but structurally random permutations score low; a true
+// (keyed) columnar key scores high at its period. This is the n-gram-gaming
+// guard that AZDecrypt gets from its periodic-redundancy rule.
+static double key_structure_score(int key[], int len, int *out_period) {
+    static int hist[2 * MAX_CIPHER_LENGTH];
+    if (out_period) *out_period = 0;
+    if (len < 2) return 0.0;
+
+    int max_period = len / 3;
+    if (max_period > 24) max_period = 24;   // bound cost; covers realistic column counts
+    if (max_period < 1) max_period = 1;
+
+    double best_frac = 0.0;
+    for (int p = 1; p <= max_period; p++) {
+        int npairs = len - p;
+        if (npairs < 1) break;
+        int modal = 0;
+        for (int i = 0; i + p < len; i++) {
+            int b = key[i + p] - key[i] + len;   // offset into [0, 2*len)
+            int c = ++hist[b];
+            if (c > modal) modal = c;
+        }
+        // Re-zero only the bins we touched (cheaper than a full memset per period).
+        for (int i = 0; i + p < len; i++) hist[key[i + p] - key[i] + len] = 0;
+
+        double frac = (double) modal / (double) npairs;
+        if (frac > best_frac) { best_frac = frac; if (out_period) *out_period = p; }
+    }
+    return best_frac;
+}
+
+// Perturb a permutation key with one of several permutation-preserving moves.
+// target_period is the column count currently detected in the key (0 if none);
+// the column-swap move uses it so it reorders the actual columns rather than
+// guessing a period at random.
+static void perturbate_permutation(int key[], int len, int target_period) {
+    int max_p = min(len / 2, 40);
+
+    // Column swap: swap the two sets of key entries {.., r*p+c1, ..} and
+    // {.., r*p+c2, ..}. With p = the detected column count this reorders whole
+    // columns in one step without disturbing the within-column structure — the
+    // move that lets a columnar-seeded key reach the exact column order. Once a
+    // period is detected it is the dominant move; small position moves would
+    // need ~one-column-height steps to do the same and erode the structure.
+    bool do_colswap = (target_period >= 2 && target_period <= max_p && max_p >= 2 && frand() < 0.6);
+    if (do_colswap) {
+        int p = target_period;
+        int c1 = rand_int(0, p), c2 = rand_int(0, p);
+        if (c1 == c2) return;
+        for (int r = 0; ; r++) {
+            int i1 = r * p + c1, i2 = r * p + c2;
+            if (i1 >= len || i2 >= len) break;   // only swap rows where both columns exist
+            int t = key[i1]; key[i1] = key[i2]; key[i2] = t;
+        }
+        return;
+    }
+
+    int move = rand_int(0, 3);
+    if (move == 0) {
+        // Swap two positions.
+        int i = rand_int(0, len), j = rand_int(0, len);
+        int t = key[i]; key[i] = key[j]; key[j] = t;
+    } else if (move == 1) {
+        // Reverse a short segment.
+        int max_blk = min(len, 14);
+        int blk = rand_int(2, max_blk + 1);
+        int s = rand_int(0, len - blk + 1);
+        for (int a = s, b = s + blk - 1; a < b; a++, b--) {
+            int t = key[a]; key[a] = key[b]; key[b] = t;
+        }
+    } else {
+        // Cut a short block and re-insert it elsewhere (a range rotation).
+        int max_blk = min(len, 14);
+        int blk = rand_int(1, max_blk + 1);
+        int s = rand_int(0, len - blk + 1);          // block start
+        int d = rand_int(0, len - blk + 1);          // destination start
+        if (d == s) return;
+        int tmp[14];
+        for (int a = 0; a < blk; a++) tmp[a] = key[s + a];
+        if (d < s) {
+            for (int a = s - 1; a >= d; a--) key[a + blk] = key[a];
+        } else {
+            for (int a = s + blk; a < d + blk; a++) key[a - blk] = key[a];
+        }
+        for (int a = 0; a < blk; a++) key[d + a] = tmp[a];
+    }
+}
+
+// Seed a key with a columnar-transposition layout: the ciphertext is read as
+// `p` columns (row-major fill, so the final row may be short) taken in column
+// order `ord`. key[plaintext_pos] = ciphertext_pos. Seeding restarts from such
+// structured keys turns the intractable free-permutation search into "find the
+// right period and column order", which the climber refines easily.
+static void build_columnar_seed(int key[], int len, int p, int ord[]) {
+    int pos = 0;
+    for (int k = 0; k < p; k++) {
+        int c = ord[k];
+        for (int r = 0; r * p + c < len; r++) key[r * p + c] = pos++;
+    }
+}
+
+double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[], int best_key[]) {
+
+    int decrypted[MAX_CIPHER_LENGTH];
+    int cur_key[MAX_CIPHER_LENGTH], loc_key[MAX_CIPHER_LENGTH];
+    double best_score = 0., current_score = 0., local_score;
+    int cur_period = 0, loc_period = 0;
+    bool have_best = false;
+
+    // Simulated-annealing schedule: each restart cools geometrically from a hot
+    // temperature (accept most worse moves, explore freely) to a cold one (pure
+    // hill climbing). This is what lets the permutation escape the many local
+    // optima a fixed accept-worse probability gets stuck in.
+    const double temp_start = 0.10;   // calibrated to single-move score deltas (~0.01-0.05)
+    const double temp_min   = 0.001;
+    double cooling = 1.0;
+    if (cfg->n_hill_climbs > 1)
+        cooling = pow(temp_min / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
+
+    for (int n = 0; n < cfg->n_restarts; n++) {
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            vec_copy(best_key, cur_key, cipher_len);
+            current_score = best_score;
+        } else {
+            // Restart: mostly from a structured columnar seed (random period and
+            // column order), occasionally from a fully random permutation so
+            // non-columnar / route transpositions remain reachable.
+            if (frand() < 0.85) {
+                int max_p = min(cipher_len / 2, 40);
+                if (max_p < 2) max_p = 2;
+                int p = rand_int(2, max_p + 1);
+                int ord[64];
+                if (p > 64) p = 64;
+                for (int c = 0; c < p; c++) ord[c] = c;
+                shuffle(ord, p);
+                build_columnar_seed(cur_key, cipher_len, p, ord);
+            } else {
+                for (int i = 0; i < cipher_len; i++) cur_key[i] = i;
+                shuffle(cur_key, cipher_len);
+            }
+            apply_permutation(cipher_indices, cur_key, cipher_len, decrypted);
+            current_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
+                + cfg->weight_structure * key_structure_score(cur_key, cipher_len, &cur_period);
+        }
+
+        double temp = temp_start;
+        for (int i = 0; i < cfg->n_hill_climbs; i++) {
+            vec_copy(cur_key, loc_key, cipher_len);
+            perturbate_permutation(loc_key, cipher_len, cur_period);
+
+            apply_permutation(cipher_indices, loc_key, cipher_len, decrypted);
+            local_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
+                + cfg->weight_structure * key_structure_score(loc_key, cipher_len, &loc_period);
+
+            // Metropolis acceptance with the current temperature.
+            double delta = local_score - current_score;
+            if (delta > 0.0 || frand() < exp(delta / temp)) {
+                vec_copy(loc_key, cur_key, cipher_len);
+                current_score = local_score;
+                cur_period = loc_period;
+            }
+            temp *= cooling;
+
+            if (!have_best || current_score > best_score) {
+                best_score = current_score;
+                vec_copy(cur_key, best_key, cipher_len);
+                have_best = true;
+            }
+        }
+    }
+
+    apply_permutation(cipher_indices, best_key, cipher_len, best_decrypted);
+    return best_score;
+}
+
+void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    int best_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_CIPHER_LENGTH];
+    double best_score;
+    int n_words_found = 0;
+
+    if (cipher_len < 3) {
+        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
+        return ;
+    }
+
+    best_score = shotgun_permutation_climber(cfg, cipher_indices, cipher_len,
+        crib_indices, crib_positions, n_cribs,
+        shared->ngram_data, best_decrypted, best_key);
+
+    printf("\ntransposition: permutation key of length %d\n", cipher_len);
+
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    plaintext_string[cipher_len] = '\0';
+
+    if (cfg->dictionary_present && shared->dict != NULL) {
+        n_words_found = find_dictionary_words(plaintext_string, shared->dict,
+            shared->n_dict_words, shared->max_dict_word_len);
+    }
+
+    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+
+    print_text(cipher_indices, cipher_len);
+    printf("\n");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+    printf("%s\n", cribtext_str);
+
+    if (PARTIAL_CRIB_MATCH && n_cribs > 0) {
+        for (int i = 0; i < cipher_len; i++) {
+            if (cribtext_str[i] == '_') {
+                printf("_");
+            } else {
+                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                if (diff < 10) printf("%d", diff); else printf("*");
+            }
+        }
+    }
+    printf("\n");
+
+    // Recovered key (source position for each output position), for reproduction.
+    printf("key: ");
+    for (int i = 0; i < cipher_len; i++) printf("%d%s", best_key[i], (i + 1 < cipher_len) ? " " : "");
+    printf("\n\n");
+
+    // One-liner summary.
+    if (cfg->dictionary_present) {
+        printf(">>> %.2f, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type,
+            cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+    } else {
+        printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type,
+            cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+    }
+    print_text(cipher_indices, cipher_len);
+    printf(", ");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+}
+
 
 
 // Hill Climber

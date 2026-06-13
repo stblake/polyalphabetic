@@ -1,0 +1,9 @@
+type: transperoffset
+period (d): 7
+offset (n): 11
+plaintext:
+THEUNITEDSTATESCONSTITUTIONESTABLISHESTHEFRAMEWORKOFGOVERNMENTANDTHESEPARATIONOFPOWERSAMONGTHELEGISLATIVEEXECUTIVEANDJUDICIALBRANCHESOFTHEFEDERALGOVERNMENTOFTHISGREATNATIONTODAY
+
+Note: without a crib the recovered offset may differ from 11; the plaintext is then
+a cyclic rotation of the text above (n-gram score is rotation-invariant). The
+recovered period must be 7. With transperoffset_crib.txt the offset resolves to 11.

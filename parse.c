@@ -58,6 +58,12 @@ int parse_cipher_type(const char *arg) {
 	if (str_eq(arg, "auto5") || str_eq(arg, "abeau") || str_eq(arg, "autobeau") || str_eq(arg, "autobeaufort")) return AUTOKEY_BEAU;
 	if (str_eq(arg, "auto6") || str_eq(arg, "aporta") || str_eq(arg, "autoporta")) return AUTOKEY_PORTA;
 
+    // Transposition ciphers (solved by optimization over the transform parameters)
+    if (str_eq(arg, "transmatrix") || str_eq(arg, "tmatrix") || str_eq(arg, "matrix")) return TRANSMATRIX;
+    if (str_eq(arg, "transperoffset") || str_eq(arg, "transperiodoffset") ||
+        str_eq(arg, "transperoff") || str_eq(arg, "tpo")) return TRANSPEROFFSET;
+    if (str_eq(arg, "trans") || str_eq(arg, "transpo") || str_eq(arg, "transposition")) return TRANSPOSITION;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

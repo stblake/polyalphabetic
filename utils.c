@@ -166,7 +166,7 @@ int int_pow(int base, int exp) {
     while (exp) {
         if (exp % 2) result *= base;
         exp /= 2;
-        base *= base;
+        if (exp) base *= base; // skip the final squaring (would overflow, e.g. 26^4 squared)
     }
     return result;
 }

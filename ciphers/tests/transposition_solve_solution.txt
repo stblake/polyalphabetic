@@ -1,0 +1,10 @@
+type: transposition (general permutation solver)
+construction: keyed columnar, 6 columns, read order [3,0,5,1,4,2]
+expected score: ~7.07
+plaintext:
+THEQUICKBROWNFOXJUMPSOVERTHELAZYDOGWHILETHEROYALORDEROFCRYPTOGRAPHERSGUARDEDTHEANCIENTSECRETSOFTHEKRYPTOSSCULPTURE
+
+Note: the general solver is stochastic. With the script's budget it usually
+recovers the exact plaintext (score 7.07) or a near-solution (score >= 6.3, a
+column or two out of order — still readable). Increase -nrestarts / -nhillclimbs,
+or tune -weightstructure, for harder or longer transpositions.
