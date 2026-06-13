@@ -2,10 +2,34 @@
 //  Polyalphabetic cipher solver
 //
 
-// A stochastic, slippery shotgun-restarted hill climber with backtracking for solving 
-// Vigenere, Beaufort, Porta, Quagmire I - IV, and Autokey ciphers with variants. 
+// A stochastic, slippery shotgun-restarted hill climber with backtracking for solving
+// Vigenere, Beaufort, Porta, Quagmire I - IV, and Autokey ciphers with variants.
 
-// Written by Sam Blake, started 14 July 2023. 
+// The same shotgun / slippery hill-climbing engine (n-gram scoring, slip, backtracking,
+// random restarts) also drives five pure-transposition solvers, dispatched by an early
+// branch in solve_cipher() that bypasses the keyword/cycleword/period machinery:
+//
+//   - transmatrix / transperoffset (solve_transposition + shotgun_transposition_climber):
+//       optimize the transform's own small parameter vector. transmatrix climbs
+//       (w1, w2, direction) of a K3-style double grid rotation; transperoffset climbs
+//       (period d, offset n) of a periodic decimation + rotation.
+//   - transposition (solve_general_transposition + shotgun_permutation_climber):
+//       an AZDecrypt-style solver that hill-climbs the FULL permutation key directly
+//       (decrypted[i] = cipher[key[i]]). Restarts are seeded from columnar layouts; a
+//       periodic-redundancy structure term (key_structure_score, weight -weightstructure)
+//       guards against n-gram-gaming; acceptance is simulated-annealing; and a
+//       period-targeted column-swap move reorders whole columns at once.
+//   - transcol / transcol2 (solve_columnar + shotgun_columnar_climber):
+//       a DEDICATED columnar solver that optimizes only the small per-stage column-order
+//       permutation (length K = column count) via the decrypt_columnar() primitive.
+//       Single (transcol) sweeps K over -mincols..-maxcols; double (transcol2) randomises
+//       (K1,K2) per restart and anneals both. Read direction is opt-in via -readdir; every
+//       candidate is a genuine columnar layout, so no structure-score guard is needed.
+//
+// These -type values are distinct from the -transmatrix / -transperoffset post-decrypt
+// STAGE flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
+
+// Written by Sam Blake, started 14 July 2023.
 
 /*
     This program is free software: you can redistribute it and/or modify
@@ -61,7 +85,17 @@
             transperoffset, tpo, 15  : Transposition - periodic decimation + rotation,
                                        solved by optimizing (period d, offset n).
             transposition, trans, 16 : General transposition (columnar / route) - hill
-                                       climbs the full permutation key (AZDecrypt-style).
+                                       climbs the full permutation key (AZDecrypt-style),
+                                       guarded by a periodic-structure score
+                                       (-weightstructure). Restarts seeded from columnar
+                                       layouts; column-swap move reorders whole columns.
+            transcol, 17             : Dedicated single columnar - hill climbs only the
+                                       column-order permutation (length K) via
+                                       decrypt_columnar(), sweeping K over
+                                       -mincols..-maxcols. Read direction via -readdir.
+            transcol2, 18            : Dedicated double columnar - randomises the two
+                                       column counts (K1, K2) per restart and anneals
+                                       both column-order permutations together.
         -transperiodoffset <int> <int> : int, int
             Applies a periodic decimation and rotation to the decrypted text.
             The first integer specifies the offset (rotation), and the second 
