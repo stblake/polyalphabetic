@@ -983,6 +983,11 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
     double best_score = 0., current_score = 0., local_score;
     bool have_best = false;
 
+    // Progress tracking for the verbose live display.
+    clock_t start_time = clock();
+    long n_iterations = 0;
+    double elapsed, n_iter_per_sec, entropy_score;
+
     for (int n = 0; n < cfg->n_restarts; n++) {
 
         if (have_best && frand() < cfg->backtracking_probability) {
@@ -999,6 +1004,7 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
         }
 
         for (int i = 0; i < cfg->n_hill_climbs; i++) {
+            n_iterations += 1;
             loc_p1 = cur_p1; loc_p2 = cur_p2; loc_p3 = cur_p3;
             perturbate_transposition_params(cfg, cipher_len, &loc_p1, &loc_p2, &loc_p3);
 
@@ -1018,6 +1024,32 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
                 best_score = current_score;
                 *best_p1 = cur_p1; *best_p2 = cur_p2; *best_p3 = cur_p3;
                 have_best = true;
+
+                if (cfg->verbose) {
+                    // Re-decrypt the best parameters for the live display.
+                    apply_transposition(cfg, cipher_indices, cipher_len,
+                        *best_p1, *best_p2, *best_p3, decrypted);
+
+                    entropy_score = entropy(decrypted, cipher_len);
+
+                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
+                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
+
+                    printf("\n%.2f\t[sec]\n", elapsed);
+                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+                    printf("%d\t[restarts]\n", n);
+                    printf("%.4f\t[entropy]\n", entropy_score);
+                    printf("%.2f\t[score]\n", best_score);
+                    if (cfg->cipher_type == TRANSMATRIX) {
+                        printf("w1 = %d, w2 = %d, direction = %s\t[params]\n",
+                            *best_p1, *best_p2, *best_p3 ? "cw" : "ccw");
+                    } else { // TRANSPEROFFSET
+                        printf("period = %d, offset = %d\t[params]\n", *best_p1, *best_p2);
+                    }
+                    printf("\n");
+                    print_text(decrypted, cipher_len); printf("\n");
+                    fflush(stdout);
+                }
             }
         }
     }
@@ -1250,7 +1282,13 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
     int cur_key[MAX_CIPHER_LENGTH], loc_key[MAX_CIPHER_LENGTH];
     double best_score = 0., current_score = 0., local_score;
     int cur_period = 0, loc_period = 0;
+    int best_period = 0;
     bool have_best = false;
+
+    // Progress tracking for the verbose live display.
+    clock_t start_time = clock();
+    long n_iterations = 0;
+    double elapsed, n_iter_per_sec, entropy_score;
 
     // Simulated-annealing schedule: each restart cools geometrically from a hot
     // temperature (accept most worse moves, explore freely) to a cold one (pure
@@ -1294,6 +1332,7 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
 
         double temp = temp_start;
         for (int i = 0; i < cfg->n_hill_climbs; i++) {
+            n_iterations += 1;
             vec_copy(cur_key, loc_key, cipher_len);
             perturbate_permutation(loc_key, cipher_len, cur_period);
 
@@ -1316,7 +1355,28 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
             if (!have_best || current_score > best_score) {
                 best_score = current_score;
                 vec_copy(cur_key, best_key, cipher_len);
+                best_period = cur_period;
                 have_best = true;
+
+                if (cfg->verbose) {
+                    // Re-decrypt the best permutation for the live display.
+                    apply_permutation(cipher_indices, best_key, cipher_len, decrypted);
+
+                    entropy_score = entropy(decrypted, cipher_len);
+
+                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
+                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
+
+                    printf("\n%.2f\t[sec]\n", elapsed);
+                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+                    printf("%d\t[restarts]\n", n);
+                    printf("%.4f\t[entropy]\n", entropy_score);
+                    printf("%.2f\t[score]\n", best_score);
+                    printf("%d\t[period]\n", best_period);
+                    printf("\n");
+                    print_text(decrypted, cipher_len); printf("\n");
+                    fflush(stdout);
+                }
             }
         }
     }
