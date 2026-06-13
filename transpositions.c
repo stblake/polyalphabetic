@@ -70,3 +70,47 @@ void transmatrix(int text[], int len, int w1, int w2, int clockwise) {
     matrix_rotate(text, len, w2, clockwise);
 }
 
+
+// Invert one columnar transposition stage.
+//
+// Encryption writes the plaintext into a grid of K columns, row by row
+// left-to-right, then reads the columns off in order `order[0..K-1]` (each column
+// top-to-bottom for COL_READ_TB, bottom-to-top for COL_READ_BT). The grid's last
+// row is short when len % K != 0: the leftmost (len % K) columns are one cell
+// taller than the rest, so each column's height is known up front.
+//
+// To decrypt we slice the ciphertext back into those columns in read order,
+// refill the grid, and read it row-major. out[] must not alias cipher[].
+void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int out[]) {
+
+    if (K <= 1 || K > len) {            // degenerate: a single column is the identity
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int grid[MAX_CIPHER_LENGTH];
+    int R = (len + K - 1) / K;          // number of rows (ceiling)
+    int rem = len % K;                  // tall columns are 0..rem-1 (all K if rem==0)
+
+    // Refill the grid one column at a time, consuming the ciphertext in read order.
+    int pos = 0;
+    for (int j = 0; j < K; j++) {
+        int c = order[j];
+        int h = (rem == 0 || c < rem) ? R : R - 1;   // height of grid column c
+        if (dir == COL_READ_BT) {
+            for (int r = h - 1; r >= 0; r--) grid[r * K + c] = cipher[pos++];
+        } else { // COL_READ_TB
+            for (int r = 0; r < h; r++) grid[r * K + c] = cipher[pos++];
+        }
+    }
+
+    // Read the grid row-major to recover the plaintext (skip missing short-row cells).
+    int o = 0;
+    for (int r = 0; r < R; r++) {
+        for (int c = 0; c < K; c++) {
+            int h = (rem == 0 || c < rem) ? R : R - 1;
+            if (r < h) out[o++] = grid[r * K + c];
+        }
+    }
+}
+

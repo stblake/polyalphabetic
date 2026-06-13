@@ -143,6 +143,14 @@
             (General transposition only.) Weight of the columnar-structure reward
             that biases the permutation key toward regular (periodic) layouts.
 
+    Columnar transposition (transcol / transcol2):
+        -mincols <int> / -maxcols <int> : int
+            Column-count search range (default 2..30, clamped to len/2). Set
+            -mincols == -maxcols to target a single, known column count.
+        -readdir <tb|bt|both> :
+            Column read direction: top-to-bottom (default), bottom-to-top, or
+            search both. Variants are only tried when explicitly requested.
+
     Notes
     -----
     Cipher Types:
@@ -206,6 +214,10 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->trans_w1 = 0;
     cfg->trans_w2 = 0;
     cfg->trans_clockwise = 1; // Default to clockwise
+
+    cfg->min_cols = 2;
+    cfg->max_cols = 30;
+    cfg->read_direction = COL_READ_TB; // canonical only; bottom-to-top is opt-in
 }
 
 
@@ -383,6 +395,26 @@ int main(int argc, char **argv) {
                 return 0;
             }
             printf("-transmatrix %d %d %s\n", cfg.trans_w1, cfg.trans_w2, cfg.trans_clockwise ? "cw" : "ccw");
+        } else if (strcmp(argv[i], "-mincols") == 0) {
+            cfg.min_cols = atoi(argv[++i]);
+            printf("-mincols %d\n", cfg.min_cols);
+        } else if (strcmp(argv[i], "-maxcols") == 0) {
+            cfg.max_cols = atoi(argv[++i]);
+            printf("-maxcols %d\n", cfg.max_cols);
+        } else if (strcmp(argv[i], "-readdir") == 0) {
+            char *dir_arg = argv[++i];
+            // Flexible parsing of the columnar read direction.
+            if (strcasecmp(dir_arg, "tb") == 0 || strcasecmp(dir_arg, "topbottom") == 0 || strcmp(dir_arg, "0") == 0) {
+                cfg.read_direction = COL_READ_TB;
+            } else if (strcasecmp(dir_arg, "bt") == 0 || strcasecmp(dir_arg, "bottomtop") == 0 || strcmp(dir_arg, "1") == 0) {
+                cfg.read_direction = COL_READ_BT;
+            } else if (strcasecmp(dir_arg, "both") == 0 || strcmp(dir_arg, "2") == 0) {
+                cfg.read_direction = COL_READ_BOTH;
+            } else {
+                printf("\n\nERROR: Invalid direction '%s' for -readdir. Use 'tb', 'bt' or 'both'.\n\n", dir_arg);
+                return 0;
+            }
+            printf("-readdir %s\n", dir_arg);
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -425,6 +457,10 @@ int main(int argc, char **argv) {
         printf("\nAttacking a transperoffset (periodic decimation + rotation) transposition cipher.\n\n");
     } else if (cfg.cipher_type == TRANSPOSITION) {
         printf("\nAttacking a general transposition cipher (permutation-key hill climber).\n\n");
+    } else if (cfg.cipher_type == TRANSCOL) {
+        printf("\nAttacking a columnar transposition cipher (column-order hill climber).\n\n");
+    } else if (cfg.cipher_type == TRANSCOL2) {
+        printf("\nAttacking a double columnar transposition cipher (column-order hill climber).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -597,6 +633,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     }
     if (cfg->cipher_type == TRANSPOSITION) {
         solve_general_transposition(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == TRANSCOL || cfg->cipher_type == TRANSCOL2) {
+        solve_columnar(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
         return ;
     }
@@ -1450,6 +1491,302 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
         printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type,
             cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
     }
+    print_text(cipher_indices, cipher_len);
+    printf(", ");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+}
+
+
+// =====================================================================
+//  Dedicated columnar transposition solver (TRANSCOL / TRANSCOL2)
+//
+//  Where solve_general_transposition hill-climbs the full N-length
+//  permutation key and leans on a structure-score guard, this solver
+//  optimizes only the small per-stage column-order permutation (length
+//  K, the column count). The search space is K! (or K1!*K2! for double),
+//  every candidate is a genuine columnar layout by construction, and a
+//  column swap maps one-to-one onto the key -- the AZDecrypt approach.
+// =====================================================================
+
+// Decrypt one or two stacked columnar stages. cipher[] -> out[].
+// Encryption applies stage 0 then stage 1, so we invert stage 1 then stage 0.
+static void decrypt_columnar_stages(int cipher[], int len, int nstages,
+    int K[2], int order[2][MAX_COLS], int dir[2], int out[]) {
+    if (nstages == 1) {
+        decrypt_columnar(cipher, len, K[0], order[0], dir[0], out);
+    } else {
+        int tmp[MAX_CIPHER_LENGTH];
+        decrypt_columnar(cipher, len, K[1], order[1], dir[1], tmp);  // undo outer (2nd applied)
+        decrypt_columnar(tmp,    len, K[0], order[0], dir[0], out);  // undo inner (1st applied)
+    }
+}
+
+// Perturb a single stage's column order with one permutation-preserving move
+// (swap dominant, plus short reverse and short block-move). The direction is
+// only flipped when the user asked to search both (search_dir == COL_READ_BOTH);
+// otherwise it stays pinned to the requested read direction.
+static void perturbate_column_order(int order[], int K, int *dir, int search_dir) {
+    if (search_dir == COL_READ_BOTH && frand() < 0.05) {
+        *dir = 1 - *dir;
+        return;
+    }
+    if (K < 2) return;
+
+    double r = frand();
+    if (r < 0.70) {
+        // Swap two columns (the dominant move).
+        int a = rand_int(0, K), b = rand_int(0, K);
+        int t = order[a]; order[a] = order[b]; order[b] = t;
+    } else if (r < 0.85) {
+        // Reverse a short segment of the order.
+        int max_blk = min(K, 8);
+        int blk = rand_int(2, max_blk + 1);
+        int s = rand_int(0, K - blk + 1);
+        for (int a = s, b = s + blk - 1; a < b; a++, b--) {
+            int t = order[a]; order[a] = order[b]; order[b] = t;
+        }
+    } else {
+        // Cut a short block and re-insert it elsewhere (a range rotation).
+        int max_blk = min(K, 8);
+        int blk = rand_int(1, max_blk + 1);
+        int s = rand_int(0, K - blk + 1);
+        int d = rand_int(0, K - blk + 1);
+        if (d == s) return;
+        int tmp[8];
+        for (int a = 0; a < blk; a++) tmp[a] = order[s + a];
+        if (d < s) {
+            for (int a = s - 1; a >= d; a--) order[a + blk] = order[a];
+        } else {
+            for (int a = s + blk; a < d + blk; a++) order[a - blk] = order[a];
+        }
+        for (int a = 0; a < blk; a++) order[d + a] = tmp[a];
+    }
+}
+
+// Seed a fresh restart: random column order(s), direction(s) per read_direction.
+static void columnar_seed(PolyalphabeticConfig *cfg, int nstages,
+    int K[2], int order[2][MAX_COLS], int dir[2]) {
+    for (int s = 0; s < nstages; s++) {
+        for (int c = 0; c < K[s]; c++) order[s][c] = c;
+        shuffle(order[s], K[s]);
+        dir[s] = (cfg->read_direction == COL_READ_BOTH) ? rand_int(0, 2) : cfg->read_direction;
+    }
+}
+
+// Copy a full columnar state (per-stage K, order, direction).
+static void columnar_copy_state(int nstages,
+    int srcK[2], int srcOrder[2][MAX_COLS], int srcDir[2],
+    int dstK[2], int dstOrder[2][MAX_COLS], int dstDir[2]) {
+    for (int s = 0; s < nstages; s++) {
+        dstK[s] = srcK[s];
+        dstDir[s] = srcDir[s];
+        for (int c = 0; c < srcK[s]; c++) dstOrder[s][c] = srcOrder[s][c];
+    }
+}
+
+// Shotgun / annealing climber over the column-order permutation(s). Single
+// columnar (TRANSCOL) sweeps the column count K = min_cols..max_cols, running
+// n_restarts restarts per K; double columnar (TRANSCOL2) randomises (K1,K2) per
+// restart. Scoring is the n-gram (+ optional crib) state_score only -- no
+// structure-score guard is needed because the candidates are all columnar.
+static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[],
+    int best_K[2], int best_order[2][MAX_COLS], int best_dir[2], int *best_nstages) {
+
+    int nstages = (cfg->cipher_type == TRANSCOL2) ? 2 : 1;
+    *best_nstages = nstages;
+
+    // Clamp the column-count search range to [2, len/2] (and the array bound).
+    int lo = cfg->min_cols, hi = cfg->max_cols;
+    int cap = cipher_len / 2;
+    if (cap < 2) cap = 2;
+    if (cap > MAX_COLS) cap = MAX_COLS;
+    if (lo < 2) lo = 2;
+    if (hi > cap) hi = cap;
+    if (lo > hi) lo = hi;
+
+    int cur_K[2], cur_order[2][MAX_COLS], cur_dir[2];
+    int loc_K[2], loc_order[2][MAX_COLS], loc_dir[2];
+    int decrypted[MAX_CIPHER_LENGTH];
+    double best_score = 0., current_score = 0., local_score;
+    bool have_best = false;
+
+    // Geometric Metropolis annealing schedule (as in shotgun_permutation_climber).
+    const double temp_start = 0.10, temp_min = 0.001;
+    double cooling = 1.0;
+    if (cfg->n_hill_climbs > 1)
+        cooling = pow(temp_min / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
+
+    clock_t start_time = clock();
+    long n_iterations = 0;
+    double elapsed, n_iter_per_sec, entropy_score;
+
+    // Single: one restart slot per (K, restart). Double: just n_restarts.
+    int n_K = (nstages == 1) ? (hi - lo + 1) : 1;
+    long total_restarts = (long) n_K * cfg->n_restarts;
+
+    for (long rs = 0; rs < total_restarts; rs++) {
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            // Refine the best-known state.
+            columnar_copy_state(nstages, best_K, best_order, best_dir,
+                cur_K, cur_order, cur_dir);
+            current_score = best_score;
+        } else {
+            // Fresh restart: choose the column count(s) for this restart.
+            if (nstages == 1) {
+                cur_K[0] = lo + (int)(rs / cfg->n_restarts);
+            } else {
+                cur_K[0] = rand_int(lo, hi + 1);
+                cur_K[1] = rand_int(lo, hi + 1);
+            }
+            columnar_seed(cfg, nstages, cur_K, cur_order, cur_dir);
+            decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
+                cur_K, cur_order, cur_dir, decrypted);
+            current_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+        }
+
+        double temp = temp_start;
+        for (int it = 0; it < cfg->n_hill_climbs; it++) {
+            n_iterations += 1;
+
+            columnar_copy_state(nstages, cur_K, cur_order, cur_dir,
+                loc_K, loc_order, loc_dir);
+
+            // Perturb one stage (random for double, the only one for single).
+            int s = (nstages == 1) ? 0 : rand_int(0, 2);
+            perturbate_column_order(loc_order[s], loc_K[s], &loc_dir[s], cfg->read_direction);
+
+            decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
+                loc_K, loc_order, loc_dir, decrypted);
+            local_score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+
+            double delta = local_score - current_score;
+            if (delta > 0.0 || frand() < exp(delta / temp)) {
+                columnar_copy_state(nstages, loc_K, loc_order, loc_dir,
+                    cur_K, cur_order, cur_dir);
+                current_score = local_score;
+            }
+            temp *= cooling;
+
+            if (!have_best || current_score > best_score) {
+                best_score = current_score;
+                columnar_copy_state(nstages, cur_K, cur_order, cur_dir,
+                    best_K, best_order, best_dir);
+                have_best = true;
+
+                if (cfg->verbose) {
+                    decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
+                        best_K, best_order, best_dir, decrypted);
+                    entropy_score = entropy(decrypted, cipher_len);
+                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
+                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
+
+                    printf("\n%.2f\t[sec]\n", elapsed);
+                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+                    printf("%ld\t[restarts]\n", rs);
+                    printf("%.4f\t[entropy]\n", entropy_score);
+                    printf("%.2f\t[score]\n", best_score);
+                    for (int st = 0; st < nstages; st++) {
+                        printf("stage %d: K=%d dir=%s\t[params]\n", st + 1, best_K[st],
+                            best_dir[st] == COL_READ_BT ? "bt" : "tb");
+                    }
+                    printf("\n");
+                    print_text(decrypted, cipher_len); printf("\n");
+                    fflush(stdout);
+                }
+            }
+        }
+    }
+
+    decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
+        best_K, best_order, best_dir, best_decrypted);
+    return best_score;
+}
+
+void solve_columnar(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    int best_decrypted[MAX_CIPHER_LENGTH];
+    int best_K[2], best_order[2][MAX_COLS], best_dir[2], best_nstages = 1;
+    double best_score;
+    int n_words_found = 0;
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for a columnar solve.\n\n");
+        return ;
+    }
+
+    best_score = shotgun_columnar_climber(cfg, cipher_indices, cipher_len,
+        crib_indices, crib_positions, n_cribs,
+        shared->ngram_data, best_decrypted, best_K, best_order, best_dir, &best_nstages);
+
+    if (best_nstages == 1)
+        printf("\ntranscol: single columnar, %d columns, read %s\n",
+            best_K[0], best_dir[0] == COL_READ_BT ? "bottom-to-top" : "top-to-bottom");
+    else
+        printf("\ntranscol2: double columnar, %d x %d columns\n", best_K[0], best_K[1]);
+
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    plaintext_string[cipher_len] = '\0';
+
+    if (cfg->dictionary_present && shared->dict != NULL) {
+        n_words_found = find_dictionary_words(plaintext_string, shared->dict,
+            shared->n_dict_words, shared->max_dict_word_len);
+    }
+
+    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+
+    print_text(cipher_indices, cipher_len);
+    printf("\n");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+    printf("%s\n", cribtext_str);
+
+    if (PARTIAL_CRIB_MATCH && n_cribs > 0) {
+        for (int i = 0; i < cipher_len; i++) {
+            if (cribtext_str[i] == '_') {
+                printf("_");
+            } else {
+                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                if (diff < 10) printf("%d", diff); else printf("*");
+            }
+        }
+    }
+    printf("\n");
+
+    // Recovered column order(s), for reproduction.
+    for (int s = 0; s < best_nstages; s++) {
+        printf("stage %d (K=%d, dir=%s) order:", s + 1, best_K[s],
+            best_dir[s] == COL_READ_BT ? "bt" : "tb");
+        for (int c = 0; c < best_K[s]; c++) printf(" %d", best_order[s][c]);
+        printf("\n");
+    }
+    printf("\n");
+
+    // One-liner summary.
+    if (cfg->dictionary_present) {
+        printf(">>> %.2f, %d, %d, ", best_score, n_words_found, cfg->cipher_type);
+    } else {
+        printf(">>> %.2f, %d, ", best_score, cfg->cipher_type);
+    }
+    if (best_nstages == 1) printf("%d, ", best_K[0]);
+    else printf("%d, %d, ", best_K[0], best_K[1]);
+    printf("%s, ", cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
     print_text(cipher_indices, cipher_len);
     printf(", ");
     print_text(best_decrypted, cipher_len);

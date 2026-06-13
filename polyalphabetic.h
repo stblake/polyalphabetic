@@ -33,6 +33,8 @@
 #define TRANSMATRIX    14
 #define TRANSPEROFFSET 15
 #define TRANSPOSITION  16
+#define TRANSCOL       17   // single columnar transposition (dedicated solver)
+#define TRANSCOL2      18   // double (nested) columnar transposition
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -41,6 +43,12 @@
 #define MAX_CYCLEWORD_LEN 300
 #define MAX_NGRAM_SIZE 8
 #define MAX_DICT_WORD_LEN 30
+#define MAX_COLS 100            // upper bound on columnar column count (sizes order arrays)
+
+// Columnar read direction (cfg->read_direction).
+#define COL_READ_TB   0        // read each column top-to-bottom (canonical)
+#define COL_READ_BT   1        // read each column bottom-to-top
+#define COL_READ_BOTH 2        // search both directions
 
 #define FREQUENCY_WEIGHTED_SELECTION 1
 #define DICTIONARY 1
@@ -120,6 +128,11 @@ typedef struct {
     int trans_w2;
     int trans_clockwise; // 1 for clockwise, 0 for anti-clockwise
 
+    // Columnar transposition (TRANSCOL / TRANSCOL2).
+    int min_cols;        // smallest column count to search
+    int max_cols;        // largest column count to search
+    int read_direction;  // COL_READ_TB / COL_READ_BT / COL_READ_BOTH
+
 } PolyalphabeticConfig;
 
 typedef struct {
@@ -183,6 +196,13 @@ void transperoffset(int plaintext[], int len, int d, int n);
 void matrix_rotate(int text[], int len, int width, int clockwise);
 void transmatrix(int text[], int len, int w1, int w2, int clockwise);
 
+// Columnar transposition primitive (one stage). Inverts a columnar encryption:
+// the ciphertext is `K` columns concatenated in read order `order[0..K-1]`, each
+// column read top-to-bottom (dir == COL_READ_TB) or bottom-to-top (COL_READ_BT).
+// Incomplete grids (len % K != 0) are handled via per-column heights. Writes the
+// recovered row-major plaintext to out[0..len-1] (out must differ from cipher).
+void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int out[]);
+
 // Transposition solvers (optimization over the transform parameters)
 void solve_transposition(char *ciphertext_str, char *cribtext_str,
     PolyalphabeticConfig *cfg, SharedData *shared,
@@ -205,6 +225,14 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int best_decrypted[], int best_key[]);
+
+// Dedicated columnar solver (single TRANSCOL and double TRANSCOL2). Optimizes the
+// small per-stage column-order permutation directly, rather than the full
+// N-length permutation key.
+void solve_columnar(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
 
 // Hill Climber
 double shotgun_hill_climber(

@@ -64,6 +64,12 @@ int parse_cipher_type(const char *arg) {
         str_eq(arg, "transperoff") || str_eq(arg, "tpo")) return TRANSPEROFFSET;
     if (str_eq(arg, "trans") || str_eq(arg, "transpo") || str_eq(arg, "transposition")) return TRANSPOSITION;
 
+    // Columnar transposition (dedicated solver over the column-order permutation)
+    if (str_eq(arg, "transcol") || str_eq(arg, "transpocolumnar") ||
+        str_eq(arg, "columnar") || str_eq(arg, "col")) return TRANSCOL;
+    if (str_eq(arg, "transcol2") || str_eq(arg, "doublecolumnar") ||
+        str_eq(arg, "doublecol") || str_eq(arg, "dcol")) return TRANSCOL2;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

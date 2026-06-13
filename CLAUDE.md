@@ -54,8 +54,12 @@ Two caveats:
   *outside* this directory. That predates the isolation of this repo; the in-tree
   `./polyalphabetic` is the one that matters here.
 
-There are no unit tests; `ciphers/tests/` holds end-to-end cases (ciphertext +
-`*_solution.txt`) you can run by hand.
+`make test` builds and runs the framework-free unit tests in
+`tests/test_transpositions.c` (the transposition primitives, including the columnar
+`decrypt_columnar`: known-answer, round-trip across complete/incomplete grids and both
+read directions, double-columnar composition). `ciphers/tests/` additionally holds
+end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
+`transcol_*_solve.sh` columnar recovery tests) you can run by hand.
 
 ## Run
 
@@ -72,11 +76,12 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-ngramsize`, and `-ngramfile`. Everything else has defaults (see `init_config`).
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
-`transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16` (full list in `parse.c`;
-codes in `polyalphabetic.h`). Output is a human-readable block followed by a `>>> ...`
-one-line CSV summary that batch runs grep/sort.
+`transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
+`transcol2`/`18` (full list in `parse.c`; codes in `polyalphabetic.h`). Output is a
+human-readable block followed by a `>>> ...` one-line CSV summary that batch runs
+grep/sort.
 
-Three **pure transposition** cipher types bypass the keyword/cycleword/period machinery
+Five **pure transposition** cipher types bypass the keyword/cycleword/period machinery
 and are solved by optimization instead (all isolated from the polyalphabetic pipeline by
 an early branch in `solve_cipher`):
 - `transmatrix`/`transperoffset` → `solve_transposition()` +
@@ -89,6 +94,16 @@ an early branch in `solve_cipher`):
   structure term (`key_structure_score`, weight `-weightstructure`, default 4) guards
   against n-gram-gaming; simulated-annealing acceptance; and a period-targeted column-swap
   move reorders whole columns. Stochastic — run more restarts/iterations for hard ciphers.
+- `transcol`/`transcol2` → `solve_columnar()` + `shotgun_columnar_climber()`: a
+  **dedicated columnar** solver that, unlike the general one, optimizes only the small
+  per-stage **column-order permutation** (length `K` = column count) via the
+  `decrypt_columnar()` primitive (`transpositions.c`). Single (`transcol`) sweeps the
+  column count over `-mincols..-maxcols` (default 2..30); double (`transcol2`) randomises
+  `(K1,K2)` per restart and anneals both keys. Read direction is opt-in via
+  `-readdir tb|bt|both` (default `tb`); incomplete final rows are handled automatically.
+  No structure-score guard is needed — every candidate is a genuine columnar layout. Move
+  set is column swaps (dominant) + short reverses/block-moves with the same Metropolis
+  annealing as the permutation climber.
 
 These `-type` values are distinct from the `-transmatrix`/`-transperoffset` *post-decrypt
 stage* flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
