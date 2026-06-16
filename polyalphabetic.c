@@ -2761,14 +2761,33 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
         cached_ngram_size = ngram_size;
     }
 
-    for (int i = 0; i < cipher_len - ngram_size + 1; i++) {
+    // Rolling base-26 index. The packed window index is little-endian
+    //   idx_i = sum_{j=0..n-1} decrypted[i+j] * 26^j,
+    // so advancing one position is exact integer arithmetic:
+    //   idx_{i+1} = (idx_i - decrypted[i]) / 26 + decrypted[i+n] * 26^(n-1).
+    // (idx_i - decrypted[i]) is divisible by 26 -- every surviving term carries a
+    // factor of 26 -- so the integer division is exact and idx_{i+1} is the SAME
+    // integer the old per-window inner loop produced. Identical index => identical
+    // ngram_data[] element => identical sum in the same order: bit-for-bit unchanged.
+    // This collapses the per-window O(ngram_size) multiply-add loop to O(1).
+    int n_windows = cipher_len - ngram_size + 1;
+    if (n_windows > 0) {
+        int top = 1;                    // 26^(ngram_size-1)
+        for (int j = 0; j < ngram_size - 1; j++) top *= ALPHABET_SIZE;
+
         index = 0;
         base = 1;
         for (int j = 0; j < ngram_size; j++) {
-            index += decrypted[i + j]*base;
+            index += decrypted[j]*base;
             base *= ALPHABET_SIZE;
         }
         score += ngram_data[index];
+
+        for (int i = 1; i < n_windows; i++) {
+            index = (index - decrypted[i - 1]) / ALPHABET_SIZE
+                    + decrypted[i + ngram_size - 1] * top;
+            score += ngram_data[index];
+        }
     }
     score = scale*score/(cipher_len - ngram_size);
     return score;
