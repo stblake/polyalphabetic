@@ -142,6 +142,24 @@ typedef struct {
     int max_dict_word_len;
 } SharedData;
 
+// Outcome of a polyalphabetic solve. solve_cipher fills this (when a non-NULL
+// pointer is passed) so callers -- in particular the regression tests -- can
+// inspect the recovered solution instead of scraping stdout. solved is false if
+// no valid configuration was found, or for the transposition cipher types
+// (which are dispatched to their own solvers and report separately).
+typedef struct {
+    bool solved;
+    int cipher_type;
+    double score;
+    int n_words;
+    int cycleword_len;
+    int plaintext_keyword[ALPHABET_SIZE];
+    int ciphertext_keyword[ALPHABET_SIZE];
+    int cycleword[MAX_CYCLEWORD_LEN];
+    int decrypted[MAX_CIPHER_LENGTH];
+    int decrypted_len;
+} SolveResult;
+
 // --- Statistics Data ---
 
 static int n_english_word_length_frequency_letters = 25;
@@ -160,7 +178,15 @@ static double english_monograms[] = {
 };
 
 // Core Logic
-void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg, SharedData *shared);
+void init_config(PolyalphabeticConfig *cfg);
+// result may be NULL (CLI use); when supplied it receives the recovered solution.
+void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg,
+    SharedData *shared, SolveResult *result);
+
+// Prints the human-readable block and the ">>> ..." one-line CSV summary for a
+// polyalphabetic solve, from the populated result.
+void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
+    int cipher_indices[], SolveResult *res);
 
 // Porta cipher
 void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);

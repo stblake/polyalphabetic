@@ -67,29 +67,27 @@
    **Note**: The Vigenère cipher (Type 0) is a further specialization where *both* the PT-KW and CT-KW are fixed to a straight A-Z alphabet.
 */
 
-void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
-    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
     int cycleword_indices[], int cycleword_len, bool variant) {
-    
-    int i, j, posn_keyword, posn_cycleword, indx, ct_indx, cw_indx; 
+
+    int i, posn_keyword, posn_cycleword, indx;
+
+    // Invert the ciphertext keyword once: ct_inverse[char] = its position in the
+    // CT keyed alphabet. This replaces the two inner linear 26-scans (per char)
+    // that previously dominated the decrypt, with O(1) lookups. This is the hot
+    // path: quagmire_decrypt runs once per hill-climber iteration.
+    int ct_inverse[ALPHABET_SIZE];
+    for (i = 0; i < ALPHABET_SIZE; i++) ct_inverse[ciphertext_keyword_indices[i]] = i;
+
+    // The cycleword char's position in the CT keyword depends only on the period
+    // index (i % cycleword_len), so resolve all of them up front.
+    int cw_pos[MAX_CYCLEWORD_LEN];
+    for (i = 0; i < cycleword_len; i++) cw_pos[i] = ct_inverse[cycleword_indices[i]];
 
     for (i = 0; i < cipher_len; i++) {
-        // Find position of ciphertext char in ciphertext key. 
-        for (j = 0; j < ALPHABET_SIZE; j++) {
-            ct_indx = ciphertext_keyword_indices[j];
-            if (cipher_indices[i] == ct_indx) {
-                posn_keyword = j; 
-                break ;
-            }
-        }
-        // Find the position of cycleword char in keyword. 
-        for (j = 0; j < ALPHABET_SIZE; j++) {
-            cw_indx = cycleword_indices[i%cycleword_len];
-            if (cw_indx == ciphertext_keyword_indices[j]) {
-                posn_cycleword = j; 
-                break ;
-            }
-        }
+        posn_keyword = ct_inverse[cipher_indices[i]];
+        posn_cycleword = cw_pos[i % cycleword_len];
 
         if (variant) {
             indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
@@ -104,27 +102,27 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
 
 
 
-void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
-    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
+void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
+    int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
     int cycleword_indices[], int cycleword_len, bool variant) {
-    
-    int i, j, posn_keyword, posn_cycleword, indx, pt_indx, cw_indx;
+
+    int i, posn_keyword, posn_cycleword, indx;
+
+    // Invert both keyed alphabets once (see quagmire_decrypt): the message char's
+    // position comes from the PT keyword, the cycleword char's from the CT keyword.
+    int pt_inverse[ALPHABET_SIZE], ct_inverse[ALPHABET_SIZE];
+    for (i = 0; i < ALPHABET_SIZE; i++) {
+        pt_inverse[plaintext_keyword_indices[i]] = i;
+        ct_inverse[ciphertext_keyword_indices[i]] = i;
+    }
+
+    int cw_pos[MAX_CYCLEWORD_LEN];
+    for (i = 0; i < cycleword_len; i++) cw_pos[i] = ct_inverse[cycleword_indices[i]];
 
     for (i = 0; i < cipher_len; i++) {
-        for (j = 0; j < ALPHABET_SIZE; j++) {
-            pt_indx = plaintext_indices[i];
-            if (pt_indx == plaintext_keyword_indices[j]) {
-                posn_keyword = j; 
-                break ;
-            }
-        }
-        for (j = 0; j < ALPHABET_SIZE; j++) {
-            cw_indx = cycleword_indices[i%cycleword_len];
-            if (cw_indx == ciphertext_keyword_indices[j]) {
-                posn_cycleword = j; 
-                break ;
-            }
-        }
+        posn_keyword = pt_inverse[plaintext_indices[i]];
+        posn_cycleword = cw_pos[i % cycleword_len];
+
         if (variant) {
             indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
         } else {

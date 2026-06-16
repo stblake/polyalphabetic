@@ -62,6 +62,10 @@
             Path to a dictionary file (one word per line). Defaults to "OxfordEnglishWords.txt".
         -verbose : flag
             Enable detailed output during execution.
+        -seed <int> : int, optional
+            Fix the PRNG seed for reproducible runs. Defaults to the current
+            Unix time. Used by the regression tests to make stochastic solves
+            deterministic.
 
     Cipher Configuration:
         -type <int> : int
@@ -256,6 +260,10 @@ void init_config(PolyalphabeticConfig *cfg) {
 
 
 
+// Guarded so the regression tests can link the whole solver (solve_cipher and
+// its dependencies live in this file) while supplying their own main:
+// compile this translation unit with -DPOLY_NO_MAIN.
+#ifndef POLY_NO_MAIN
 int main(int argc, char **argv) {
     PolyalphabeticConfig cfg;
     SharedData shared;
@@ -266,8 +274,10 @@ int main(int argc, char **argv) {
     printf("\n\nPOLYALPHABETIC Cipher Solver\n\n");
     printf("Written by Sam Blake, started 14 July 2023.\n\n");
 
-    // Seed the PRNG with the current Unix time (seconds since Epoch)
-    seed_rand((uint32_t)time(NULL));
+    // Seed the PRNG with the current Unix time (seconds since Epoch).
+    // A -seed <uint> argument (parsed below) overrides this for reproducible runs.
+    uint32_t rng_seed = (uint32_t)time(NULL);
+    seed_rand(rng_seed);
 
     init_config(&cfg);
     
@@ -395,6 +405,11 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-variant") == 0) { 
             cfg.variant = true;
             printf("-variant\n");
+        } else if (strcmp(argv[i], "-seed") == 0) {
+            // Fix the PRNG seed for reproducible runs (regression tests, debugging).
+            rng_seed = (uint32_t)strtoul(argv[++i], NULL, 10);
+            seed_rand(rng_seed);
+            printf("-seed %u\n", rng_seed);
         } else if (strcmp(argv[i], "-verbose") == 0) {
             cfg.verbose = true;
             printf("-verbose\n");
@@ -557,7 +572,7 @@ int main(int argc, char **argv) {
 
     // --- Execution Flow ---
 
-    srand(time(NULL));
+    printf("\nRNG seed = %u (override with -seed)\n", rng_seed);
 
     if (cfg.batch_present) {
         if (!file_exists(cfg.batch_file)) {
@@ -580,7 +595,7 @@ int main(int argc, char **argv) {
 
             n_ciphers ++;
             printf("\nProcessing %d: %s\n", n_ciphers, line_buffer);
-            solve_cipher(line_buffer, cribtext, &cfg, &shared);
+            solve_cipher(line_buffer, cribtext, &cfg, &shared, NULL);
         }
         fclose(fp_batch);
 
@@ -597,7 +612,7 @@ int main(int argc, char **argv) {
 
         if (cfg.verbose) printf("ciphertext = \n\'%s\'\n\n", single_ciphertext_buffer);
 
-        solve_cipher(single_ciphertext_buffer, cribtext, &cfg, &shared);
+        solve_cipher(single_ciphertext_buffer, cribtext, &cfg, &shared, NULL);
     }
 
     // --- Cleanup ---
@@ -608,13 +623,19 @@ int main(int argc, char **argv) {
 
     return 1;
 }
+#endif // POLY_NO_MAIN
 
 
 
 // Core Solver
 
-void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg, SharedData *shared) {
-    
+void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg,
+    SharedData *shared, SolveResult *result) {
+
+    // Default to "not solved": every early return (transposition dispatch, no
+    // periodicities found, no valid configuration) then leaves a correct result.
+    if (result) result->solved = false;
+
     int cipher_len = (int)strlen(ciphertext_str);
     int cipher_indices[MAX_CIPHER_LENGTH];
     int n_cribs = 0;
@@ -878,14 +899,6 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         transmatrix(best_decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
     }
 
-    if (cfg->transperoffset_present) {
-        printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
-    }
-
-    if (cfg->transmatrix_present) {
-        printf("\ntransmatrix: w1 = %d, w2 = %d, direction = %s\n", cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise ? "cw" : "ccw");
-    }
-
     char plaintext_string[MAX_CIPHER_LENGTH];
     for (int i = 0; i < cipher_len; i++) {
         plaintext_string[i] = best_decrypted[i] + 'A';
@@ -896,22 +909,59 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
         n_words_found = find_dictionary_words(plaintext_string, shared->dict, shared->n_dict_words, shared->max_dict_word_len);
     }
 
+    // Populate the result (into the caller's buffer if supplied, else a local).
+    SolveResult local_res;
+    SolveResult *res = result ? result : &local_res;
+    res->solved = true;
+    res->cipher_type = cfg->cipher_type;
+    res->score = best_score;
+    res->n_words = n_words_found;
+    res->cycleword_len = best_cycleword_length;
+    vec_copy(best_plaintext_keyword, res->plaintext_keyword, ALPHABET_SIZE);
+    vec_copy(best_ciphertext_keyword, res->ciphertext_keyword, ALPHABET_SIZE);
+    vec_copy(best_cycleword, res->cycleword, best_cycleword_length);
+    vec_copy(best_decrypted, res->decrypted, cipher_len);
+    res->decrypted_len = cipher_len;
+
+    report_solution(cfg, cribtext_str, cipher_indices, res);
+}
+
+
+
+// Prints the human-readable result block and the ">>> ..." one-line CSV summary
+// from a populated SolveResult. Output is byte-for-byte the same as the inline
+// reporting it replaced, so batch grep/sort over the ">>>" lines is unaffected.
+void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
+    int cipher_indices[], SolveResult *res) {
+
+    int cipher_len = res->decrypted_len;
+    int n_cribs = 0;
+    for (int i = 0; cribtext_str[i] != '\0'; i++) if (cribtext_str[i] != '_') n_cribs++;
+
+    if (cfg->transperoffset_present) {
+        printf("\ntransperiodoffset: period = %d, offset = %d\n", cfg->trans_period, cfg->trans_offset);
+    }
+
+    if (cfg->transmatrix_present) {
+        printf("\ntransmatrix: w1 = %d, w2 = %d, direction = %s\n", cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise ? "cw" : "ccw");
+    }
+
     // Results Output
-    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
-    
+    printf("\nResult Score: %.2f | Words: %d\n", res->score, res->n_words);
+
     print_text(cipher_indices, cipher_len);
     printf("\n");
-    
+
     if (cfg->cipher_type != PORTA) {
-        print_text(best_plaintext_keyword, ALPHABET_SIZE);
+        print_text(res->plaintext_keyword, ALPHABET_SIZE);
         printf("\n");
-        print_text(best_ciphertext_keyword, ALPHABET_SIZE);
+        print_text(res->ciphertext_keyword, ALPHABET_SIZE);
         printf("\n");
     }
-    
-    print_text(best_cycleword, best_cycleword_length);
+
+    print_text(res->cycleword, res->cycleword_len);
     printf("\n");
-    print_text(best_decrypted, cipher_len);
+    print_text(res->decrypted, cipher_len);
     printf("\n");
     printf("%s\n", cribtext_str);
 
@@ -923,7 +973,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
             if (cribtext_str[i] == '_') {
                 printf("_"); // No crib defined for this position.
             } else {
-                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(res->decrypted[i] - (cribtext_str[i] - 'A'));
                 if (diff < 10) {
                     printf("%d", diff);
                 } else {
@@ -937,38 +987,38 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     // One-liner summary
     if (cfg->transperoffset_present) {
         if (cfg->dictionary_present) {
-            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", res->score, res->n_words, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %d, %s, ", res->score, cfg->cipher_type, cfg->trans_period, cfg->trans_offset, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
     } else if (cfg->transmatrix_present) {
         if (cfg->dictionary_present) {
-            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", res->score, res->n_words, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", res->score, cfg->cipher_type, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
     } else {
         if (cfg->dictionary_present) {
-            printf(">>> %.2f, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+            printf(">>> %.2f, %d, %d, %s, ", res->score, res->n_words, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
-        }        
+            printf(">>> %.2f, %d, %s, ", res->score, cfg->cipher_type, cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+        }
     }
-    
+
     print_text(cipher_indices, cipher_len);
     printf(", ");
-    
+
     if (cfg->cipher_type != PORTA) {
-        print_text(best_plaintext_keyword, ALPHABET_SIZE);
+        print_text(res->plaintext_keyword, ALPHABET_SIZE);
         printf(", ");
-        print_text(best_ciphertext_keyword, ALPHABET_SIZE);
+        print_text(res->ciphertext_keyword, ALPHABET_SIZE);
         printf(", ");
     }
-    
-    print_text(best_cycleword, best_cycleword_length);
+
+    print_text(res->cycleword, res->cycleword_len);
     printf(", ");
-    
-    print_text(best_decrypted, cipher_len);
+
+    print_text(res->decrypted, cipher_len);
     printf("\n");
 }
 
@@ -2365,213 +2415,9 @@ double shotgun_hill_climber(
 
 
 
-/*
-   derive_optimal_cycleword
-   ========================
-
-   Determines the statistically most likely cycleword (key) for a given set of 
-   plaintext and ciphertext alphabets using a "Shotgun-Hill-Climb" hybrid approach. 
-   Instead of perturbing the cycleword stochastically, this routine deterministically 
-   solves for the optimal key character for each column of the period.
-
-   ## Mathematical Model
-
-   Let $L$ be the period (cycleword length) and $C$ be the ciphertext message 
-   of length $N$. We partition $C$ into $L$ columns, where the $k$-th column 
-   $C^{(k)}$ consists of all characters $C_i$ such that $i \equiv k \pmod L$.
-
-   For each column $k \in \{0, \dots, L-1\}$, we seek the key character $K_k$ 
-   that maximizes the correlation between the decrypted column's frequency 
-   distribution and the expected English letter frequencies.
-
-   ## Optimization Problem
-
-   For every possible key shift index $s \in \{0, \dots, 25\}$ (representing a 
-   candidate character from the Ciphertext Keyword):
-
-   1. **Decryption**: Generate a candidate plaintext vector $\mathbf{P}_s$ by 
-      decrypting every character $c \in C^{(k)}$ using shift $s$. The decryption 
-      function $D(c, s)$ depends on the cipher type (Quagmire, Beaufort, Porta, etc.):
-      
-      $$P = D(c, s)$$
-
-   2. **Frequency Analysis**: Compute the frequency count vector $\mathbf{f}^{(s)}$ 
-      for the candidate plaintext $\mathbf{P}_s$, where $f^{(s)}_i$ is the count 
-      of the $i$-th letter of the alphabet.
-
-   3. **Scoring (Dot Product)**: Calculate the fitness score $S_s$ using the 
-      dot product of the candidate frequencies and standard English monogram 
-      probabilities $\mathbf{E}$:
-      
-      $$S_s = \mathbf{f}^{(s)} \cdot \mathbf{E} = \sum_{i=0}^{25} f^{(s)}_i \times E_i$$
-
-   4. **Selection**: The optimal key character $K_k$ for column $k$ is the one 
-      that maximizes the score:
-      
-      $$K_k = \text{argmax}_{s} (S_s)$$
-
-   ## Decryption Functions $D(c, s)$
-
-   The relationship between Plaintext ($P$), Ciphertext ($C$), and Key Shift ($s$) 
-   varies by cipher type. Let $idx(x)$ denote the alphabet index of character $x$:
-
-   * **Vigenère / Beaufort**:
-       Standard arithmetic modulo 26.
-       $$D_{vig}(c, s) = (c - s) \pmod{26}$$
-       $$D_{beau}(c, s) = (s - c) \pmod{26}$$
-
-   * **Porta**:
-       The shift $S$ is determined by $\lfloor s/2 \rfloor$. The alphabet is 
-       split into halves $H_1=[0,12]$ and $H_2=[13,25]$.
-       $$D_{porta}(c, s) = \begin{cases} 
-       (c + \lfloor s/2 \rfloor) \pmod{13} + 13 & \text{if } c \in H_1 \\ 
-       (c - 13 - \lfloor s/2 \rfloor) \pmod{13} & \text{if } c \in H_2 
-       \end{cases}$$
-
-   * **Quagmire (I-IV)**:
-       Uses keyed alphabets. Let $A_{pt}$ and $A_{ct}$ be the plaintext and 
-       ciphertext alphabet permutation arrays. The shift $s$ represents the 
-       offset of the sliding $A_{ct}$ relative to $A_{pt}$.
-       
-       First, find the position $p_{kw}$ of the ciphertext char in $A_{ct}$.
-       Then, calculate the target index $i$:
-       $$i = (p_{kw} - s) \pmod{26}$$
-       Finally, map back to the plaintext character:
-       $$P = A_{pt}[i]$$
-*/
-
-void derive_optimal_cycleword(
-    PolyalphabeticConfig *cfg, 
-    int cipher_indices[], int cipher_len,
-    int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
-    int cycleword_state[], int cycleword_len) {
-
-    int col, row, i, shift, best_shift_index;
-    int ct_char, pt_char, pt_idx_calc;
-    int posn_keyword, posn_cycleword;
-    double best_score, current_score;
-    int char_counts[ALPHABET_SIZE];
-    int total_count;
-
-    // Pre-calculate lookup table for ciphertext keyword positions to speed up the loop
-    int ct_key_lookup[ALPHABET_SIZE];
-    for (i = 0; i < ALPHABET_SIZE; i++) ct_key_lookup[i] = -1;
-    for (i = 0; i < ALPHABET_SIZE; i++) {
-        // We map the CHAR (0-25) to its POSITION (0-25) in the CT keyword
-        ct_key_lookup[ciphertext_keyword_indices[i]] = i;
-    }
-
-    // Iterate over each column of the period
-    for (col = 0; col < cycleword_len; col++) {
-        best_score = -1.0;
-        best_shift_index = 0; // This will be the index in the CT keyword
-
-        // Try all 26 possible shifts (letters of the cycleword)
-        for (shift = 0; shift < ALPHABET_SIZE; shift++) {
-            
-            // Reset counts
-            for (i = 0; i < ALPHABET_SIZE; i++) char_counts[i] = 0;
-            total_count = 0;
-
-            // Decrypt this column using the current 'shift'
-            row = 0;
-            while ((row * cycleword_len + col) < cipher_len) {
-                ct_char = cipher_indices[row * cycleword_len + col];
-                
-                // Look up position of CT char in CT keyword
-                posn_keyword = ct_key_lookup[ct_char];
-                
-                // If the char isn't in the keyed alphabet (shouldn't happen if full alphabet), skip
-                if (posn_keyword == -1) { row++; continue; }
-
-                // The 'shift' variable represents the cycleword character's index (0-25)
-                int key_char_index = shift;
-
-                if (cfg->cipher_type == PORTA) {
-                    // === PORTA CIPHER DECRYPTION LOGIC (ACA Standard) ===
-                    
-                    int pt_val = ct_char; // Ciphertext index is the input
-                    int key_val = key_char_index; 
-                    
-                    // The Porta shift is floor(key_index / 2), from 0 to 12
-                    int porta_shift = key_val / 2;
-
-                    // Porta Decryption (which is reciprocal)
-                    if (pt_val < 13) { 
-                        // CT in A-M (0-12) -> PT in N-Z (13-25). Formula: P = (C + S) mod 13 + 13
-                        pt_char = (pt_val + porta_shift) % 13 + 13;
-                    } else { 
-                        // CT in N-Z (13-25) -> PT in A-M (0-12). Formula: P = (C - 13 - S) mod 13
-                        pt_char = (pt_val - 13 - porta_shift + ALPHABET_SIZE) % 13;
-                    }
-                } else if (cfg->cipher_type == BEAUFORT) { 
-                    // === BEAUFORT DECRYPTION LOGIC: P = K - C (mod 26) ===
-                    // The 'shift' variable is the Key index K, and ct_char is the Cipher index C.
-                    int k_val = key_char_index; 
-                    int c_val = ct_char;
-                    
-                    // P = K - C (mod 26)
-                    pt_char = (k_val - c_val + ALPHABET_SIZE) % ALPHABET_SIZE;   
-                } else if (cfg->cipher_type == VIGENERE) { 
-                    // === VIGENERE DECRYPTION LOGIC: P = C - K (mod 26) (Non-variant)
-                    //                                P = K - C (mod 26) (Variant/Reciprocal) ===
-                    
-                    int c_val = ct_char; // Ciphertext char index
-                    int k_val = key_char_index; // Key char index (shift)
-
-                    if (cfg->variant) {
-                        // Vigenere Variant (or Reciprocal Vigenere, equivalent to Beaufort)
-                        pt_char = (k_val - c_val + ALPHABET_SIZE) % ALPHABET_SIZE;
-                    } else {
-                        // Standard Vigenere: P = C - K (mod 26)
-                        pt_char = (c_val - k_val + ALPHABET_SIZE) % ALPHABET_SIZE;
-                    }
-                } else {
-                    // === QUAGMIRE / BEAUFORT DECRYPTION LOGIC ===
-                    
-                    // The 'shift' variable acts as 'posn_cycleword'
-                    posn_cycleword = key_char_index;
-
-                    // Quagmire Decryption Math
-                    if (cfg->variant) {
-                        pt_idx_calc = (posn_keyword + posn_cycleword) % ALPHABET_SIZE;
-                    } else {
-                        pt_idx_calc = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
-                    }
-                    if (pt_idx_calc < 0) pt_idx_calc += ALPHABET_SIZE;
-
-                    // Map index back to Plaintext Character
-                    pt_char = plaintext_keyword_indices[pt_idx_calc];
-                }
-
-                char_counts[pt_char]++;
-                total_count++;
-                row++;
-            }
-
-            // Calculate Dot Product Score (Frequency * English Probability)
-            current_score = 0.0;
-            if (total_count > 0) {
-                for (i = 0; i < ALPHABET_SIZE; i++) {
-                    // english_monograms is defined in quagmire.h
-                    current_score += ((double)char_counts[i]) * english_monograms[i];
-                }
-                // Normalize isn't strictly necessary for comparison, but good for debug
-                current_score /= total_count; 
-            }
-
-            // Maximizing Dot Product finds the best fit
-            if (current_score > best_score) {
-                best_score = current_score;
-                best_shift_index = shift;
-            }
-        }
-
-        // Set the best cycleword character for this column
-        // Note: The state stores the CHARACTER, not the index.
-        cycleword_state[col] = ciphertext_keyword_indices[best_shift_index];
-    }
-}
+// derive_optimal_cycleword() lives in optimal_cycleword.c (prototype in the
+// shared header). It deterministically solves each period column for the key
+// character that best matches English monogram frequencies.
 
 
 int get_matrix_rotate_old_idx(int target_idx, int len, int width, int clockwise) {
