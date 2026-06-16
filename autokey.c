@@ -14,7 +14,16 @@ void autokey_encrypt(PolyalphabeticConfig *cfg, int ciphertext[], int plaintext_
     int primer_indices[], int primer_len) {
 
     int key_stream[MAX_CIPHER_LENGTH + MAX_KEYWORD_LEN];
-    int i, j;
+    int i;
+
+    // Invert both keyed alphabets once: the message char comes from the PT
+    // alphabet, the key char from the CT alphabet. Replaces two per-character
+    // linear 26-scans with O(1) lookups.
+    int pt_inverse[ALPHABET_SIZE], ct_inverse[ALPHABET_SIZE];
+    for (i = 0; i < ALPHABET_SIZE; i++) {
+        pt_inverse[plaintext_keyword_indices[i]] = i;
+        ct_inverse[ciphertext_keyword_indices[i]] = i;
+    }
 
     // Key stream = primer, then the plaintext (autokey feedback).
     for (i = 0; i < primer_len; i++) key_stream[i] = primer_indices[i];
@@ -40,21 +49,8 @@ void autokey_encrypt(PolyalphabeticConfig *cfg, int ciphertext[], int plaintext_
         }
         else {
             // Quagmire/Vigenere Autokey.
-            int p_idx = -1;
-            for (j = 0; j < ALPHABET_SIZE; j++) {
-                if (p_char == plaintext_keyword_indices[j]) {
-                    p_idx = j;
-                    break;
-                }
-            }
-
-            int k_idx = -1;
-            for (j = 0; j < ALPHABET_SIZE; j++) {
-                if (k_char == ciphertext_keyword_indices[j]) {
-                    k_idx = j;
-                    break;
-                }
-            }
+            int p_idx = pt_inverse[p_char];
+            int k_idx = ct_inverse[k_char];
 
             int indx;
             if (cfg->variant) {
@@ -78,8 +74,15 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
     
     int key_stream[MAX_CIPHER_LENGTH + MAX_KEYWORD_LEN];
     int key_stream_len = primer_len;
-    int i, j;
-    
+    int i;
+
+    // Invert the CT keyed alphabet once: ct_inverse[char] = its position. Both the
+    // ciphertext char and the key char are looked up in the CT alphabet, so this
+    // replaces the two per-character linear 26-scans with O(1) lookups. (Mirrors
+    // the optimization already in quagmire_decrypt; this is the autokey hot path.)
+    int ct_inverse[ALPHABET_SIZE];
+    for (i = 0; i < ALPHABET_SIZE; i++) ct_inverse[ciphertext_keyword_indices[i]] = i;
+
     // Initialise key stream with the primer.
     for (i = 0; i < primer_len; i++) {
         key_stream[i] = primer_indices[i];
@@ -105,21 +108,8 @@ void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indi
         } 
         else {
             // Quagmire/Vigenere Autokey.
-            int posn_keyword = -1;
-            for (j = 0; j < ALPHABET_SIZE; j++) {
-                if (ct_char == ciphertext_keyword_indices[j]) {
-                    posn_keyword = j; 
-                    break;
-                }
-            }
-
-            int posn_key_char = -1;
-            for (j = 0; j < ALPHABET_SIZE; j++) {
-                if (k_char == ciphertext_keyword_indices[j]) {
-                    posn_key_char = j; 
-                    break;
-                }
-            }
+            int posn_keyword = ct_inverse[ct_char];
+            int posn_key_char = ct_inverse[k_char];
 
             int indx;
             if (cfg->variant) {

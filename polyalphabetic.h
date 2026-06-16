@@ -273,11 +273,17 @@ double shotgun_hill_climber(
 	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
 	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[MAX_CYCLEWORD_LEN]);
 
+// hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
+// histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher
+// char c in column col for this cycleword_len). It depends only on the (fixed)
+// ciphertext and cycleword_len, so the caller computes it once per
+// shotgun_hill_climber call instead of every derive. Pass NULL to have the
+// routine build it locally (standalone/test use).
 void derive_optimal_cycleword(
-    PolyalphabeticConfig *cfg, 
+    PolyalphabeticConfig *cfg,
     int cipher_indices[], int cipher_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
-    int cycleword_state[], int cycleword_len);
+    int cycleword_state[], int cycleword_len, int *hist_by_col);
 
 // Helpers
 int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len);

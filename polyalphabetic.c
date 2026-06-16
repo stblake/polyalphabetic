@@ -1912,6 +1912,36 @@ double shotgun_hill_climber(
 
     best_score = 0.;
 
+    // Per-column ciphertext histogram for the optimal-cycleword solver. It
+    // depends only on the (fixed) ciphertext and this cycleword_len, so build it
+    // once here rather than on every derive_optimal_cycleword call. Layout:
+    // hist_by_col[col*ALPHABET_SIZE + c] = count of cipher char c in column col.
+    static int hist_by_col[MAX_CYCLEWORD_LEN * ALPHABET_SIZE];
+    int *hist_arg = NULL;
+    if (cfg->optimal_cycleword && !is_autokey) {
+        for (i = 0; i < cycleword_len * ALPHABET_SIZE; i++) hist_by_col[i] = 0;
+        int cw_idx = 0;
+        for (i = 0; i < cipher_len; i++) {
+            hist_by_col[cw_idx * ALPHABET_SIZE + cipher_indices[i]]++;
+            if (++cw_idx == cycleword_len) cw_idx = 0;
+        }
+        hist_arg = hist_by_col;
+    }
+
+    // Vigenere/Beaufort/Porta in optimal-cycleword mode use FIXED straight
+    // alphabets and a deterministically-derived cycleword, so every restart and
+    // every hill-climb iteration recomputes the identical state and score. The
+    // full loop therefore just repeats restart 0 / iteration 0's result. Detect
+    // this and stop as soon as that best is recorded -- the reported best state
+    // (and verbose output, which only fires on the first improvement) is
+    // bit-for-bit what the full loop would have produced. (same_key_cycle ties
+    // the cycleword to the keyword and breaks the determinism, so exclude it.)
+    bool deterministic_optimal = cfg->optimal_cycleword && !is_autokey &&
+        !cfg->same_key_cycle &&
+        (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT ||
+         cfg->cipher_type == PORTA);
+    bool det_done = false;
+
     for (n = 0; n < cfg->n_restarts; n++) {
 
         if (best_score > 0. && frand() < cfg->backtracking_probability) {
@@ -2061,9 +2091,9 @@ double shotgun_hill_climber(
 
             // If in optimal mode, fix the cycleword immediately for the initial random state
             if (cfg->optimal_cycleword && ! is_autokey) {
-                derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
-                    current_plaintext_keyword_state, current_ciphertext_keyword_state, 
-                    current_cycleword_state, cycleword_len);
+                derive_optimal_cycleword(cfg, cipher_indices, cipher_len,
+                    current_plaintext_keyword_state, current_ciphertext_keyword_state,
+                    current_cycleword_state, cycleword_len, hist_arg);
             }
 
             decrypt_state(cfg, cipher_indices, cipher_len, 
@@ -2086,7 +2116,12 @@ double shotgun_hill_climber(
             // perturbate.
             vec_copy(current_plaintext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
             vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
-            vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
+            // In optimal-cycleword mode derive_optimal_cycleword (below) rewrites
+            // every entry of local_cycleword_state unconditionally before it is
+            // read, so seeding it from current_cycleword_state here is dead work.
+            // The stochastic path does perturb it in place, so it still needs the copy.
+            if (!(cfg->optimal_cycleword && !is_autokey))
+                vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
 
             bool did_perturb_keyword = false; 
             
@@ -2233,9 +2268,9 @@ double shotgun_hill_climber(
                 }
 
                 // Derive the optimal cycleword for the (possibly new) keyword state
-                derive_optimal_cycleword(cfg, cipher_indices, cipher_len, 
-                    local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                    local_cycleword_state, cycleword_len);
+                derive_optimal_cycleword(cfg, cipher_indices, cipher_len,
+                    local_plaintext_keyword_state, local_ciphertext_keyword_state,
+                    local_cycleword_state, cycleword_len, hist_arg);
 
             } else {
                 // Stochastic Mode: Perturb Keyword OR Cycleword.
@@ -2374,8 +2409,11 @@ double shotgun_hill_climber(
 
                     fflush(stdout);
                 }
+                if (deterministic_optimal) det_done = true;
             }
+            if (det_done) break;   // nothing further can change; see comment above
         }
+        if (det_done) break;
     }
 
     vec_copy(best_plaintext_keyword_state, plaintext_keyword, ALPHABET_SIZE);
@@ -2711,6 +2749,18 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     int index, base;
     double score = 0.;
 
+    // pow(ALPHABET_SIZE, ngram_size) is a positive constant for the whole run
+    // (ngram_size never changes), yet was previously recomputed via a libm pow()
+    // on EVERY score -- i.e. every hill-climber iteration. Memoize it. pow()
+    // returns the identical double for identical args, so the cached value equals
+    // the recomputed one bit-for-bit; the score is unchanged.
+    static int cached_ngram_size = -1;
+    static double scale = 0.;
+    if (ngram_size != cached_ngram_size) {
+        scale = pow(ALPHABET_SIZE, ngram_size);
+        cached_ngram_size = ngram_size;
+    }
+
     for (int i = 0; i < cipher_len - ngram_size + 1; i++) {
         index = 0;
         base = 1;
@@ -2720,7 +2770,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
         }
         score += ngram_data[index];
     }
-    score = pow(ALPHABET_SIZE,ngram_size)*score/(cipher_len - ngram_size);
+    score = scale*score/(cipher_len - ngram_size);
     return score;
 }
 

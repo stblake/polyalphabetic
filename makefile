@@ -2,7 +2,7 @@
 #   makefile
 #
 
-CC=gcc -Wall -O3 
+CC=gcc -Wall -O3 -funroll-loops
 
 # CC=gcc -Wall -lm -g -O0 
 

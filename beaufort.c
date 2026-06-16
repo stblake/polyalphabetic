@@ -28,11 +28,12 @@
 void beaufort_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
     int cycleword_indices[], int cycleword_len) {
     
-    int i, c_val, k_val, p_val;
+    int i, c_val, k_val, p_val, cw_idx = 0;
 
     for (i = 0; i < cipher_len; i++) {
         c_val = cipher_indices[i]; // Cipher index (C)
-        k_val = cycleword_indices[i % cycleword_len]; // Key index (K)
+        k_val = cycleword_indices[cw_idx]; // Key index (K)
+        if (++cw_idx == cycleword_len) cw_idx = 0;
 
         // Beaufort Decryption: P = K - C (mod 26)
         p_val = (k_val - c_val + ALPHABET_SIZE) % ALPHABET_SIZE;

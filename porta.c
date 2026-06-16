@@ -48,11 +48,12 @@ void porta_core(int output[], int input[], int len, int cycleword_indices[], int
 
 
 void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len) {
-    int i, input_val, key_val, shift;
+    int i, input_val, key_val, shift, cw_idx = 0;
 
     for (i = 0; i < len; i++) {
         input_val = input[i]; // Input index (0-25)
-        key_val = cycleword_indices[i % cycleword_len]; // Key index (0-25)
+        key_val = cycleword_indices[cw_idx]; // Key index (0-25)
+        if (++cw_idx == cycleword_len) cw_idx = 0;
 
         // The Porta shift value (0-12)
         shift = key_val / 2;

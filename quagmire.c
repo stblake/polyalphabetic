@@ -85,9 +85,13 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     int cw_pos[MAX_CYCLEWORD_LEN];
     for (i = 0; i < cycleword_len; i++) cw_pos[i] = ct_inverse[cycleword_indices[i]];
 
+    // Walk the period with an increment-and-wrap counter instead of `i %
+    // cycleword_len`, removing an integer division from every character.
+    int cw_idx = 0;
     for (i = 0; i < cipher_len; i++) {
         posn_keyword = ct_inverse[cipher_indices[i]];
-        posn_cycleword = cw_pos[i % cycleword_len];
+        posn_cycleword = cw_pos[cw_idx];
+        if (++cw_idx == cycleword_len) cw_idx = 0;
 
         if (variant) {
             indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
@@ -119,9 +123,11 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     int cw_pos[MAX_CYCLEWORD_LEN];
     for (i = 0; i < cycleword_len; i++) cw_pos[i] = ct_inverse[cycleword_indices[i]];
 
+    int cw_idx = 0;
     for (i = 0; i < cipher_len; i++) {
         posn_keyword = pt_inverse[plaintext_indices[i]];
-        posn_cycleword = cw_pos[i % cycleword_len];
+        posn_cycleword = cw_pos[cw_idx];
+        if (++cw_idx == cycleword_len) cw_idx = 0;
 
         if (variant) {
             indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;

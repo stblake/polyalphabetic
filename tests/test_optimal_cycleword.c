@@ -75,7 +75,7 @@ static void check_recovery(const char *name, int cipher_type, int variant,
         quagmire_encrypt(C, P, len, pt, ct, planted_cw, cwlen, variant);
     }
 
-    derive_optimal_cycleword(&cfg, C, len, pt, ct, recovered_cw, cwlen);
+    derive_optimal_cycleword(&cfg, C, len, pt, ct, recovered_cw, cwlen, NULL);
 
     CHECK(arrays_equal(recovered_cw, planted_cw, cwlen),
         "%s: recovered cycleword != planted (cwlen=%d, len=%d)", name, cwlen, len);
@@ -107,7 +107,7 @@ int main(void) {
         for (int i = 0; i < cwlen; i++) planted[i] = 2 * rand_int(0, 13); // even chars
         porta_encrypt(C, P, len, planted, cwlen);
         PolyalphabeticConfig cfg; cfg.cipher_type = cipher_type; cfg.variant = 0;
-        derive_optimal_cycleword(&cfg, C, len, straight, straight, recovered, cwlen);
+        derive_optimal_cycleword(&cfg, C, len, straight, straight, recovered, cwlen, NULL);
         int ok = 1;
         for (int i = 0; i < cwlen; i++) if (recovered[i] / 2 != planted[i] / 2) ok = 0;
         CHECK(ok, "porta: recovered shift (floor key/2) != planted");
