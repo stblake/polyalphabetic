@@ -213,7 +213,10 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant);
 
 // Autokey
-void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[], 
+void autokey_encrypt(PolyalphabeticConfig *cfg, int ciphertext[], int plaintext_indices[],
+    int plaintext_len, int plaintext_keyword[], int ciphertext_keyword[],
+    int primer_indices[], int primer_len);
+void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[],
     int cipher_len, int plaintext_keyword[], int ciphertext_keyword[],
     int key_indices[], int key_len);
 

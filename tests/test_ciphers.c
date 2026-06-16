@@ -177,6 +177,113 @@ static void test_quagmire_matches_vigenere(void) {
     }
 }
 
+// --- Autokey (Vigenere / Quagmire / Beaufort / Porta tableaus) ------------
+//
+// Plaintext autokey: the key stream is the primer followed by the plaintext.
+// autokey_encrypt is the inverse of autokey_decrypt, so the round-trip invariant
+// holds; the known-answer vectors below are taken verbatim from the reference
+// implementation in autokey.ipynb and pin the actual convention per tableau.
+
+// cfg carries only cipher_type + variant for the autokey primitives.
+static void autokey_cfg(PolyalphabeticConfig *cfg, int cipher_type, int variant) {
+    memset(cfg, 0, sizeof *cfg);
+    cfg->cipher_type = cipher_type;
+    cfg->variant = variant;
+}
+
+static void autokey_kat(const char *name, int cipher_type, int variant,
+    const char *pt_kw, const char *ct_kw, const char *primer,
+    const char *pt, const char *expected) {
+
+    PolyalphabeticConfig cfg;
+    autokey_cfg(&cfg, cipher_type, variant);
+
+    int len = (int) strlen(pt);
+    int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], back[MAX_CIPHER_LENGTH], exp[MAX_CIPHER_LENGTH];
+    int ptkw[ALPHABET_SIZE], ctkw[ALPHABET_SIZE], pr[MAX_CYCLEWORD_LEN];
+
+    str_to_indices(pt, P);
+    str_to_indices(expected, exp);
+    if (pt_kw) make_keyed_alphabet((char *) pt_kw, ptkw); else straight_alphabet(ptkw, ALPHABET_SIZE);
+    if (ct_kw) make_keyed_alphabet((char *) ct_kw, ctkw); else straight_alphabet(ctkw, ALPHABET_SIZE);
+    str_to_indices(primer, pr);
+    int prlen = (int) strlen(primer);
+
+    autokey_encrypt(&cfg, C, P, len, ptkw, ctkw, pr, prlen);
+    CHECK(arrays_equal(C, exp, len), "%s encrypt KAT mismatch", name);
+
+    autokey_decrypt(&cfg, back, C, len, ptkw, ctkw, pr, prlen);
+    CHECK(arrays_equal(back, P, len), "%s decrypt round-trip mismatch", name);
+}
+
+static void test_autokey_known_answer(void) {
+    const char *cia =
+        "CIAMARKERONTHEGROUNDEASTNORTHEASTOFKRYPTOSDECODEUSINGSETTHEORY"
+        "BERLINCLOCKANDFOLLOWMARKERDIRECTION";
+
+    // Auto0 (Vigenere tableau), standard and variant.
+    autokey_kat("auto0-std", AUTOKEY_0, 0, NULL, NULL, "PRIMER",
+        "DOYOULIKETHESUMMARY", "SFGAYCLYCHBPAEQFHVQ");
+    autokey_kat("auto0-var", AUTOKEY_0, 1, NULL, NULL, "PRIMER",
+        "DOYOULIKETHESUMMARY", "OXQCQUFWGFNTKKITTNG");
+
+    // Auto1 (Quagmire I: keyed PT, straight CT), variant.
+    autokey_kat("auto1-var", AUTOKEY_1, 1, "KRYPTOS", NULL, "GIRASOL", cia,
+        "DHQSPNPJTFHEXBJKRIADHBPQZSYAOTOTQOTTXCLLRBAULQRXDDLRZDHKMGYZJY"
+        "PSUNBCLQBSPZGIBRPHFKPCNPANODBUZAYCL");
+
+    // Auto3 (Quagmire III: same keyed PT & CT), standard.
+    autokey_kat("auto3-std", AUTOKEY_3, 0, "KRYPTOS", "KRYPTOS", "GIRASOL", cia,
+        "VTBZGSLQJFEEIEXYDHWXVQACHXEIULEZCSJHFCCBDMDFEBHJRJKYMJVZDPTMAG"
+        "FIIYQQEZJDLVFNPDKLFJYNSLYSAABFCIJIB");
+
+    // Autokey Beaufort and Porta tableaus.
+    autokey_kat("autobeau", AUTOKEY_BEAU, 0, NULL, NULL, "GIRASOL", cia,
+        "EAROSXBYRMZHKGYAATGEAGZVHZMLTOTVVDOXNCDAANHNWBQKYLWPILABZBJSBG"
+        "SPQTGEWQQPBIAZGARZMRRFXBHXTEJNILJPV");
+    autokey_kat("autoporta", AUTOKEY_PORTA, 0, NULL, NULL, "GIRASOL", cia,
+        "SZVZWKPSABHGPWVJHBETTQKMDIDEUNWMMGONCLGKHDVZOHZYLEXMNETJKYXLIJ"
+        "XNBNPFOYMXPRHRXHZQBDNPKPWKOOEZUEQAJ");
+}
+
+// Round-trip across all autokey tableaus, primer lengths and (where meaningful)
+// the variant flag. The quag-family math is identical for auto0-4 -- the type
+// only fixes which alphabet is straight -- so random PT/CT alphabets under
+// AUTOKEY_4 cover that whole family; AUTOKEY_BEAU/PORTA exercise the reciprocal
+// tableaus (which ignore the keywords and variant).
+static void test_autokey_roundtrip(void) {
+    int types[] = {AUTOKEY_4, AUTOKEY_BEAU, AUTOKEY_PORTA};
+    int lens[] = {1, 26, 97, 336};
+    int prlens[] = {1, 4, 7};
+
+    for (int ti = 0; ti < 3; ti++) {
+        for (int li = 0; li < 4; li++) {
+            int len = lens[li];
+            for (int pi = 0; pi < 3; pi++) {
+                int prlen = prlens[pi];
+                for (int variant = 0; variant <= 1; variant++) {
+                    PolyalphabeticConfig cfg;
+                    autokey_cfg(&cfg, types[ti], variant);
+
+                    int pt[ALPHABET_SIZE], ct[ALPHABET_SIZE], pr[MAX_CYCLEWORD_LEN];
+                    int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], back[MAX_CIPHER_LENGTH];
+
+                    random_alphabet(pt);
+                    random_alphabet(ct);
+                    random_text(P, len);
+                    for (int i = 0; i < prlen; i++) pr[i] = rand_int(0, ALPHABET_SIZE);
+
+                    autokey_encrypt(&cfg, C, P, len, pt, ct, pr, prlen);
+                    autokey_decrypt(&cfg, back, C, len, pt, ct, pr, prlen);
+                    CHECK(arrays_equal(back, P, len),
+                        "autokey round-trip type=%d len=%d prlen=%d variant=%d",
+                        types[ti], len, prlen, variant);
+                }
+            }
+        }
+    }
+}
+
 int main(void) {
     seed_rand(20240617u);
 
@@ -186,6 +293,8 @@ int main(void) {
     test_porta();
     test_quagmire_roundtrip();
     test_quagmire_matches_vigenere();
+    test_autokey_known_answer();
+    test_autokey_roundtrip();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     if (failures) {

@@ -125,6 +125,35 @@ void straight_alphabet(int keyword[], int len) {
     for (int i = 0; i < len; i++) keyword[i] = i;
 }
 
+// Build a keyed alphabet (as 0-25 indices) from a keyword string: the keyword's
+// distinct letters in order, then the remaining letters in alphabetical order.
+void make_keyed_alphabet(char *keyword_str, int *output_indices) {
+    int i, char_idx;
+    int seen[ALPHABET_SIZE];
+    int current_pos = 0;
+    int len = strlen(keyword_str);
+
+    for(i = 0; i < ALPHABET_SIZE; i++) seen[i] = 0;
+
+    // Process keyword string.
+    for(i = 0; i < len; i++) {
+        char_idx = toupper(keyword_str[i]) - 'A';
+        if(char_idx >= 0 && char_idx < ALPHABET_SIZE) {
+            if(!seen[char_idx]) {
+                output_indices[current_pos++] = char_idx;
+                seen[char_idx] = 1;
+            }
+        }
+    }
+
+    // Fill remaining alphabet.
+    for(i = 0; i < ALPHABET_SIZE; i++) {
+        if(!seen[i]) {
+            output_indices[current_pos++] = i;
+        }
+    }
+}
+
 
 
 bool file_exists(const char *filename) {
