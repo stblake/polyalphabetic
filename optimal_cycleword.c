@@ -65,56 +65,87 @@ void derive_optimal_cycleword(
     int ct_key_lookup[ALPHABET_SIZE];
     for (i = 0; i < ALPHABET_SIZE; i++) ct_key_lookup[ciphertext_keyword_indices[i]] = i;
 
-    // The 26x26 monogram-weight table depends only on (cipher_type, variant, and
-    // the two keyed alphabets). For fixed-keyword ciphers (Vigenere/Beaufort/
-    // Porta) the keywords never change, so it is built once for the whole run;
-    // for Quagmire it is rebuilt only on calls where a keyword actually changed.
-    // We detect change by comparing the inputs against the cached ones (52 int
-    // compares + a couple of scalars -- far cheaper than recomputing 676 entries
-    // with per-cell branches and mods). The rebuilt values are identical to the
-    // old code's, so derived cyclewords are bit-for-bit unchanged.
+    // Quagmire I-IV are handled by a factored fast path (below); the cached 26x26
+    // weight table is only built for the keyword-free ciphers.
+    int is_quag = !(cfg->cipher_type == PORTA || cfg->cipher_type == BEAUFORT ||
+                    cfg->cipher_type == VIGENERE);
+
+    // Quagmire factoring.
+    // ===================
+    // For Quagmire the per-shift, per-char monogram weight is
+    //
+    //     weight[s][c] = monogram[ pt_kw[ (pos[c] -/+ s) mod 26 ] ]
+    //
+    // where pos[c] = ct_key_lookup[c] is c's position in the CT keyed alphabet and
+    // -/+ selects standard/variant. The right-hand monogram depends on the PT
+    // keyword ONLY through the 26-vector
+    //
+    //     M[q] = monogram[ pt_kw[q] ],
+    //
+    // so weight[s][c] = M[(pos[c] -/+ s) mod 26]. Building M (26 entries) per call
+    // and indexing it directly replaces the previous 676-entry weight-table
+    // rebuild, which never cached for Quagmire because the keyword changes on
+    // essentially every hill-climb iteration -- the dominant cost of the default
+    // -optimalcycle climb. To drop the per-access `mod 26`, M is laid out twice
+    // back-to-back in Mext[0..51] (Mext[i] = M[i % 26]); then for nonzero column
+    // entries at position p = pos[c],
+    //
+    //     standard: weight = Mext[p + 26 - s]   (p+26-s in 1..51)
+    //     variant : weight = Mext[p + s]        (p+s    in 0..50).
+    //
+    // The looked-up double is bit-for-bit the old weight[s][c] (same monogram
+    // array element), and the per-shift dot product keeps the same operands and
+    // summation order, so every column's argmax -- and the derived cycleword -- is
+    // unchanged.
+    double Mext[2 * ALPHABET_SIZE];
+    if (is_quag) {
+        for (i = 0; i < ALPHABET_SIZE; i++) {
+            double m = english_monograms[plaintext_keyword_indices[i]];
+            Mext[i] = m;
+            Mext[i + ALPHABET_SIZE] = m;
+        }
+    }
+
+    // The 26x26 monogram-weight table for the keyword-free ciphers (Vigenere/
+    // Beaufort/Porta) depends only on (cipher_type, variant); their keywords never
+    // change, so it is built once for the whole run and cached. (We still compare
+    // the cached keywords so a stray batch run with a different type rebuilds.)
     static double weight[ALPHABET_SIZE][ALPHABET_SIZE];
     static int w_valid = 0, w_type = -1, w_variant = -1;
     static int w_pt[ALPHABET_SIZE], w_ct[ALPHABET_SIZE];
 
-    int rebuild = !w_valid || w_type != cfg->cipher_type || w_variant != (int)cfg->variant;
-    if (!rebuild) {
-        for (i = 0; i < ALPHABET_SIZE; i++) {
-            if (w_pt[i] != plaintext_keyword_indices[i] ||
-                w_ct[i] != ciphertext_keyword_indices[i]) { rebuild = 1; break; }
-        }
-    }
-    if (rebuild) {
-        for (s = 0; s < ALPHABET_SIZE; s++) {
-            for (c = 0; c < ALPHABET_SIZE; c++) {
-                int pt_char;
-                if (cfg->cipher_type == PORTA) {
-                    int porta_shift = s / 2;
-                    if (c < 13) pt_char = (c + porta_shift) % 13 + 13;
-                    else        pt_char = (c - 13 - porta_shift + ALPHABET_SIZE) % 13;
-                } else if (cfg->cipher_type == BEAUFORT) {
-                    pt_char = (s - c + ALPHABET_SIZE) % ALPHABET_SIZE;
-                } else if (cfg->cipher_type == VIGENERE) {
-                    // Must match vigenere_decrypt: standard P = (C - K), variant
-                    // P = (C + K) mod 26.
-                    if (cfg->variant) pt_char = (c + s) % ALPHABET_SIZE;
-                    else              pt_char = (c - s + ALPHABET_SIZE) % ALPHABET_SIZE;
-                } else {
-                    // Quagmire I-IV.
-                    int posn_keyword = ct_key_lookup[c];
-                    int pt_idx;
-                    if (cfg->variant) pt_idx = (posn_keyword + s) % ALPHABET_SIZE;
-                    else              pt_idx = (posn_keyword - s) % ALPHABET_SIZE;
-                    if (pt_idx < 0) pt_idx += ALPHABET_SIZE;
-                    pt_char = plaintext_keyword_indices[pt_idx];
-                }
-                weight[s][c] = english_monograms[pt_char];
+    if (!is_quag) {
+        int rebuild = !w_valid || w_type != cfg->cipher_type || w_variant != (int)cfg->variant;
+        if (!rebuild) {
+            for (i = 0; i < ALPHABET_SIZE; i++) {
+                if (w_pt[i] != plaintext_keyword_indices[i] ||
+                    w_ct[i] != ciphertext_keyword_indices[i]) { rebuild = 1; break; }
             }
         }
-        w_valid = 1; w_type = cfg->cipher_type; w_variant = (int)cfg->variant;
-        for (i = 0; i < ALPHABET_SIZE; i++) {
-            w_pt[i] = plaintext_keyword_indices[i];
-            w_ct[i] = ciphertext_keyword_indices[i];
+        if (rebuild) {
+            for (s = 0; s < ALPHABET_SIZE; s++) {
+                for (c = 0; c < ALPHABET_SIZE; c++) {
+                    int pt_char;
+                    if (cfg->cipher_type == PORTA) {
+                        int porta_shift = s / 2;
+                        if (c < 13) pt_char = (c + porta_shift) % 13 + 13;
+                        else        pt_char = (c - 13 - porta_shift + ALPHABET_SIZE) % 13;
+                    } else if (cfg->cipher_type == BEAUFORT) {
+                        pt_char = (s - c + ALPHABET_SIZE) % ALPHABET_SIZE;
+                    } else {
+                        // Vigenere. Must match vigenere_decrypt: standard
+                        // P = (C - K), variant P = (C + K) mod 26.
+                        if (cfg->variant) pt_char = (c + s) % ALPHABET_SIZE;
+                        else              pt_char = (c - s + ALPHABET_SIZE) % ALPHABET_SIZE;
+                    }
+                    weight[s][c] = english_monograms[pt_char];
+                }
+            }
+            w_valid = 1; w_type = cfg->cipher_type; w_variant = (int)cfg->variant;
+            for (i = 0; i < ALPHABET_SIZE; i++) {
+                w_pt[i] = plaintext_keyword_indices[i];
+                w_ct[i] = ciphertext_keyword_indices[i];
+            }
         }
     }
 
@@ -149,11 +180,33 @@ void derive_optimal_cycleword(
 
         double best_score = -1.0;
         int best_shift = 0;
-        for (s = 0; s < ALPHABET_SIZE; s++) {
-            double score = 0.0;
-            const double *ws = weight[s];
-            for (int k = 0; k < n_nz; k++) score += nz_n[k] * ws[nz_c[k]];
-            if (score > best_score) { best_score = score; best_shift = s; }
+        if (is_quag) {
+            // Index Mext directly (see the factoring note above). pp[k] folds in
+            // the per-entry CT-keyed-alphabet position so the shift loop is a flat
+            // gather; the resulting dot products equal the old weight[s][.] ones.
+            int pp[ALPHABET_SIZE];
+            if (cfg->variant) {
+                for (int k = 0; k < n_nz; k++) pp[k] = ct_key_lookup[nz_c[k]];
+                for (s = 0; s < ALPHABET_SIZE; s++) {
+                    double score = 0.0;
+                    for (int k = 0; k < n_nz; k++) score += nz_n[k] * Mext[pp[k] + s];
+                    if (score > best_score) { best_score = score; best_shift = s; }
+                }
+            } else {
+                for (int k = 0; k < n_nz; k++) pp[k] = ct_key_lookup[nz_c[k]] + ALPHABET_SIZE;
+                for (s = 0; s < ALPHABET_SIZE; s++) {
+                    double score = 0.0;
+                    for (int k = 0; k < n_nz; k++) score += nz_n[k] * Mext[pp[k] - s];
+                    if (score > best_score) { best_score = score; best_shift = s; }
+                }
+            }
+        } else {
+            for (s = 0; s < ALPHABET_SIZE; s++) {
+                double score = 0.0;
+                const double *ws = weight[s];
+                for (int k = 0; k < n_nz; k++) score += nz_n[k] * ws[nz_c[k]];
+                if (score > best_score) { best_score = score; best_shift = s; }
+            }
         }
 
         // State stores the cycleword CHARACTER (from the CT keyed alphabet).
