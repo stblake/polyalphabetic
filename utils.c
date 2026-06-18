@@ -91,13 +91,16 @@ void vec_print(int vec[], int len) {
 
 
 void print_text(int indices[], int len) {
-    for (int i = 0; i < len; i++) printf("%c", indices[i] + 'A');
+    for (int i = 0; i < len; i++) printf("%c", index_to_char(indices[i]));
 }
 
 
 
 void ord(char *text, int indices[]) {
-    for (int i = 0; i < strlen(text); i++) indices[i] = toupper(text[i]) - 'A';
+    for (int i = 0; i < strlen(text); i++) {
+        unsigned char c = (unsigned char) text[i];
+        indices[i] = isalpha(c) ? (toupper(c) - 'A') : (-(int) c - 1);
+    }
 }
 
 
@@ -105,7 +108,11 @@ void ord(char *text, int indices[]) {
 void tally(int plaintext[], int len, int frequencies[], int n_frequencies) {
     int i;
     for (i = 0; i < n_frequencies; i++) frequencies[i] = 0;
-    for (i = 0; i < len; i++) frequencies[plaintext[i]]++;
+    // Skip negative sentinels (non-alphabetic characters); they have no histogram
+    // bin. For all-letter text this loop is identical to the unguarded version.
+    for (i = 0; i < len; i++) {
+        if (plaintext[i] >= 0 && plaintext[i] < n_frequencies) frequencies[plaintext[i]]++;
+    }
 }
 
 

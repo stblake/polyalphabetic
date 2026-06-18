@@ -226,6 +226,7 @@ void init_config(PolyalphabeticConfig *cfg) {
     cfg->crib_present = false;
     cfg->dictionary_present = false;
     cfg->verbose = false;
+    cfg->skip_spaces = false;
     cfg->variant = false;
     cfg->beaufort = false;
 
@@ -413,6 +414,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-verbose") == 0) {
             cfg.verbose = true;
             printf("-verbose\n");
+        } else if (strcmp(argv[i], "-skipspaces") == 0) {
+            cfg.skip_spaces = true;
+            printf("-skipspaces\n");
         } else if (strcmp(argv[i], "-optimalcycle") == 0) {
             cfg.optimal_cycleword = true;
             printf("-optimalcycle\n");
@@ -624,8 +628,23 @@ int main(int argc, char **argv) {
              return 0;
         }
 
+        // Read the first line of the cipher file as the ciphertext, preserving any
+        // internal spaces and punctuation (unlike fscanf("%s"), which stops at the
+        // first whitespace). Stopping at the newline keeps the historical behaviour
+        // of ignoring trailing lines (e.g. a "plaintext = ..." annotation). These
+        // non-alphabetic characters are kept as positions and carried through the
+        // decryption; scoring skips them. Use -skipspaces to drop them entirely.
         FILE *fp_cipher = fopen(cfg.ciphertext_file, "r");
-        fscanf(fp_cipher, "%s", single_ciphertext_buffer);
+        int ci = 0, ch;
+        while ((ch = fgetc(fp_cipher)) != EOF && ch != '\n' && ci < MAX_CIPHER_LENGTH - 1) {
+            if (ch == '\r') continue;
+            single_ciphertext_buffer[ci++] = (char) ch;
+        }
+        single_ciphertext_buffer[ci] = '\0';
+        // Trim trailing whitespace so a stray space at the end of the line does not
+        // become an extra cipher position.
+        while (ci > 0 && isspace((unsigned char) single_ciphertext_buffer[ci - 1]))
+            single_ciphertext_buffer[--ci] = '\0';
         fclose(fp_cipher);
 
         if (cfg.verbose) printf("ciphertext = \n\'%s\'\n\n", single_ciphertext_buffer);
@@ -653,6 +672,19 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     // Default to "not solved": every early return (transposition dispatch, no
     // periodicities found, no valid configuration) then leaves a correct result.
     if (result) result->solved = false;
+
+    // -skipspaces: drop spaces/punctuation from the ciphertext entirely, so they
+    // are not even carried as transposition positions. Default (flag off) keeps
+    // them -- ord() encodes them as negative sentinels that ride through the
+    // decryption and are skipped only by scoring.
+    if (cfg->skip_spaces) {
+        int w = 0;
+        for (int r = 0; ciphertext_str[r] != '\0'; r++) {
+            if (isalpha((unsigned char) ciphertext_str[r]))
+                ciphertext_str[w++] = ciphertext_str[r];
+        }
+        ciphertext_str[w] = '\0';
+    }
 
     int cipher_len = (int)strlen(ciphertext_str);
     int cipher_indices[MAX_CIPHER_LENGTH];
@@ -964,7 +996,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
 
     char plaintext_string[MAX_CIPHER_LENGTH];
     for (int i = 0; i < cipher_len; i++) {
-        plaintext_string[i] = best_decrypted[i] + 'A';
+        plaintext_string[i] = index_to_char(best_decrypted[i]);
     }
     plaintext_string[cipher_len] = '\0';
 
@@ -1277,7 +1309,7 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
     }
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1597,7 +1629,7 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
     printf("\ntransposition: permutation key of length %d\n", cipher_len);
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1888,7 +1920,7 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
         printf("\ntranscol2: double columnar, %d x %d columns\n", best_K[0], best_K[1]);
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1960,7 +1992,7 @@ static void report_transposition(PolyalphabeticConfig *cfg, SharedData *shared,
     int n_words_found = 0;
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -3627,6 +3659,12 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     // integer the old per-window inner loop produced. Identical index => identical
     // ngram_data[] element => identical sum in the same order: bit-for-bit unchanged.
     // This collapses the per-window O(ngram_size) multiply-add loop to O(1).
+    // Windows containing a negative sentinel (a space or punctuation character
+    // carried through from the ciphertext) are skipped -- only n-grams that lie
+    // wholly inside a run of letters are scored. `bad` counts the sentinels in the
+    // current window; a sentinel contributes 0 to the packed index so the rolling
+    // base-26 arithmetic stays valid across it. When the text is all letters `bad`
+    // is always 0 and every operation is bit-identical to the unguarded version.
     int n_windows = cipher_len - ngram_size + 1;
     if (n_windows > 0) {
         int top = 1;                    // 26^(ngram_size-1)
@@ -3634,16 +3672,23 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
 
         index = 0;
         base = 1;
+        int bad = 0;
         for (int j = 0; j < ngram_size; j++) {
-            index += decrypted[j]*base;
+            int v = decrypted[j];
+            if (v < 0) { bad++; v = 0; }
+            index += v*base;
             base *= ALPHABET_SIZE;
         }
-        score += ngram_data[index];
+        if (bad == 0) score += ngram_data[index];
 
         for (int i = 1; i < n_windows; i++) {
-            index = (index - decrypted[i - 1]) / ALPHABET_SIZE
-                    + decrypted[i + ngram_size - 1] * top;
-            score += ngram_data[index];
+            int out_v = decrypted[i - 1];
+            int in_v  = decrypted[i + ngram_size - 1];
+            if (out_v < 0) { bad--; out_v = 0; }
+            int in_iv = in_v;
+            if (in_v < 0) { bad++; in_iv = 0; }
+            index = (index - out_v) / ALPHABET_SIZE + in_iv * top;
+            if (bad == 0) score += ngram_data[index];
         }
     }
     score = scale*score/(cipher_len - ngram_size);

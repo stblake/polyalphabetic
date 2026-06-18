@@ -119,6 +119,7 @@ typedef struct {
 
     // Flags
     bool verbose;
+    bool skip_spaces;   // strip spaces/punctuation from the ciphertext entirely
     bool cipher_present;
     bool batch_present;
     bool crib_present;
@@ -470,6 +471,17 @@ int unique_len(char *str);
 void vec_print(int vec[], int len);
 void print_text(int indices[], int len);
 void ord(char *text, int indices[]);
+
+// Non-alphabetic bytes (spaces, punctuation) in a ciphertext are carried through
+// the integer-index arrays as negative values that reversibly encode the original
+// byte: index = -(unsigned char)c - 1, so 'A'..'Z' stay 0..25 and everything else
+// is < 0. Scoring and frequency stats skip these positions; printing restores the
+// original character. This lets pure-transposition solves permute the spaces along
+// with the letters and reveal word boundaries in the recovered plaintext.
+static inline int index_to_char(int idx) {
+    return (idx >= 0) ? (idx + 'A') : (-(idx + 1));
+}
+
 float index_of_coincidence(int plaintext[], int len);
 void tally(int plaintext[], int len, int frequencies[], int n_frequencies);
 bool file_exists(const char * filename);
