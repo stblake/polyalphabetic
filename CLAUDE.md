@@ -61,6 +61,22 @@ read directions, double-columnar composition). `ciphers/tests/` additionally hol
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests) you can run by hand.
 
+`ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
+21 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+`q*_p1xx` puzzles, and pure-transposition types) that each solve to 100% with a
+**fixed `-seed`** and quadgrams. It runs the solver, pulls the recovered plaintext
+from the last field of the `>>>` CSV line, compares it character-for-character to a
+sibling `<name>.solution` (bare A–Z plaintext), and prints per-test accuracy + time +
+mean, exiting non-zero if any test drops below the threshold (default 99%). Because
+the seed is fixed, a bit-identical refactor keeps every score at 100% and any
+behavioural regression shows up immediately. Each test's `-nrestarts`/`-nhillclimbs`
+are trimmed to the smallest that still lands on the solution at the seed, so the full
+run is ~2 min (was ~45 before trimming). The manifest tags each case `fast` or `slow`:
+`./run_tests.sh --fast` runs the 14-case fast tier in ~20s (use while iterating),
+`--slow` the 7 heavier ciphers, no flag runs both. Add a case by appending a
+`tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
+once the recovered text is verified correct.
+
 ## Run
 
 Run from this directory — the binary loads its n-gram table, dictionary, and
