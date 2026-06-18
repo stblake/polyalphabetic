@@ -114,3 +114,482 @@ void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int ou
     }
 }
 
+
+// Apply a ciphertext->plaintext position map. pt_of_ct[k] is the plaintext
+// position that received ciphertext position k, so standard decryption scatters
+// the ciphertext (out[pt_of_ct[k]] = cipher[k]) while -variant (encryption swapped
+// for decryption) gathers it (out[k] = cipher[pt_of_ct[k]]). Shared by the
+// permutation-style transposition primitives below. out[] must not alias cipher[].
+static void apply_perm(const int cipher[], const int pt_of_ct[], int len, int variant, int out[]) {
+    if (variant) for (int k = 0; k < len; k++) out[k] = cipher[pt_of_ct[k]];
+    else         for (int k = 0; k < len; k++) out[pt_of_ct[k]] = cipher[k];
+}
+
+
+// =====================================================================
+//  Rail fence (and Variant Rail fence)
+// =====================================================================
+//
+// Encryption writes the plaintext along a zigzag that runs down then up across
+// `rails` rows -- position i lands on rail r(i) where the rail index sweeps
+// 0,1,...,rails-1,rails-2,...,1,0,1,... with period P = 2*(rails-1). The
+// ciphertext is then the rows read off top to bottom, each left to right.
+//
+// `offset` shifts the starting phase of the zigzag: a standard rail fence has
+// offset == 0 (begins on the top rail going down), while the ACA "Variant Rail
+// fence" begins partway through the sweep. Sweeping offset over [0, P-1] lets the
+// one primitive cover both, so a single solver attacks standard and variant rails.
+//
+// To decrypt we recompute r(i) for every position, then walk the ciphertext rail
+// by rail (the order it was written out) handing each cipher letter back to its
+// original position. out[] must not alias cipher[].
+//
+// `variant` swaps encryption for decryption (the global -variant convention): the
+// cipher was produced by reading the plaintext along the rails and laying it back
+// out along the zigzag -- the inverse layout -- so recovery applies the forward map
+// (out[pos] = cipher[i]) instead of the inverse (out[i] = cipher[pos]).
+void decrypt_railfence(int cipher[], int len, int rails, int offset, int variant, int out[]) {
+
+    if (rails <= 1 || rails >= len) {   // degenerate: a single rail is the identity
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int P = 2 * (rails - 1);            // length of one down-and-up sweep
+    int pos = 0;                        // cursor into the rail-by-rail read order
+
+    // The ciphertext is rail 0's letters, then rail 1's, ... Walk the rails in
+    // that order and, within each, the positions left to right, to invert it.
+    for (int r = 0; r < rails; r++) {
+        for (int i = 0; i < len; i++) {
+            int ph = (i + offset) % P;
+            int rail = (ph < rails) ? ph : P - ph;
+            if (rail != r) continue;
+            if (variant) out[pos++] = cipher[i];   // apply the forward permutation
+            else         out[i] = cipher[pos++];   // apply the inverse (standard)
+        }
+    }
+}
+
+
+// =====================================================================
+//  Route transposition
+// =====================================================================
+//
+// Encryption writes the plaintext row-major into an R x C grid (R*C == len), then
+// reads the cells out along a geometric "route". `route_cells` returns that route
+// as the reading order: cells[k] is the row-major index (r*C + c) of the k-th cell
+// emitted. N_ROUTES routes are defined:
+//
+//   0  rows, boustrophedon (snake) -- row 0 left->right, row 1 right->left, ...
+//   1  columns, boustrophedon      -- col 0 top->bottom, col 1 bottom->top, ...
+//   2  spiral inward, clockwise from the top-left corner (start heading right)
+//   3  spiral inward, counter-clockwise from the top-left corner (start heading down)
+//   4  anti-diagonals (r+c constant), boustrophedon (alternate scan direction)
+//   5  anti-diagonals (r+c constant), constant direction (always r ascending)
+//
+// Plain row-major and plain column reads are already reachable through the
+// columnar solver, so the route set focuses on the snake, spiral and diagonal
+// patterns that the dedicated columnar primitive cannot express.
+void route_cells(int R, int C, int route_id, int cells[]) {
+    int k = 0;
+    switch (route_id) {
+        case 0: // rows, snake
+            for (int r = 0; r < R; r++) {
+                if ((r & 1) == 0) for (int c = 0;     c < C; c++) cells[k++] = r * C + c;
+                else              for (int c = C - 1; c >= 0; c--) cells[k++] = r * C + c;
+            }
+            break;
+        case 1: // columns, snake
+            for (int c = 0; c < C; c++) {
+                if ((c & 1) == 0) for (int r = 0;     r < R; r++) cells[k++] = r * C + c;
+                else              for (int r = R - 1; r >= 0; r--) cells[k++] = r * C + c;
+            }
+            break;
+        case 2: { // clockwise spiral inward from top-left
+            int top = 0, bottom = R - 1, left = 0, right = C - 1;
+            while (top <= bottom && left <= right) {
+                for (int c = left; c <= right; c++)  cells[k++] = top * C + c;     top++;
+                for (int r = top; r <= bottom; r++)  cells[k++] = r * C + right;   right--;
+                if (top <= bottom)
+                    for (int c = right; c >= left; c--) cells[k++] = bottom * C + c; bottom--;
+                if (left <= right)
+                    for (int r = bottom; r >= top; r--) cells[k++] = r * C + left;   left++;
+            }
+            break;
+        }
+        case 3: { // counter-clockwise spiral inward from top-left
+            int top = 0, bottom = R - 1, left = 0, right = C - 1;
+            while (top <= bottom && left <= right) {
+                for (int r = top; r <= bottom; r++)  cells[k++] = r * C + left;    left++;
+                for (int c = left; c <= right; c++)  cells[k++] = bottom * C + c;  bottom--;
+                if (left <= right)
+                    for (int r = bottom; r >= top; r--) cells[k++] = r * C + right; right--;
+                if (top <= bottom)
+                    for (int c = right; c >= left; c--) cells[k++] = top * C + c;   top++;
+            }
+            break;
+        }
+        case 4:   // anti-diagonals, boustrophedon
+        case 5: { // anti-diagonals, constant direction
+            for (int d = 0; d <= R + C - 2; d++) {
+                int r_lo = (d - (C - 1) > 0) ? d - (C - 1) : 0;  // c = d - r <= C-1
+                int r_hi = (d < R - 1) ? d : R - 1;              // r <= R-1
+                if (route_id == 4 && (d & 1)) {                  // reverse on odd diagonals
+                    for (int r = r_hi; r >= r_lo; r--) cells[k++] = r * C + (d - r);
+                } else {
+                    for (int r = r_lo; r <= r_hi; r++) cells[k++] = r * C + (d - r);
+                }
+            }
+            break;
+        }
+        default: // unknown route -> identity (row-major)
+            for (int i = 0; i < R * C; i++) cells[i] = i;
+            break;
+    }
+}
+
+// Invert one route transposition. The plaintext was written row-major, so the
+// recovered plaintext is just the grid read row-major; cell cells[k] received the
+// k-th ciphertext letter, hence out[cells[k]] = cipher[k]. out[] must not alias
+// cipher[]. A grid that does not tile the text exactly (R*C != len) is rejected as
+// the identity so the caller can skip that factorization.
+//
+// `variant` swaps encryption for decryption (the global -variant convention): the
+// cipher was produced by writing along the route and reading row-major, so recovery
+// applies the forward map (out[k] = cipher[cells[k]]) instead of the inverse.
+void decrypt_route(int cipher[], int len, int R, int C, int route_id, int variant, int out[]) {
+    if (R <= 0 || C <= 0 || R * C != len) {
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+    int cells[MAX_CIPHER_LENGTH];
+    route_cells(R, C, route_id, cells);
+    if (variant) for (int k = 0; k < len; k++) out[k] = cipher[cells[k]];
+    else         for (int k = 0; k < len; k++) out[cells[k]] = cipher[k];
+}
+
+
+// =====================================================================
+//  Amsco
+// =====================================================================
+//
+// Encryption fills a grid of K columns row by row, each cell taking alternately
+// one then two letters (`start` = the size of the very first cell, 1 or 2), with
+// the 1/2 alternation continuing without break from one row into the next. The
+// columns are then read off in key order `order[0..K-1]`, each top to bottom,
+// concatenating each cell's one-or-two letters.
+//
+// Because the alternation runs continuously by cell index, the size of cell m
+// (row m/K, column m%K, filled row-major) is fixed up front, so we can rebuild the
+// exact per-cell letter layout, slice the ciphertext back into columns in key
+// order, and scatter each cell's letters to their original plaintext offsets.
+// `variant` swaps read/write. out[] must not alias cipher[].
+void decrypt_amsco(int cipher[], int len, int K, int order[], int start, int variant, int out[]) {
+
+    if (K <= 1 || K > len) {            // degenerate: a single column is the identity
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    // 1. Walk the cells in row-major fill order, recording each cell's letter
+    //    count and the plaintext offset where its letters begin, until the text
+    //    is exhausted (the final cell may be clipped to the letters that remain).
+    int cell_size[MAX_CIPHER_LENGTH];  // 1 or 2 (last cell possibly fewer)
+    int cell_off[MAX_CIPHER_LENGTH];   // plaintext offset of the cell's first letter
+    int sz_even = start;               // size of even-indexed cells
+    int sz_odd  = (start == 1) ? 2 : 1;
+    int n_cells = 0, placed = 0;
+    while (placed < len) {
+        int nominal = ((n_cells & 1) == 0) ? sz_even : sz_odd;
+        int sz = (len - placed < nominal) ? (len - placed) : nominal;
+        cell_off[n_cells]  = placed;
+        cell_size[n_cells] = sz;
+        placed += sz;
+        n_cells++;
+    }
+
+    // 2. Read the columns in key order, each top-to-bottom (cells c, c+K, c+2K,
+    //    ...), emitting each cell's letters to build the ciphertext->plaintext map.
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+    int k = 0;
+    for (int j = 0; j < K; j++) {
+        int c = order[j];
+        for (int m = c; m < n_cells; m += K)
+            for (int i = 0; i < cell_size[m]; i++)
+                pt_of_ct[k++] = cell_off[m] + i;
+    }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Myszkowski
+// =====================================================================
+//
+// A columnar transposition whose keyword may contain repeated letters. `rank[c]`
+// is the numeric rank of column c (equal ranks for equal keyword letters). The
+// grid is filled row-major into K columns (incomplete final row when len % K != 0).
+// Columns are taken off by ascending rank; a rank shared by several columns is
+// read **row by row across those columns together** (left to right) rather than
+// column by column -- the feature that distinguishes Myszkowski from plain columnar
+// (to which it reduces when all ranks are distinct).
+//
+// `variant` swaps read/write. out[] must not alias cipher[]. Grid cell (r,c) holds
+// plaintext position r*K + c and exists iff that position is < len.
+void decrypt_myszkowski(int cipher[], int len, int K, int rank[], int variant, int out[]) {
+
+    if (K <= 1 || K > len) {            // degenerate: a single column is the identity
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int R = (len + K - 1) / K;          // number of rows (ceiling)
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+    int k = 0;
+
+    // Process ranks in ascending order. To avoid sorting, sweep candidate rank
+    // values and, for each, gather the columns carrying it (left to right).
+    bool done[MAX_COLS] = { false };
+    int processed = 0;
+    while (processed < K) {
+        // Find the smallest not-yet-processed rank value.
+        int v = 0; bool have_v = false;
+        for (int c = 0; c < K; c++) {
+            if (done[c]) continue;
+            if (!have_v || rank[c] < v) { v = rank[c]; have_v = true; }
+        }
+
+        // Columns sharing rank v, in left-to-right order.
+        int group[MAX_COLS], g = 0;
+        for (int c = 0; c < K; c++) if (!done[c] && rank[c] == v) { group[g++] = c; done[c] = true; }
+        processed += g;
+
+        if (g == 1) {
+            // Single column: read it top-to-bottom.
+            int c = group[0];
+            for (int r = 0; r < R; r++) {
+                int pos = r * K + c;
+                if (pos < len) pt_of_ct[k++] = pos;
+            }
+        } else {
+            // Tied columns: read row by row across the group, left to right.
+            for (int r = 0; r < R; r++)
+                for (int gi = 0; gi < g; gi++) {
+                    int pos = r * K + group[gi];
+                    if (pos < len) pt_of_ct[k++] = pos;
+                }
+        }
+    }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Redefence (keyed rail fence)
+// =====================================================================
+//
+// A rail fence (zigzag over `rails` rows, starting phase `offset`) whose rails are
+// read off not top-to-bottom but in the keyed order `order[0..rails-1]`. With
+// order == identity this is exactly decrypt_railfence; the solver climbs `order`.
+// `variant` swaps read/write. out[] must not alias cipher[].
+void decrypt_redefence(int cipher[], int len, int rails, int offset, int order[], int variant, int out[]) {
+
+    if (rails <= 1 || rails >= len) {
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int P = 2 * (rails - 1);
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+    int k = 0;
+
+    // Emit the rails in keyed order; within each rail, positions left to right.
+    for (int j = 0; j < rails; j++) {
+        int target = order[j];
+        for (int i = 0; i < len; i++) {
+            int ph = (i + offset) % P;
+            int rail = (ph < rails) ? ph : P - ph;
+            if (rail == target) pt_of_ct[k++] = i;
+        }
+    }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Cadenus
+// =====================================================================
+//
+// The plaintext is written row-major into a grid of `rows` rows (25 in the classic
+// cipher) and K = len/rows columns. Each column is cyclically rotated upward, then
+// the columns are reordered, and the grid is read row-major. The keyword supplies
+// both the rotation amount and the column order; the solver decouples them and
+// searches `order` (the read-order permutation, length K) and `rot` (the per-column
+// upward rotation, 0..rows-1) freely, which subsumes any keyword/alphabet
+// convention. `variant` swaps read/write. out[] must not alias cipher[].
+//
+// Read column p (0..K-1) comes from original column c = order[p]; output row r of
+// that column comes from original grid row (r + rot[c]) mod rows.
+void decrypt_cadenus(int cipher[], int len, int K, int order[], int rot[], int variant, int out[]) {
+
+    if (K <= 1 || K > len || len % K != 0) {
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int rows = len / K;
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+
+    for (int r = 0; r < rows; r++)
+        for (int p = 0; p < K; p++) {
+            int c = order[p];
+            int src_row = (r + rot[c]) % rows;
+            pt_of_ct[r * K + p] = src_row * K + c;
+        }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Nihilist transposition
+// =====================================================================
+//
+// The plaintext fills an N x N grid row-major; `rowperm`/`colperm` permute the rows
+// and columns (the classic Nihilist transposition ties them to one keyword, but we
+// keep them independent so the solver covers that and the two-key variant), and the
+// grid is read off either row-major (readmode 0) or column-major (readmode 1).
+// N = sqrt(len). Grid cell (r,c) holds plaintext rowperm[r]*N + colperm[c].
+// `variant` swaps read/write. out[] must not alias cipher[].
+void decrypt_nihilist(int cipher[], int len, int N, int rowperm[], int colperm[],
+                      int readmode, int variant, int out[]) {
+
+    if (N < 2 || N * N != len) {
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+    for (int r = 0; r < N; r++)
+        for (int c = 0; c < N; c++) {
+            int ct_pos = (readmode == 1) ? (c * N + r) : (r * N + c);
+            pt_of_ct[ct_pos] = rowperm[r] * N + colperm[c];
+        }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Swagman
+// =====================================================================
+//
+// The plaintext fills an N-row x W-column grid row-major (W = len/N). An N x N key
+// square (each column a permutation of 0..N-1) is applied column-wise and repeats
+// every N columns: plaintext column jj is sorted vertically by the digits of square
+// column (jj mod N) -- output row i takes the plaintext row whose square digit is i.
+// `square[r*N + j]` is the digit at row r, column j of the key square. `readmode`
+// selects how the rearranged grid is read off: 0 = row-major, 1 = column-major
+// (sources differ, so the solver sweeps it). `variant` swaps read/write. out[] must
+// not alias cipher[].
+void decrypt_swagman(int cipher[], int len, int N, int square[], int readmode, int variant, int out[]) {
+
+    if (N < 2 || N > 7 || len % N != 0) {   // Swagman squares are 3x3..7x7
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    int W = len / N;
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+
+    // pos_of_digit for each of the N square columns: pod[j][d] = row r with
+    // square[r][j] == d.
+    int pod[7][7];                      // N <= 7 for Swagman
+    for (int j = 0; j < N; j++)
+        for (int r = 0; r < N; r++)
+            pod[j][square[r * N + j]] = r;
+
+    for (int i = 0; i < N; i++) {        // output row within a column
+        for (int jj = 0; jj < W; jj++) { // plaintext/cipher column
+            int src_row = pod[jj % N][i];
+            int pt_pos  = src_row * W + jj;
+            int ct_pos  = (readmode == 1) ? (jj * N + i) : (i * W + jj);
+            pt_of_ct[ct_pos] = pt_pos;
+        }
+    }
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+
+
+// =====================================================================
+//  Turning grille
+// =====================================================================
+//
+// An N x N turning grille has, for each rotation orbit of cells (the 4 cells a cell
+// visits under repeated 90 degrees turns), exactly one open hole. The plaintext is
+// written through the holes, the grille is turned 90 degrees, and so on for four
+// turns, filling every cell once; the ciphertext is the grid read row-major.
+//
+// `key[orbit]` in {0,1,2,3} chooses, for each orbit, which turn exposes that
+// orbit's hole. Orbits are numbered by their representative cell (the smallest
+// row-major index among the four), in increasing representative order, so the key
+// indexing is stable across calls for a given N. The number of orbits is written to
+// *n_orbits when non-NULL (the solver needs it as the key length). `variant` swaps
+// read/write. out[] must not alias cipher[].
+//
+// A cell at rotation index `ridx` within its orbit is exposed at turn t iff
+// ridx == (key[orbit] + t) mod 4, so across the four turns every orbit cell is
+// written exactly once. Odd N leaves a single centre cell (an orbit of size one),
+// handled by the same rule. The grille's grid read row-major IS the ciphertext, so
+// pt_of_ct[cell] = the plaintext index written into that cell.
+void decrypt_grille(int cipher[], int len, int N, int key[], int variant, int out[], int *n_orbits) {
+
+    int side = N;
+    if (side < 2 || side * side != len) {
+        if (n_orbits) *n_orbits = 0;
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+
+    // For each cell compute its orbit representative (min row-major index over the
+    // four 90-degree CW rotations (r,c)->(c, N-1-r)) and its rotation index.
+    int rep[MAX_CIPHER_LENGTH], ridx[MAX_CIPHER_LENGTH], orbit[MAX_CIPHER_LENGTH];
+    for (int idx = 0; idx < len; idx++) {
+        int r = idx / side, c = idx % side;
+        int best = idx, bestk = 0;
+        for (int t = 1; t < 4; t++) {
+            int nr = c, nc = side - 1 - r;     // rotate 90 CW
+            r = nr; c = nc;
+            int j = r * side + c;
+            if (j < best) { best = j; bestk = t; }
+        }
+        rep[idx] = best;
+        // rotation index of idx relative to its representative: turns from rep to idx
+        ridx[idx] = (4 - bestk) % 4;
+    }
+
+    // Assign stable orbit ids in representative-index order.
+    int norb = 0;
+    for (int idx = 0; idx < len; idx++) {
+        if (rep[idx] == idx) { orbit[idx] = norb++; }
+    }
+    for (int idx = 0; idx < len; idx++) orbit[idx] = orbit[rep[idx]];
+    if (n_orbits) *n_orbits = norb;
+
+    // Walk the four turns; at each, scan cells row-major and assign the next
+    // plaintext index to every exposed cell.
+    int pt_of_ct[MAX_CIPHER_LENGTH];
+    int m = 0;
+    for (int t = 0; t < 4; t++)
+        for (int idx = 0; idx < len; idx++)
+            if (ridx[idx] == ((key[orbit[idx]] + t) & 3))
+                pt_of_ct[idx] = m++;
+
+    apply_perm(cipher, pt_of_ct, len, variant, out);
+}
+

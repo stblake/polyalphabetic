@@ -100,6 +100,14 @@ fast | example_autokey_beaufort_longer | autobeau | example_autokey_beaufort_lon
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 1500 -nhillclimbs 6000
 slow | transcol_single     | transcol      | transcol_single_tb.txt  | -nrestarts 40 -nhillclimbs 8000
+fast | railfence_aca       | railfence     | railfence_aca.txt       | -maxcols 12
+slow | amsco_aca           | amsco         | amsco_aca.txt           | -mincols 4 -maxcols 12 -nrestarts 60 -nhillclimbs 6000
+fast | myszkowski_aca      | myszkowski    | myszkowski_aca.txt      | -nrestarts 30 -nhillclimbs 4000
+fast | redefence_aca       | redefence     | redefence_aca.txt       | -maxcols 7 -nrestarts 15 -nhillclimbs 3000
+slow | cadenus_aca         | cadenus       | cadenus_aca.txt         | -nrestarts 200 -nhillclimbs 6000
+slow | nihilist_aca        | nihilist      | nihilist_aca.txt        | -nrestarts 400 -nhillclimbs 6000
+slow | swagman_aca         | swagman       | swagman_aca.txt         | -nrestarts 300 -nhillclimbs 6000
+fast | grille_aca          | grille        | grille_aca.txt          | -nrestarts 300 -nhillclimbs 6000
 EOF
 
 trim() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; printf '%s' "$s"; }

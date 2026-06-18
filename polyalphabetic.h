@@ -35,6 +35,15 @@
 #define TRANSPOSITION  16
 #define TRANSCOL       17   // single columnar transposition (dedicated solver)
 #define TRANSCOL2      18   // double (nested) columnar transposition
+#define RAILFENCE      19   // rail fence + variant rail fence (phase-offset sweep)
+#define ROUTE          20   // route transposition (snake / spiral over an R x C grid)
+#define AMSCO          21   // Amsco (alternating 1/2-letter columnar)
+#define MYSZKOWSKI     22   // Myszkowski (columnar with tied keyword ranks)
+#define REDEFENCE      23   // Redefence (keyed rail fence)
+#define CADENUS        24   // Cadenus (rotated-column transposition, 25 rows)
+#define NIHILIST       25   // Nihilist transposition (single perm on rows + columns)
+#define SWAGMAN        26   // Swagman (N x N Latin-square column transposition)
+#define GRILLE         27   // Turning grille
 
 #define ALPHABET_SIZE 26
 #define MAX_CIPHER_LENGTH 10000
@@ -44,6 +53,8 @@
 #define MAX_NGRAM_SIZE 8
 #define MAX_DICT_WORD_LEN 30
 #define MAX_COLS 100            // upper bound on columnar column count (sizes order arrays)
+#define MAX_TRANS_KEY 1024      // upper bound on a climbed transposition key length
+                                // (grille orbit map, packed Cadenus order+rotation, etc.)
 
 // Columnar read direction (cfg->read_direction).
 #define COL_READ_TB   0        // read each column top-to-bottom (canonical)
@@ -232,6 +243,53 @@ void transmatrix(int text[], int len, int w1, int w2, int clockwise);
 // recovered row-major plaintext to out[0..len-1] (out must differ from cipher).
 void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int out[]);
 
+// Number of geometric routes recognised by route_cells()/decrypt_route().
+#define N_ROUTES 6
+
+// Rail fence (and variant rail fence) primitive: invert a zigzag over `rails`
+// rows with starting phase `offset` in [0, 2*(rails-1)). `variant` swaps the read
+// and write directions (the -variant convention). out[] must not alias cipher[].
+void decrypt_railfence(int cipher[], int len, int rails, int offset, int variant, int out[]);
+
+// Route transposition primitives. route_cells() fills cells[0..R*C-1] with the
+// row-major cell indices in reading order for route_id in [0, N_ROUTES); decrypt_route()
+// inverts one route over an R x C grid (`variant` swaps read/write directions).
+void route_cells(int R, int C, int route_id, int cells[]);
+void decrypt_route(int cipher[], int len, int R, int C, int route_id, int variant, int out[]);
+
+// Amsco primitive: invert an alternating 1/2-letter columnar transposition over K
+// columns read in `order`, with `start` (1 or 2) the size of the first cell.
+// `variant` swaps read/write. out[] must not alias cipher[].
+void decrypt_amsco(int cipher[], int len, int K, int order[], int start, int variant, int out[]);
+
+// Myszkowski primitive: invert a columnar transposition over K columns whose
+// keyword ranks `rank[0..K-1]` may tie; tied columns are read row-by-row together.
+// `variant` swaps read/write. out[] must not alias cipher[].
+void decrypt_myszkowski(int cipher[], int len, int K, int rank[], int variant, int out[]);
+
+// Redefence primitive: rail fence over `rails` rows (phase `offset`) whose rails
+// are read in keyed order `order[0..rails-1]`. `variant` swaps read/write.
+void decrypt_redefence(int cipher[], int len, int rails, int offset, int order[], int variant, int out[]);
+
+// Cadenus primitive: K = len/rows columns rotated vertically by rot[c] and reordered
+// by order[p] (read col p -> original col order[p]), grid read row-major.
+void decrypt_cadenus(int cipher[], int len, int K, int order[], int rot[], int variant, int out[]);
+
+// Nihilist transposition primitive: independent rowperm/colperm on the N x N grid
+// (N = sqrt(len)), read row-major (readmode 0) or column-major (readmode 1).
+// `variant` swaps read/write.
+void decrypt_nihilist(int cipher[], int len, int N, int rowperm[], int colperm[],
+                      int readmode, int variant, int out[]);
+
+// Swagman primitive: N x N key square (column j a permutation of 0..N-1) applied
+// column-wise over an N x (len/N) grid; readmode selects row/column-major read-off.
+void decrypt_swagman(int cipher[], int len, int N, int square[], int readmode, int variant, int out[]);
+
+// Turning-grille primitive: key[orbit] in {0..3} chooses the turn that exposes each
+// rotation orbit of the N x N grid (N = sqrt(len)). Writes the orbit count to
+// *n_orbits (the climbed key length) when non-NULL. `variant` swaps read/write.
+void decrypt_grille(int cipher[], int len, int N, int key[], int variant, int out[], int *n_orbits);
+
 // Transposition solvers (optimization over the transform parameters)
 void solve_transposition(char *ciphertext_str, char *cribtext_str,
     PolyalphabeticConfig *cfg, SharedData *shared,
@@ -259,6 +317,67 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
 // small per-stage column-order permutation directly, rather than the full
 // N-length permutation key.
 void solve_columnar(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+// Enumerate-and-score solvers for the small-key-space transposition types. Both
+// exhaustively try every parameter setting (no hill climbing needed), score each
+// with the shared n-gram (+ optional crib) state_score, and report the best:
+//   solve_railfence : rails in [min_cols, max_cols] x starting phase offset
+//   solve_route     : every R x C factorization of len x N_ROUTES routes
+void solve_railfence(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_route(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+// Hill-climbing solvers for the small-permutation transposition types. Both sweep
+// the column count K = [min_cols, max_cols] and, per K, run the shared
+// shotgun/annealing key climber (transposition_anneal):
+//   solve_amsco      : climbs the column order x start-chunk in {1,2}
+//   solve_myszkowski : climbs the per-column rank vector (ties allowed)
+void solve_amsco(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+// Remaining transposition solvers (all share transposition_anneal):
+//   solve_redefence : sweeps rails x phase, climbs the rail read-order permutation
+//   solve_cadenus   : K = len/25, climbs the packed column order + per-column rotation
+//   solve_nihilist  : N = sqrt(len), climbs the single row+column permutation
+//   solve_swagman   : sweeps N (3..7) x readmode, climbs the N x N key square
+//   solve_grille    : N = sqrt(len), climbs the per-orbit turn assignment
+void solve_redefence(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_cadenus(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_nihilist(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_swagman(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
+void solve_grille(char *ciphertext_str, char *cribtext_str,
     PolyalphabeticConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);

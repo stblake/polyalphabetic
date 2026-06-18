@@ -510,6 +510,24 @@ int main(int argc, char **argv) {
         printf("\nAttacking a columnar transposition cipher (column-order hill climber).\n\n");
     } else if (cfg.cipher_type == TRANSCOL2) {
         printf("\nAttacking a double columnar transposition cipher (column-order hill climber).\n\n");
+    } else if (cfg.cipher_type == RAILFENCE) {
+        printf("\nAttacking a rail fence transposition cipher (rail-count + phase enumeration).\n\n");
+    } else if (cfg.cipher_type == ROUTE) {
+        printf("\nAttacking a route transposition cipher (grid + route enumeration).\n\n");
+    } else if (cfg.cipher_type == AMSCO) {
+        printf("\nAttacking an Amsco transposition cipher (column-order hill climber).\n\n");
+    } else if (cfg.cipher_type == MYSZKOWSKI) {
+        printf("\nAttacking a Myszkowski transposition cipher (rank-vector hill climber).\n\n");
+    } else if (cfg.cipher_type == REDEFENCE) {
+        printf("\nAttacking a redefence (keyed rail fence) cipher (rail-order hill climber).\n\n");
+    } else if (cfg.cipher_type == CADENUS) {
+        printf("\nAttacking a Cadenus transposition cipher (order + rotation hill climber).\n\n");
+    } else if (cfg.cipher_type == NIHILIST) {
+        printf("\nAttacking a Nihilist transposition cipher (single-permutation hill climber).\n\n");
+    } else if (cfg.cipher_type == SWAGMAN) {
+        printf("\nAttacking a Swagman transposition cipher (key-square hill climber).\n\n");
+    } else if (cfg.cipher_type == GRILLE) {
+        printf("\nAttacking a turning grille transposition cipher (orbit-assignment hill climber).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -693,6 +711,51 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     }
     if (cfg->cipher_type == TRANSCOL || cfg->cipher_type == TRANSCOL2) {
         solve_columnar(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == RAILFENCE) {
+        solve_railfence(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == ROUTE) {
+        solve_route(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == AMSCO) {
+        solve_amsco(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == MYSZKOWSKI) {
+        solve_myszkowski(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == REDEFENCE) {
+        solve_redefence(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == CADENUS) {
+        solve_cadenus(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == NIHILIST) {
+        solve_nihilist(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == SWAGMAN) {
+        solve_swagman(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == GRILLE) {
+        solve_grille(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
         return ;
     }
@@ -1877,6 +1940,800 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
     printf("\n");
 }
 
+
+
+// =====================================================================
+//  Shared reporting for the dedicated transposition solvers
+// =====================================================================
+//
+// Every transposition solver recovers a single best plaintext plus a short,
+// type-specific parameter description; this helper prints the common
+// human-readable block and the ">>> ..." one-line CSV summary so the output shape
+// (and, crucially, the recovered plaintext as the final CSV field that the
+// regression suite scrapes) is identical across types. `param_summary` is one
+// already-formatted CSV field describing the recovered key (e.g. "rails=5 off=0").
+static void report_transposition(PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len, int best_decrypted[],
+    double best_score, char *cribtext_str, int n_cribs,
+    const char *param_summary) {
+
+    int n_words_found = 0;
+
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = best_decrypted[i] + 'A';
+    plaintext_string[cipher_len] = '\0';
+
+    if (cfg->dictionary_present && shared->dict != NULL) {
+        n_words_found = find_dictionary_words(plaintext_string, shared->dict,
+            shared->n_dict_words, shared->max_dict_word_len);
+    }
+
+    printf("\nResult Score: %.2f | Words: %d | %s\n", best_score, n_words_found, param_summary);
+
+    print_text(cipher_indices, cipher_len);
+    printf("\n");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+    printf("%s\n", cribtext_str);
+
+    if (PARTIAL_CRIB_MATCH && n_cribs > 0) {
+        for (int i = 0; i < cipher_len; i++) {
+            if (cribtext_str[i] == '_') {
+                printf("_");
+            } else {
+                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                if (diff < 10) printf("%d", diff); else printf("*");
+            }
+        }
+        printf("\n");
+    }
+
+    // One-liner summary: >>> score, [words,] type, <params>, file, CIPHER, PLAINTEXT
+    if (cfg->dictionary_present) {
+        printf(">>> %.2f, %d, %d, ", best_score, n_words_found, cfg->cipher_type);
+    } else {
+        printf(">>> %.2f, %d, ", best_score, cfg->cipher_type);
+    }
+    printf("%s, ", param_summary);
+    printf("%s, ", cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+    print_text(cipher_indices, cipher_len);
+    printf(", ");
+    print_text(best_decrypted, cipher_len);
+    printf("\n");
+}
+
+
+// =====================================================================
+//  Rail fence solver (TYPE railfence) -- covers variant rail fence too
+// =====================================================================
+//
+// The key space is tiny (rail count x starting phase), so we enumerate it
+// exhaustively rather than hill-climb: for each rail count in [min_cols, max_cols]
+// and every starting phase offset, invert the zigzag with decrypt_railfence and
+// keep the highest-scoring plaintext. -variant swaps the read/write directions.
+void solve_railfence(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for a rail fence solve.\n\n");
+        return ;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    int lo = max(2, cfg->min_cols);
+    int hi = min(cfg->max_cols, cipher_len - 1);
+    if (hi < lo) hi = lo;
+
+    int decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH];
+    double best_score = 0.0;
+    int best_rails = lo, best_offset = 0;
+    bool have_best = false;
+
+    for (int rails = lo; rails <= hi; rails++) {
+        int P = 2 * (rails - 1);                 // number of distinct phases
+        for (int offset = 0; offset < P; offset++) {
+            decrypt_railfence(cipher_indices, cipher_len, rails, offset, variant, decrypted);
+            double score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                shared->ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+            if (!have_best || score > best_score) {
+                best_score = score; best_rails = rails; best_offset = offset;
+                vec_copy(decrypted, best_decrypted, cipher_len);
+                have_best = true;
+            }
+        }
+    }
+
+    decrypt_railfence(cipher_indices, cipher_len, best_rails, best_offset, variant, best_decrypted);
+
+    printf("\nrailfence: %d rails, starting phase %d%s\n",
+        best_rails, best_offset, variant ? " (variant: read/write swapped)" : "");
+
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s",
+        best_rails, best_offset, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Route transposition solver (TYPE route)
+// =====================================================================
+//
+// Enumerate every rectangular grid that tiles the text exactly (R x C with
+// R*C == len, both >= 2) and every route in [0, N_ROUTES); invert each with
+// decrypt_route and keep the best-scoring plaintext. -variant swaps read/write.
+void solve_route(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for a route solve.\n\n");
+        return ;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+
+    int decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH];
+    double best_score = 0.0;
+    int best_R = 0, best_C = 0, best_route = 0;
+    bool have_best = false;
+
+    for (int R = 2; R <= cipher_len / 2; R++) {
+        if (cipher_len % R != 0) continue;
+        int C = cipher_len / R;
+        if (C < 2) continue;
+        for (int route_id = 0; route_id < N_ROUTES; route_id++) {
+            decrypt_route(cipher_indices, cipher_len, R, C, route_id, variant, decrypted);
+            double score = state_score(decrypted, cipher_len,
+                crib_indices, crib_positions, n_cribs,
+                shared->ngram_data, cfg->ngram_size,
+                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+            if (!have_best || score > best_score) {
+                best_score = score; best_R = R; best_C = C; best_route = route_id;
+                vec_copy(decrypted, best_decrypted, cipher_len);
+                have_best = true;
+            }
+        }
+    }
+
+    if (!have_best) {
+        printf("\n\nERROR: ciphertext length %d has no R x C grid (>=2 each) for a route solve.\n\n",
+            cipher_len);
+        return ;
+    }
+
+    decrypt_route(cipher_indices, cipher_len, best_R, best_C, best_route, variant, best_decrypted);
+
+    static const char *route_names[N_ROUTES] = {
+        "rows-snake", "cols-snake", "spiral-cw", "spiral-ccw", "diag-snake", "diag" };
+    printf("\nroute: %d x %d grid, route %d (%s)%s\n",
+        best_R, best_C, best_route, route_names[best_route],
+        variant ? " (variant: read/write swapped)" : "");
+
+    char params[64];
+    snprintf(params, sizeof(params), "%dx%d route=%d%s",
+        best_R, best_C, best_route, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Shared key-climber for the permutation-style transposition solvers
+// =====================================================================
+//
+// Amsco, Myszkowski (and further small-key transposition types) all reduce to
+// hill-climbing a short integer key array with the same scaffold: shotgun
+// restarts, a per-iteration neighbour move, geometric-cooling Metropolis
+// acceptance, and best-state tracking, scored by the shared n-gram state_score.
+// Only the key->plaintext decrypt, the neighbour move, and the restart seeding
+// differ per type, so those are supplied as callbacks while this routine owns the
+// loop. No structure-score guard is needed -- every candidate is a genuine layout.
+
+typedef struct {
+    int *cipher;
+    int cipher_len;
+    int *crib_indices;
+    int *crib_positions;
+    int n_cribs;
+    float *ngram_data;
+    PolyalphabeticConfig *cfg;
+    int param[4];               // type-specific fixed parameters (e.g. Amsco start/variant)
+} TransAnnealCtx;
+
+typedef void (*trans_decrypt_fn)(const int *key, int key_len, const TransAnnealCtx *ctx, int *out);
+typedef void (*trans_move_fn)(int *key, int key_len);
+typedef void (*trans_seed_fn)(int *key, int key_len);
+
+static double trans_score(const TransAnnealCtx *ctx, int *decrypted) {
+    PolyalphabeticConfig *cfg = ctx->cfg;
+    return state_score(decrypted, ctx->cipher_len,
+        ctx->crib_indices, ctx->crib_positions, ctx->n_cribs,
+        ctx->ngram_data, cfg->ngram_size,
+        cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+}
+
+// Climb a length-key_len integer key. Returns the best score; writes the best key
+// and its decryption. Caller invokes once per fixed outer parameter (e.g. per K).
+static double transposition_anneal(
+    const TransAnnealCtx *ctx, int key_len,
+    trans_decrypt_fn decrypt, trans_move_fn move, trans_seed_fn seed,
+    int n_restarts, int n_iters,
+    int *best_key, int *best_decrypted) {
+
+    int cur[MAX_TRANS_KEY], loc[MAX_TRANS_KEY];
+    int decrypted[MAX_CIPHER_LENGTH];
+    double best_score = 0.0, current_score, local_score;
+    bool have_best = false;
+
+    // Geometric Metropolis annealing schedule (matches the columnar climber).
+    const double temp_start = 0.10, temp_min = 0.001;
+    double cooling = 1.0;
+    if (n_iters > 1)
+        cooling = pow(temp_min / temp_start, 1.0 / (double)(n_iters - 1));
+
+    for (int rs = 0; rs < n_restarts; rs++) {
+
+        if (have_best && frand() < ctx->cfg->backtracking_probability) {
+            for (int i = 0; i < key_len; i++) cur[i] = best_key[i];   // refine the best
+        } else {
+            seed(cur, key_len);                                       // fresh restart
+        }
+        decrypt(cur, key_len, ctx, decrypted);
+        current_score = trans_score(ctx, decrypted);
+
+        if (!have_best || current_score > best_score) {
+            best_score = current_score; have_best = true;
+            for (int i = 0; i < key_len; i++) best_key[i] = cur[i];
+        }
+
+        double temp = temp_start;
+        for (int it = 0; it < n_iters; it++) {
+            for (int i = 0; i < key_len; i++) loc[i] = cur[i];
+            move(loc, key_len);
+            decrypt(loc, key_len, ctx, decrypted);
+            local_score = trans_score(ctx, decrypted);
+
+            double delta = local_score - current_score;
+            if (delta > 0.0 || frand() < exp(delta / temp)) {
+                for (int i = 0; i < key_len; i++) cur[i] = loc[i];
+                current_score = local_score;
+                if (current_score > best_score) {
+                    best_score = current_score;
+                    for (int i = 0; i < key_len; i++) best_key[i] = cur[i];
+                }
+            }
+            temp *= cooling;
+        }
+    }
+
+    decrypt(best_key, key_len, ctx, best_decrypted);   // materialise the winning plaintext
+    return best_score;
+}
+
+// Neighbour move shared by the permutation-key types (swap dominant, with short
+// reverses and block moves), preserving the permutation property.
+static void perm_move(int *key, int K) {
+    if (K < 2) return;
+    double r = frand();
+    if (r < 0.70) {
+        int a = rand_int(0, K), b = rand_int(0, K);
+        int t = key[a]; key[a] = key[b]; key[b] = t;
+    } else if (r < 0.85) {
+        int max_blk = min(K, 8);
+        int blk = rand_int(2, max_blk + 1);
+        int s = rand_int(0, K - blk + 1);
+        for (int a = s, b = s + blk - 1; a < b; a++, b--) {
+            int t = key[a]; key[a] = key[b]; key[b] = t;
+        }
+    } else {
+        int max_blk = min(K, 8);
+        int blk = rand_int(1, max_blk + 1);
+        int s = rand_int(0, K - blk + 1);
+        int d = rand_int(0, K - blk + 1);
+        if (d == s) return;
+        int tmp[8];
+        for (int a = 0; a < blk; a++) tmp[a] = key[s + a];
+        if (d < s) { for (int a = s - 1; a >= d; a--) key[a + blk] = key[a]; }
+        else       { for (int a = s + blk; a < d + blk; a++) key[a - blk] = key[a]; }
+        for (int a = 0; a < blk; a++) key[d + a] = tmp[a];
+    }
+}
+
+// Restart seed shared by the permutation-key types: a random permutation.
+static void perm_seed(int *key, int K) {
+    for (int i = 0; i < K; i++) key[i] = i;
+    shuffle(key, K);
+}
+
+
+// =====================================================================
+//  Amsco solver (TYPE amsco)
+// =====================================================================
+
+static void amsco_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    decrypt_amsco(ctx->cipher, ctx->cipher_len, key_len, (int *)key,
+        ctx->param[0] /* start */, ctx->param[1] /* variant */, out);
+}
+
+// Sweep the column count K and the start-chunk (1 or 2); for each, climb the
+// column order with the shared annealer and keep the best plaintext.
+void solve_amsco(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for an Amsco solve.\n\n");
+        return ;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len / 2);
+    if (hi < lo) hi = lo;
+
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_COLS], cur_key[MAX_COLS];
+    double best_score = 0.0;
+    int best_K = lo, best_start = 1;
+    bool have_best = false;
+
+    for (int K = lo; K <= hi; K++) {
+        for (int start = 1; start <= 2; start++) {
+            ctx.param[0] = start; ctx.param[1] = variant;
+            double sc = transposition_anneal(&ctx, K, amsco_decrypt_cb, perm_move, perm_seed,
+                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
+            if (!have_best || sc > best_score) {
+                best_score = sc; best_K = K; best_start = start; have_best = true;
+                for (int i = 0; i < K; i++) best_key[i] = cur_key[i];
+                vec_copy(cur_decrypted, best_decrypted, cipher_len);
+            }
+        }
+    }
+
+    printf("\namsco: %d columns, start-chunk %d%s\norder:", best_K, best_start,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < best_K; c++) printf(" %d", best_key[c]);
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d start=%d%s", best_K, best_start, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Myszkowski solver (TYPE myszkowski)
+// =====================================================================
+
+static void mysz_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    decrypt_myszkowski(ctx->cipher, ctx->cipher_len, key_len, (int *)key,
+        ctx->param[0] /* variant */, out);
+}
+
+// Rank-vector neighbour move: swap two ranks (reorder), copy one rank onto another
+// (merge -> create a tie), or relabel one column (split). This explores both the
+// column ordering and the tie structure that distinguishes Myszkowski from columnar.
+static void mysz_move(int *key, int K) {
+    if (K < 2) return;
+    double r = frand();
+    if (r < 0.60) {
+        int a = rand_int(0, K), b = rand_int(0, K);
+        int t = key[a]; key[a] = key[b]; key[b] = t;
+    } else if (r < 0.80) {
+        int a = rand_int(0, K), b = rand_int(0, K);
+        key[a] = key[b];                      // merge a into b's rank group
+    } else {
+        int a = rand_int(0, K);
+        key[a] = rand_int(0, K);              // relabel (may split a tie)
+    }
+}
+
+// Sweep the column count K; for each, climb the per-column rank vector with the
+// shared annealer and keep the best plaintext.
+void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for a Myszkowski solve.\n\n");
+        return ;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len / 2);
+    if (hi < lo) hi = lo;
+
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
+    ctx.param[0] = variant;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_COLS], cur_key[MAX_COLS];
+    double best_score = 0.0;
+    int best_K = lo;
+    bool have_best = false;
+
+    for (int K = lo; K <= hi; K++) {
+        // Myszkowski seeds as a random permutation (distinct ranks -> columnar);
+        // the rank move set then introduces ties. perm_seed supplies that.
+        double sc = transposition_anneal(&ctx, K, mysz_decrypt_cb, mysz_move, perm_seed,
+            cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
+        if (!have_best || sc > best_score) {
+            best_score = sc; best_K = K; have_best = true;
+            for (int i = 0; i < K; i++) best_key[i] = cur_key[i];
+            vec_copy(cur_decrypted, best_decrypted, cipher_len);
+        }
+    }
+
+    printf("\nmyszkowski: %d columns%s\nranks:", best_K,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < best_K; c++) printf(" %d", best_key[c]);
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", best_K, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// Integer square root with exact-square test: returns N where N*N == x, else -1.
+static int exact_isqrt(int x) {
+    if (x < 0) return -1;
+    int n = (int)(sqrt((double)x) + 0.5);
+    for (int d = -1; d <= 1; d++)
+        if ((n + d) >= 0 && (n + d) * (n + d) == x) return n + d;
+    return -1;
+}
+
+
+// =====================================================================
+//  Redefence solver (TYPE redefence)
+// =====================================================================
+
+static void redefence_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    decrypt_redefence(ctx->cipher, ctx->cipher_len, key_len /* rails */,
+        ctx->param[0] /* offset */, (int *)key, ctx->param[1] /* variant */, out);
+}
+
+// Sweep rail count and starting phase; for each, climb the rail read-order
+// permutation with the shared annealer.
+void solve_redefence(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+    if (cipher_len < 4) { printf("\n\nERROR: ciphertext too short for a redefence solve.\n\n"); return; }
+
+    int variant = cfg->variant ? 1 : 0;
+    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len - 1);
+    if (hi < lo) hi = lo;
+
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
+    double best_score = 0.0; int best_rails = lo, best_offset = 0;
+    bool have_best = false;
+
+    for (int rails = lo; rails <= hi; rails++) {
+        int P = 2 * (rails - 1);
+        for (int offset = 0; offset < P; offset++) {
+            ctx.param[0] = offset; ctx.param[1] = variant;
+            double sc = transposition_anneal(&ctx, rails, redefence_decrypt_cb, perm_move, perm_seed,
+                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
+            if (!have_best || sc > best_score) {
+                best_score = sc; best_rails = rails; best_offset = offset; have_best = true;
+                for (int i = 0; i < rails; i++) best_key[i] = cur_key[i];
+                vec_copy(cur_decrypted, best_decrypted, cipher_len);
+            }
+        }
+    }
+
+    printf("\nredefence: %d rails, phase %d%s\norder:", best_rails, best_offset,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < best_rails; c++) printf(" %d", best_key[c]);
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s", best_rails, best_offset, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Cadenus solver (TYPE cadenus) -- 25 rows, K = len/25 columns
+// =====================================================================
+//
+// The climbed key packs two halves: key[0..K-1] is the column read-order
+// permutation, key[K..2K-1] is the per-column upward rotation in [0,25). Decoupling
+// them lets the search subsume any keyword/alphabet convention.
+
+static void cadenus_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    int K = key_len / 2;
+    decrypt_cadenus(ctx->cipher, ctx->cipher_len, K, (int *)key, (int *)key + K,
+        ctx->param[0] /* variant */, out);
+}
+static void cadenus_seed(int *key, int key_len) {
+    int K = key_len / 2;
+    for (int i = 0; i < K; i++) key[i] = i;
+    shuffle(key, K);
+    for (int i = 0; i < K; i++) key[K + i] = rand_int(0, 25);   // Cadenus has 25 rows
+}
+static void cadenus_move(int *key, int key_len) {
+    int K = key_len / 2;
+    if (frand() < 0.55) perm_move(key, K);                       // reorder columns
+    else key[K + rand_int(0, K)] = rand_int(0, 25);              // re-rotate one column
+}
+
+void solve_cadenus(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+    if (cipher_len % 25 != 0) {
+        printf("\n\nERROR: Cadenus needs a length that is a multiple of 25 (got %d).\n\n", cipher_len);
+        return;
+    }
+    int K = cipher_len / 25;
+    if (K < 2 || 2 * K > MAX_TRANS_KEY) {
+        printf("\n\nERROR: Cadenus column count %d out of range.\n\n", K);
+        return;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg; ctx.param[0] = variant;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], best_key[MAX_TRANS_KEY];
+    double best_score = transposition_anneal(&ctx, 2 * K, cadenus_decrypt_cb, cadenus_move, cadenus_seed,
+        cfg->n_restarts, cfg->n_hill_climbs, best_key, best_decrypted);
+
+    printf("\ncadenus: %d columns x 25 rows%s\norder:", K, variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < K; c++) printf(" %d", best_key[c]);
+    printf("\nrot:");
+    for (int c = 0; c < K; c++) printf(" %d", best_key[K + c]);
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", K, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Nihilist transposition solver (TYPE nihilist) -- N = sqrt(len)
+// =====================================================================
+
+// The climbed key packs the row permutation (first N) and column permutation
+// (second N) of the N x N grid; readmode (row/column-major read-off) is swept.
+static void nihilist_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    int N = key_len / 2;
+    decrypt_nihilist(ctx->cipher, ctx->cipher_len, N, (int *)key, (int *)key + N,
+        ctx->param[1] /* readmode */, ctx->param[0] /* variant */, out);
+}
+static void nihilist_seed(int *key, int key_len) {   // two independent permutations
+    int N = key_len / 2;
+    for (int i = 0; i < N; i++) key[i] = i;
+    shuffle(key, N);
+    for (int i = 0; i < N; i++) key[N + i] = i;
+    shuffle(key + N, N);
+}
+static void nihilist_move(int *key, int key_len) {   // perturb one of the two halves
+    int N = key_len / 2;
+    if (frand() < 0.5) perm_move(key, N);
+    else perm_move(key + N, N);
+}
+
+void solve_nihilist(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+    int N = exact_isqrt(cipher_len);
+    if (N < 2) {
+        printf("\n\nERROR: Nihilist transposition needs a perfect-square length (got %d).\n\n", cipher_len);
+        return;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg; ctx.param[0] = variant;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
+    double best_score = 0.0; int best_readmode = 0;
+    bool have_best = false;
+
+    for (int readmode = 0; readmode <= 1; readmode++) {
+        ctx.param[1] = readmode;
+        double sc = transposition_anneal(&ctx, 2 * N, nihilist_decrypt_cb, nihilist_move, nihilist_seed,
+            cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
+        if (!have_best || sc > best_score) {
+            best_score = sc; best_readmode = readmode; have_best = true;
+            for (int i = 0; i < 2 * N; i++) best_key[i] = cur_key[i];
+            vec_copy(cur_decrypted, best_decrypted, cipher_len);
+        }
+    }
+
+    printf("\nnihilist: %d x %d grid, read %s%s\nrows:", N, N,
+        best_readmode ? "column-major" : "row-major",
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < N; c++) printf(" %d", best_key[c]);
+    printf("\ncols:");
+    for (int c = 0; c < N; c++) printf(" %d", best_key[N + c]);
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s", N, best_readmode, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Swagman solver (TYPE swagman) -- sweep N in [3,7] x read-off mode
+// =====================================================================
+
+static void swagman_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    int N = exact_isqrt(key_len);
+    decrypt_swagman(ctx->cipher, ctx->cipher_len, N, (int *)key,
+        ctx->param[0] /* readmode */, ctx->param[1] /* variant */, out);
+}
+static void swagman_seed(int *key, int key_len) {
+    int N = exact_isqrt(key_len);
+    int col[8];
+    for (int j = 0; j < N; j++) {
+        for (int r = 0; r < N; r++) col[r] = r;
+        shuffle(col, N);
+        for (int r = 0; r < N; r++) key[r * N + j] = col[r];     // each square column a permutation
+    }
+}
+static void swagman_move(int *key, int key_len) {
+    int N = exact_isqrt(key_len);
+    int j = rand_int(0, N), r1 = rand_int(0, N), r2 = rand_int(0, N);
+    int t = key[r1 * N + j]; key[r1 * N + j] = key[r2 * N + j]; key[r2 * N + j] = t;
+}
+
+void solve_swagman(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+    if (cipher_len < 9) { printf("\n\nERROR: ciphertext too short for a Swagman solve.\n\n"); return; }
+
+    int variant = cfg->variant ? 1 : 0;
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
+    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
+    double best_score = 0.0; int best_N = 0, best_readmode = 0;
+    bool have_best = false;
+
+    for (int N = 3; N <= 7; N++) {
+        if (cipher_len % N != 0) continue;            // need N equal-length rows
+        for (int readmode = 0; readmode <= 1; readmode++) {
+            ctx.param[0] = readmode; ctx.param[1] = variant;
+            double sc = transposition_anneal(&ctx, N * N, swagman_decrypt_cb, swagman_move, swagman_seed,
+                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
+            if (!have_best || sc > best_score) {
+                best_score = sc; best_N = N; best_readmode = readmode; have_best = true;
+                for (int i = 0; i < N * N; i++) best_key[i] = cur_key[i];
+                vec_copy(cur_decrypted, best_decrypted, cipher_len);
+            }
+        }
+    }
+
+    if (!have_best) { printf("\n\nERROR: no Swagman period in [3,7] divides length %d.\n\n", cipher_len); return; }
+
+    printf("\nswagman: %dx%d key square, read %s%s\nsquare:",
+        best_N, best_N, best_readmode ? "column-major" : "row-major",
+        variant ? " (variant: read/write swapped)" : "");
+    for (int r = 0; r < best_N; r++) { printf("\n  "); for (int j = 0; j < best_N; j++) printf("%d ", best_key[r * best_N + j]); }
+    printf("\n");
+
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s", best_N, best_readmode, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
+
+
+// =====================================================================
+//  Turning-grille solver (TYPE grille) -- N = sqrt(len)
+// =====================================================================
+
+static void grille_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
+    (void) key_len;
+    decrypt_grille(ctx->cipher, ctx->cipher_len, ctx->param[1] /* N */, (int *)key,
+        ctx->param[0] /* variant */, out, NULL);
+}
+static void grille_seed(int *key, int key_len) {
+    for (int i = 0; i < key_len; i++) key[i] = rand_int(0, 4);   // each orbit: which of 4 turns
+}
+static void grille_move(int *key, int key_len) {
+    key[rand_int(0, key_len)] = rand_int(0, 4);
+}
+
+void solve_grille(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+    int N = exact_isqrt(cipher_len);
+    if (N < 2) {
+        printf("\n\nERROR: turning grille needs a perfect-square length (got %d).\n\n", cipher_len);
+        return;
+    }
+
+    // Discover the orbit count (the climbed key length) for this N.
+    int n_orbits = 0, tmp_key[MAX_TRANS_KEY] = {0}, tmp_out[MAX_CIPHER_LENGTH];
+    decrypt_grille(cipher_indices, cipher_len, N, tmp_key, 0, tmp_out, &n_orbits);
+    if (n_orbits < 1 || n_orbits > MAX_TRANS_KEY) {
+        printf("\n\nERROR: grille orbit count %d out of range for N=%d.\n\n", n_orbits, N);
+        return;
+    }
+
+    int variant = cfg->variant ? 1 : 0;
+    TransAnnealCtx ctx;
+    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
+    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
+    ctx.param[0] = variant; ctx.param[1] = N;
+
+    int best_decrypted[MAX_CIPHER_LENGTH], best_key[MAX_TRANS_KEY];
+    double best_score = transposition_anneal(&ctx, n_orbits, grille_decrypt_cb, grille_move, grille_seed,
+        cfg->n_restarts, cfg->n_hill_climbs, best_key, best_decrypted);
+
+    printf("\ngrille: %d x %d, %d orbits%s\n", N, N, n_orbits,
+        variant ? " (variant: read/write swapped)" : "");
+
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d%s", N, variant ? " var" : "");
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, params);
+}
 
 
 // Hill Climber

@@ -70,6 +70,36 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "transcol2") || str_eq(arg, "doublecolumnar") ||
         str_eq(arg, "doublecol") || str_eq(arg, "dcol")) return TRANSCOL2;
 
+    // Rail fence (covers the variant rail fence via the phase-offset sweep)
+    if (str_eq(arg, "railfence") || str_eq(arg, "rail") || str_eq(arg, "rails") ||
+        str_eq(arg, "varrailfence")) return RAILFENCE;
+
+    // Route transposition (snake / spiral over an R x C grid)
+    if (str_eq(arg, "route") || str_eq(arg, "routetransposition") ||
+        str_eq(arg, "routetramp")) return ROUTE;
+
+    // Amsco (alternating 1/2-letter columnar)
+    if (str_eq(arg, "amsco")) return AMSCO;
+
+    // Myszkowski (columnar with tied keyword ranks)
+    if (str_eq(arg, "myszkowski") || str_eq(arg, "mysz")) return MYSZKOWSKI;
+
+    // Redefence (keyed rail fence)
+    if (str_eq(arg, "redefence") || str_eq(arg, "rede")) return REDEFENCE;
+
+    // Cadenus (rotated-column transposition, 25 rows)
+    if (str_eq(arg, "cadenus")) return CADENUS;
+
+    // Nihilist transposition (single permutation on rows + columns)
+    if (str_eq(arg, "nihilist") || str_eq(arg, "nihilisttransposition") ||
+        str_eq(arg, "nihilisttramp")) return NIHILIST;
+
+    // Swagman (N x N Latin-square column transposition)
+    if (str_eq(arg, "swagman")) return SWAGMAN;
+
+    // Turning grille
+    if (str_eq(arg, "grille") || str_eq(arg, "turninggrille")) return GRILLE;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

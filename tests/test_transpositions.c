@@ -295,6 +295,392 @@ static void test_columnar_double(void) {
     }
 }
 
+// --- rail fence (decrypt_railfence) --------------------------------------
+//
+// Independent reference encryption: read the plaintext off rail by rail (the
+// inverse of what decrypt_railfence does for variant==0). Two invariants tie the
+// standard and variant directions together without trusting either alone:
+//   C = encrypt(P);  decrypt(C, variant=0) == P   (standard recovery)
+//                    decrypt(P, variant=1) == C   (variant applies the forward map)
+static void ref_railfence_encrypt(int P[], int len, int rails, int offset, int ct[]) {
+    int Pp = 2 * (rails - 1);
+    int pos = 0;
+    for (int r = 0; r < rails; r++)
+        for (int i = 0; i < len; i++) {
+            int ph = (i + offset) % Pp;
+            int rail = (ph < rails) ? ph : Pp - ph;
+            if (rail == r) ct[pos++] = P[i];
+        }
+}
+
+static void test_railfence(void) {
+    int lens[]  = {40, 47, 61, 100, 177};
+    int railv[] = {2, 3, 4, 7, 9};
+
+    for (int li = 0; li < 5; li++) {
+        int len = lens[li];
+        for (int ri = 0; ri < 5; ri++) {
+            int rails = railv[ri];
+            if (rails >= len) continue;
+            int P = 2 * (rails - 1);
+            for (int offset = 0; offset < P; offset++) {
+
+                // Position map is a genuine bijection (both directions).
+                int ident[MAX_CIPHER_LENGTH], map0[MAX_CIPHER_LENGTH], map1[MAX_CIPHER_LENGTH];
+                for (int i = 0; i < len; i++) ident[i] = i;
+                decrypt_railfence(ident, len, rails, offset, 0, map0);
+                decrypt_railfence(ident, len, rails, offset, 1, map1);
+                CHECK(is_permutation(map0, len),
+                    "railfence len=%d rails=%d off=%d (std) not a bijection", len, rails, offset);
+                CHECK(is_permutation(map1, len),
+                    "railfence len=%d rails=%d off=%d (var) not a bijection", len, rails, offset);
+
+                int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+                random_text(Pt, len);
+                ref_railfence_encrypt(Pt, len, rails, offset, C);
+
+                decrypt_railfence(C, len, rails, offset, 0, out);
+                CHECK(arrays_equal(out, Pt, len),
+                    "railfence len=%d rails=%d off=%d standard round-trip mismatch", len, rails, offset);
+
+                decrypt_railfence(Pt, len, rails, offset, 1, out);
+                CHECK(arrays_equal(out, C, len),
+                    "railfence len=%d rails=%d off=%d variant round-trip mismatch", len, rails, offset);
+            }
+        }
+    }
+}
+
+// --- route transposition (decrypt_route) ---------------------------------
+
+static void ref_route_encrypt(int P[], int len, int R, int C, int route_id, int ct[]) {
+    int cells[MAX_CIPHER_LENGTH];
+    route_cells(R, C, route_id, cells);
+    for (int k = 0; k < len; k++) ct[k] = P[cells[k]];
+}
+
+// Known-answer: 2x3 rows-snake reads (0,1,2) then (5,4,3).
+static void test_route_known_answer(void) {
+    int P[6] = {0,1,2,3,4,5}, ct[6], out[6];
+    int expect_ct[6] = {0,1,2,5,4,3};
+    ref_route_encrypt(P, 6, 2, 3, 0, ct);
+    CHECK(arrays_equal(ct, expect_ct, 6), "route KAT (2x3 rows-snake) encrypt mismatch");
+    decrypt_route(ct, 6, 2, 3, 0, 0, out);
+    CHECK(arrays_equal(out, P, 6), "route KAT (2x3 rows-snake) decrypt mismatch");
+}
+
+static void test_route(void) {
+    // (R,C) pairs spanning square and rectangular grids.
+    int pairs[][2] = { {2,3}, {3,4}, {5,5}, {7,9}, {4,25}, {10,10} };
+
+    for (int p = 0; p < 6; p++) {
+        int R = pairs[p][0], C = pairs[p][1], len = R * C;
+        for (int route_id = 0; route_id < N_ROUTES; route_id++) {
+
+            int cells[MAX_CIPHER_LENGTH];
+            route_cells(R, C, route_id, cells);
+            CHECK(is_permutation(cells, len),
+                "route %dx%d id=%d cell order not a bijection", R, C, route_id);
+
+            int Pt[MAX_CIPHER_LENGTH], ct[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+            random_text(Pt, len);
+            ref_route_encrypt(Pt, len, R, C, route_id, ct);
+
+            decrypt_route(ct, len, R, C, route_id, 0, out);
+            CHECK(arrays_equal(out, Pt, len),
+                "route %dx%d id=%d standard round-trip mismatch", R, C, route_id);
+
+            decrypt_route(Pt, len, R, C, route_id, 1, out);
+            CHECK(arrays_equal(out, ct, len),
+                "route %dx%d id=%d variant round-trip mismatch", R, C, route_id);
+        }
+    }
+}
+
+// --- Amsco (decrypt_amsco) -----------------------------------------------
+//
+// Independent reference encryption: rebuild the alternating-chunk grid, then read
+// the columns off in key order. Coded separately from decrypt_amsco so a round-trip
+// exercises both halves, plus the same C=encrypt(P)/decrypt(C)==P,
+// decrypt(P,variant)==C invariants used elsewhere.
+static void ref_amsco_encrypt(int P[], int len, int K, int order[], int start, int ct[]) {
+    int cell_size[MAX_CIPHER_LENGTH], cell_off[MAX_CIPHER_LENGTH];
+    int sz_even = start, sz_odd = (start == 1) ? 2 : 1;
+    int n_cells = 0, placed = 0;
+    while (placed < len) {
+        int nominal = ((n_cells & 1) == 0) ? sz_even : sz_odd;
+        int sz = (len - placed < nominal) ? (len - placed) : nominal;
+        cell_off[n_cells] = placed; cell_size[n_cells] = sz;
+        placed += sz; n_cells++;
+    }
+    int o = 0;
+    for (int j = 0; j < K; j++) {
+        int c = order[j];
+        for (int m = c; m < n_cells; m += K)
+            for (int i = 0; i < cell_size[m]; i++) ct[o++] = P[cell_off[m] + i];
+    }
+}
+
+static void test_amsco(void) {
+    int lens[] = {69, 84, 96, 100, 113};
+    int Ks[]   = {3, 4, 5, 7, 8};
+
+    for (int li = 0; li < 5; li++) {
+        int len = lens[li];
+        for (int ki = 0; ki < 5; ki++) {
+            int K = Ks[ki];
+            if (K >= len) continue;
+            for (int start = 1; start <= 2; start++) {
+                int order[MAX_COLS];
+                for (int c = 0; c < K; c++) order[c] = c;
+                shuffle(order, K);
+
+                // Position map is a genuine bijection.
+                int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+                for (int i = 0; i < len; i++) ident[i] = i;
+                decrypt_amsco(ident, len, K, order, start, 0, map);
+                CHECK(is_permutation(map, len),
+                    "amsco len=%d K=%d start=%d not a bijection", len, K, start);
+
+                int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+                random_text(P, len);
+                ref_amsco_encrypt(P, len, K, order, start, C);
+
+                decrypt_amsco(C, len, K, order, start, 0, out);
+                CHECK(arrays_equal(out, P, len),
+                    "amsco len=%d K=%d start=%d standard round-trip mismatch", len, K, start);
+
+                decrypt_amsco(P, len, K, order, start, 1, out);
+                CHECK(arrays_equal(out, C, len),
+                    "amsco len=%d K=%d start=%d variant round-trip mismatch", len, K, start);
+            }
+        }
+    }
+}
+
+// --- Myszkowski (decrypt_myszkowski) -------------------------------------
+//
+// Reference encryption honouring tied ranks (tied columns read row-by-row
+// together). The rank vectors deliberately include ties so the row-by-row path is
+// exercised, not just the all-distinct (plain columnar) degenerate case.
+static void ref_mysz_encrypt(int P[], int len, int K, int rank[], int ct[]) {
+    int R = (len + K - 1) / K;
+    int o = 0;
+    int done[MAX_COLS]; for (int c = 0; c < K; c++) done[c] = 0;
+    int processed = 0;
+    while (processed < K) {
+        int v = 0, have_v = 0;
+        for (int c = 0; c < K; c++)
+            if (!done[c] && (!have_v || rank[c] < v)) { v = rank[c]; have_v = 1; }
+        int group[MAX_COLS], g = 0;
+        for (int c = 0; c < K; c++) if (!done[c] && rank[c] == v) { group[g++] = c; done[c] = 1; }
+        processed += g;
+        if (g == 1) {
+            for (int r = 0; r < R; r++) { int pos = r * K + group[0]; if (pos < len) ct[o++] = P[pos]; }
+        } else {
+            for (int r = 0; r < R; r++)
+                for (int gi = 0; gi < g; gi++) { int pos = r * K + group[gi]; if (pos < len) ct[o++] = P[pos]; }
+        }
+    }
+}
+
+static void test_myszkowski(void) {
+    // Rank vectors with intentional ties (and one all-distinct = plain columnar).
+    int len = 110;
+    int ranks[][8] = {
+        {2, 0, 1, 0, 2, 1, 0, 0},   // many ties
+        {0, 1, 2, 3, 4, 5, 6, 7},   // all distinct (columnar)
+        {1, 1, 0, 2, 2, 0, 1, 0},   // mixed
+        {0, 0, 0, 1, 1, 1, 2, 2},   // block ties
+    };
+    for (int t = 0; t < 4; t++) {
+        int K = 8;
+        int *rank = ranks[t];
+
+        int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+        for (int i = 0; i < len; i++) ident[i] = i;
+        decrypt_myszkowski(ident, len, K, rank, 0, map);
+        CHECK(is_permutation(map, len), "myszkowski case %d not a bijection", t);
+
+        int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+        random_text(P, len);
+        ref_mysz_encrypt(P, len, K, rank, C);
+
+        decrypt_myszkowski(C, len, K, rank, 0, out);
+        CHECK(arrays_equal(out, P, len), "myszkowski case %d standard round-trip mismatch", t);
+
+        decrypt_myszkowski(P, len, K, rank, 1, out);
+        CHECK(arrays_equal(out, C, len), "myszkowski case %d variant round-trip mismatch", t);
+    }
+}
+
+// --- redefence (decrypt_redefence) ---------------------------------------
+static void ref_redefence_encrypt(int P[], int len, int rails, int offset, int order[], int ct[]) {
+    int Pp = 2 * (rails - 1), o = 0;
+    for (int j = 0; j < rails; j++)
+        for (int i = 0; i < len; i++) {
+            int ph = (i + offset) % Pp, rail = (ph < rails) ? ph : Pp - ph;
+            if (rail == order[j]) ct[o++] = P[i];
+        }
+}
+static void test_redefence(void) {
+    int lens[] = {50, 54, 63, 100}, railv[] = {3, 4, 5, 7};
+    for (int li = 0; li < 4; li++) for (int ri = 0; ri < 4; ri++) {
+        int len = lens[li], rails = railv[ri];
+        if (rails >= len) continue;
+        int P = 2 * (rails - 1);
+        for (int offset = 0; offset < P; offset++) {
+            int order[MAX_COLS];
+            for (int c = 0; c < rails; c++) order[c] = c;
+            shuffle(order, rails);
+            int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+            for (int i = 0; i < len; i++) ident[i] = i;
+            decrypt_redefence(ident, len, rails, offset, order, 0, map);
+            CHECK(is_permutation(map, len), "redefence len=%d rails=%d off=%d not a bijection", len, rails, offset);
+            int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+            random_text(Pt, len);
+            ref_redefence_encrypt(Pt, len, rails, offset, order, C);
+            decrypt_redefence(C, len, rails, offset, order, 0, out);
+            CHECK(arrays_equal(out, Pt, len), "redefence len=%d rails=%d off=%d round-trip mismatch", len, rails, offset);
+            decrypt_redefence(Pt, len, rails, offset, order, 1, out);
+            CHECK(arrays_equal(out, C, len), "redefence len=%d rails=%d off=%d variant mismatch", len, rails, offset);
+        }
+    }
+}
+
+// --- Cadenus (decrypt_cadenus) -------------------------------------------
+static void ref_cadenus_encrypt(int P[], int len, int K, int order[], int rot[], int ct[]) {
+    int rows = len / K;
+    for (int r = 0; r < rows; r++)
+        for (int p = 0; p < K; p++) {
+            int c = order[p];
+            ct[r * K + p] = P[((r + rot[c]) % rows) * K + c];
+        }
+}
+static void test_cadenus(void) {
+    int lens[] = {100, 125, 150, 250};   // multiples of 25
+    for (int li = 0; li < 4; li++) {
+        int len = lens[li], K = len / 25, rows = 25;
+        int order[MAX_COLS], rot[MAX_COLS];
+        for (int c = 0; c < K; c++) order[c] = c;
+        shuffle(order, K);
+        for (int c = 0; c < K; c++) rot[c] = rand_int(0, rows);
+        int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+        for (int i = 0; i < len; i++) ident[i] = i;
+        decrypt_cadenus(ident, len, K, order, rot, 0, map);
+        CHECK(is_permutation(map, len), "cadenus len=%d not a bijection", len);
+        int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+        random_text(Pt, len);
+        ref_cadenus_encrypt(Pt, len, K, order, rot, C);
+        decrypt_cadenus(C, len, K, order, rot, 0, out);
+        CHECK(arrays_equal(out, Pt, len), "cadenus len=%d round-trip mismatch", len);
+        decrypt_cadenus(Pt, len, K, order, rot, 1, out);
+        CHECK(arrays_equal(out, C, len), "cadenus len=%d variant mismatch", len);
+    }
+}
+
+// --- Nihilist transposition (decrypt_nihilist) ---------------------------
+static void ref_nihilist_encrypt(int P[], int N, int rowperm[], int colperm[], int readmode, int ct[]) {
+    for (int r = 0; r < N; r++)
+        for (int c = 0; c < N; c++) {
+            int k = (readmode == 1) ? (c * N + r) : (r * N + c);
+            ct[k] = P[rowperm[r] * N + colperm[c]];
+        }
+}
+static void test_nihilist(void) {
+    int Ns[] = {6, 8, 9, 10};
+    for (int ni = 0; ni < 4; ni++) {
+        int N = Ns[ni], len = N * N;
+        int rowperm[MAX_COLS], colperm[MAX_COLS];
+        for (int c = 0; c < N; c++) { rowperm[c] = c; colperm[c] = c; }
+        shuffle(rowperm, N); shuffle(colperm, N);
+        for (int readmode = 0; readmode <= 1; readmode++) {
+            int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+            for (int i = 0; i < len; i++) ident[i] = i;
+            decrypt_nihilist(ident, len, N, rowperm, colperm, readmode, 0, map);
+            CHECK(is_permutation(map, len), "nihilist N=%d read=%d not a bijection", N, readmode);
+            int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+            random_text(Pt, len);
+            ref_nihilist_encrypt(Pt, N, rowperm, colperm, readmode, C);
+            decrypt_nihilist(C, len, N, rowperm, colperm, readmode, 0, out);
+            CHECK(arrays_equal(out, Pt, len), "nihilist N=%d read=%d round-trip mismatch", N, readmode);
+            decrypt_nihilist(Pt, len, N, rowperm, colperm, readmode, 1, out);
+            CHECK(arrays_equal(out, C, len), "nihilist N=%d read=%d variant mismatch", N, readmode);
+        }
+    }
+}
+
+// --- Swagman (decrypt_swagman) -------------------------------------------
+static void ref_swagman_encrypt(int P[], int len, int N, int square[], int readmode, int ct[]) {
+    int W = len / N, pod[7][7];
+    for (int j = 0; j < N; j++) for (int r = 0; r < N; r++) pod[j][square[r * N + j]] = r;
+    for (int i = 0; i < N; i++)
+        for (int jj = 0; jj < W; jj++) {
+            int pt = pod[jj % N][i] * W + jj;
+            int k = (readmode == 1) ? (jj * N + i) : (i * W + jj);
+            ct[k] = P[pt];
+        }
+}
+static void test_swagman(void) {
+    int cfgs[][2] = { {3, 96}, {4, 100}, {5, 95}, {7, 147} };  // {N, len} with len % N == 0
+    for (int t = 0; t < 4; t++) {
+        int N = cfgs[t][0], len = cfgs[t][1];
+        int square[49], col[8];
+        for (int j = 0; j < N; j++) {                          // each square column a permutation
+            for (int r = 0; r < N; r++) col[r] = r;
+            shuffle(col, N);
+            for (int r = 0; r < N; r++) square[r * N + j] = col[r];
+        }
+        for (int readmode = 0; readmode <= 1; readmode++) {
+            int ident[MAX_CIPHER_LENGTH], map[MAX_CIPHER_LENGTH];
+            for (int i = 0; i < len; i++) ident[i] = i;
+            decrypt_swagman(ident, len, N, square, readmode, 0, map);
+            CHECK(is_permutation(map, len), "swagman N=%d read=%d not a bijection", N, readmode);
+            int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+            random_text(Pt, len);
+            ref_swagman_encrypt(Pt, len, N, square, readmode, C);
+            decrypt_swagman(C, len, N, square, readmode, 0, out);
+            CHECK(arrays_equal(out, Pt, len), "swagman N=%d read=%d round-trip mismatch", N, readmode);
+            decrypt_swagman(Pt, len, N, square, readmode, 1, out);
+            CHECK(arrays_equal(out, C, len), "swagman N=%d read=%d variant mismatch", N, readmode);
+        }
+    }
+}
+
+// --- turning grille (decrypt_grille) -------------------------------------
+// Reference encryption: replay the four turns to map plaintext write-order to
+// cells, then read the grid row-major. Independent of decrypt_grille's internals
+// except the shared orbit numbering, which we recompute identically here.
+static void test_grille(void) {
+    int Ns[] = {4, 6, 8, 9, 10};   // include odd N=9 (centre orbit of size 1)
+    for (int ni = 0; ni < 5; ni++) {
+        int N = Ns[ni], len = N * N;
+
+        // Build a random key of the right length by probing the orbit count.
+        int probe = 0, zero[MAX_TRANS_KEY] = {0}, ztmp[MAX_CIPHER_LENGTH];
+        decrypt_grille(zero, len, N, zero, 0, ztmp, &probe);
+        CHECK(probe > 0, "grille N=%d zero orbit count", N);
+        int key[MAX_TRANS_KEY];
+        for (int i = 0; i < probe; i++) key[i] = rand_int(0, 4);
+
+        int norb = 0;
+        int ident[MAX_CIPHER_LENGTH], ptmap[MAX_CIPHER_LENGTH];
+        for (int i = 0; i < len; i++) ident[i] = i;
+        // variant=1 on the identity returns pt_of_ct directly (out[k] = pt_of_ct[k]):
+        // ptmap[cell] = plaintext index written into that cell.
+        decrypt_grille(ident, len, N, key, 1, ptmap, &norb);
+        CHECK(is_permutation(ptmap, len), "grille N=%d not a bijection", N);
+
+        int Pt[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+        random_text(Pt, len);
+        for (int k = 0; k < len; k++) C[k] = Pt[ptmap[k]];   // grid row-major = ciphertext
+        decrypt_grille(C, len, N, key, 0, out, NULL);
+        CHECK(arrays_equal(out, Pt, len), "grille N=%d round-trip mismatch", N);
+        decrypt_grille(Pt, len, N, key, 1, out, NULL);
+        CHECK(arrays_equal(out, C, len), "grille N=%d variant mismatch", N);
+    }
+}
+
 static void test_gcd(void) {
     CHECK(gcd(7, 177) == 1, "gcd(7,177)");
     CHECK(gcd(6, 100) == 2, "gcd(6,100)");
@@ -314,6 +700,16 @@ int main(void) {
     test_columnar_roundtrip();
     test_columnar_degenerate();
     test_columnar_double();
+    test_railfence();
+    test_route_known_answer();
+    test_route();
+    test_amsco();
+    test_myszkowski();
+    test_redefence();
+    test_cadenus();
+    test_nihilist();
+    test_swagman();
+    test_grille();
 
     printf("\n%d checks, %d failures\n", checks, failures);
     if (failures) {
