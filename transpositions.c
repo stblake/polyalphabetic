@@ -176,10 +176,13 @@ void decrypt_railfence(int cipher[], int len, int rails, int offset, int variant
 //  Route transposition
 // =====================================================================
 //
-// Encryption writes the plaintext row-major into an R x C grid (R*C == len), then
-// reads the cells out along a geometric "route". `route_cells` returns that route
-// as the reading order: cells[k] is the row-major index (r*C + c) of the k-th cell
-// emitted. N_ROUTES routes are defined:
+// Encryption writes the plaintext row-major into an R x C grid, then reads the
+// cells out along a geometric "route". The grid may be ragged: with a short final
+// row ((R-1)*C < len < R*C) the cells whose row-major index r*C + c is >= len do
+// not exist, so `route_cells` skips them and walks the route over the surviving
+// cells only. `route_cells` returns that route as the reading order: cells[k] is
+// the row-major index (r*C + c) of the k-th cell emitted, and the return value is
+// the number of cells emitted (== len for a valid grid). N_ROUTES routes are defined:
 //
 //   0  rows, boustrophedon (snake) -- row 0 left->right, row 1 right->left, ...
 //   1  columns, boustrophedon      -- col 0 top->bottom, col 1 bottom->top, ...
@@ -191,42 +194,46 @@ void decrypt_railfence(int cipher[], int len, int rails, int offset, int variant
 // Plain row-major and plain column reads are already reachable through the
 // columnar solver, so the route set focuses on the snake, spiral and diagonal
 // patterns that the dedicated columnar primitive cannot express.
-void route_cells(int R, int C, int route_id, int cells[]) {
+int route_cells(int R, int C, int len, int route_id, int cells[]) {
     int k = 0;
+    // EMIT records cell (idx) only if it exists in the (possibly ragged) grid, i.e.
+    // its row-major index is within the len letters actually written. For a complete
+    // grid (R*C == len) the guard is always true and every cell is emitted.
+    #define EMIT(idx) do { int _i = (idx); if (_i >= 0 && _i < len) cells[k++] = _i; } while (0)
     switch (route_id) {
         case 0: // rows, snake
             for (int r = 0; r < R; r++) {
-                if ((r & 1) == 0) for (int c = 0;     c < C; c++) cells[k++] = r * C + c;
-                else              for (int c = C - 1; c >= 0; c--) cells[k++] = r * C + c;
+                if ((r & 1) == 0) for (int c = 0;     c < C; c++) EMIT(r * C + c);
+                else              for (int c = C - 1; c >= 0; c--) EMIT(r * C + c);
             }
             break;
         case 1: // columns, snake
             for (int c = 0; c < C; c++) {
-                if ((c & 1) == 0) for (int r = 0;     r < R; r++) cells[k++] = r * C + c;
-                else              for (int r = R - 1; r >= 0; r--) cells[k++] = r * C + c;
+                if ((c & 1) == 0) for (int r = 0;     r < R; r++) EMIT(r * C + c);
+                else              for (int r = R - 1; r >= 0; r--) EMIT(r * C + c);
             }
             break;
         case 2: { // clockwise spiral inward from top-left
             int top = 0, bottom = R - 1, left = 0, right = C - 1;
             while (top <= bottom && left <= right) {
-                for (int c = left; c <= right; c++)  cells[k++] = top * C + c;     top++;
-                for (int r = top; r <= bottom; r++)  cells[k++] = r * C + right;   right--;
+                for (int c = left; c <= right; c++)  EMIT(top * C + c);     top++;
+                for (int r = top; r <= bottom; r++)  EMIT(r * C + right);   right--;
                 if (top <= bottom)
-                    for (int c = right; c >= left; c--) cells[k++] = bottom * C + c; bottom--;
+                    for (int c = right; c >= left; c--) EMIT(bottom * C + c); bottom--;
                 if (left <= right)
-                    for (int r = bottom; r >= top; r--) cells[k++] = r * C + left;   left++;
+                    for (int r = bottom; r >= top; r--) EMIT(r * C + left);   left++;
             }
             break;
         }
         case 3: { // counter-clockwise spiral inward from top-left
             int top = 0, bottom = R - 1, left = 0, right = C - 1;
             while (top <= bottom && left <= right) {
-                for (int r = top; r <= bottom; r++)  cells[k++] = r * C + left;    left++;
-                for (int c = left; c <= right; c++)  cells[k++] = bottom * C + c;  bottom--;
+                for (int r = top; r <= bottom; r++)  EMIT(r * C + left);    left++;
+                for (int c = left; c <= right; c++)  EMIT(bottom * C + c);  bottom--;
                 if (left <= right)
-                    for (int r = bottom; r >= top; r--) cells[k++] = r * C + right; right--;
+                    for (int r = bottom; r >= top; r--) EMIT(r * C + right); right--;
                 if (top <= bottom)
-                    for (int c = right; c >= left; c--) cells[k++] = top * C + c;   top++;
+                    for (int c = right; c >= left; c--) EMIT(top * C + c);   top++;
             }
             break;
         }
@@ -236,35 +243,42 @@ void route_cells(int R, int C, int route_id, int cells[]) {
                 int r_lo = (d - (C - 1) > 0) ? d - (C - 1) : 0;  // c = d - r <= C-1
                 int r_hi = (d < R - 1) ? d : R - 1;              // r <= R-1
                 if (route_id == 4 && (d & 1)) {                  // reverse on odd diagonals
-                    for (int r = r_hi; r >= r_lo; r--) cells[k++] = r * C + (d - r);
+                    for (int r = r_hi; r >= r_lo; r--) EMIT(r * C + (d - r));
                 } else {
-                    for (int r = r_lo; r <= r_hi; r++) cells[k++] = r * C + (d - r);
+                    for (int r = r_lo; r <= r_hi; r++) EMIT(r * C + (d - r));
                 }
             }
             break;
         }
         default: // unknown route -> identity (row-major)
-            for (int i = 0; i < R * C; i++) cells[i] = i;
+            for (int i = 0; i < len; i++) cells[k++] = i;
             break;
     }
+    #undef EMIT
+    return k;
 }
 
 // Invert one route transposition. The plaintext was written row-major, so the
 // recovered plaintext is just the grid read row-major; cell cells[k] received the
 // k-th ciphertext letter, hence out[cells[k]] = cipher[k]. out[] must not alias
-// cipher[]. A grid that does not tile the text exactly (R*C != len) is rejected as
-// the identity so the caller can skip that factorization.
+// cipher[]. The grid may be ragged (a short final row): a valid grid holds exactly
+// len cells, i.e. (R-1)*C < len <= R*C; anything else is rejected as the identity so
+// the caller can skip that shape.
 //
 // `variant` swaps encryption for decryption (the global -variant convention): the
 // cipher was produced by writing along the route and reading row-major, so recovery
 // applies the forward map (out[k] = cipher[cells[k]]) instead of the inverse.
 void decrypt_route(int cipher[], int len, int R, int C, int route_id, int variant, int out[]) {
-    if (R <= 0 || C <= 0 || R * C != len) {
+    if (R < 2 || C < 2 || (long)(R - 1) * C >= len || (long)R * C < len) {
         for (int i = 0; i < len; i++) out[i] = cipher[i];
         return;
     }
     int cells[MAX_CIPHER_LENGTH];
-    route_cells(R, C, route_id, cells);
+    int n = route_cells(R, C, len, route_id, cells);
+    if (n != len) {   // route could not cover the grid exactly: leave unchanged
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
     if (variant) for (int k = 0; k < len; k++) out[k] = cipher[cells[k]];
     else         for (int k = 0; k < len; k++) out[cells[k]] = cipher[k];
 }

@@ -44,8 +44,9 @@
 #define NIHILIST       25   // Nihilist transposition (single perm on rows + columns)
 #define SWAGMAN        26   // Swagman (N x N Latin-square column transposition)
 #define GRILLE         27   // Turning grille
+#define INDEP_PERIODIC 28   // period-P substitution with P INDEPENDENT mixed alphabets
 
-#define ALPHABET_SIZE 26
+#define ALPHABET_SIZE 26        // compile-time MAX alphabet size (sizes all arrays)
 #define MAX_CIPHER_LENGTH 10000
 #define MAX_FILENAME_LEN 4096   // must hold absolute paths; main() strcpy's CLI args in unbounded
 #define MAX_KEYWORD_LEN 26
@@ -252,10 +253,12 @@ void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int ou
 // and write directions (the -variant convention). out[] must not alias cipher[].
 void decrypt_railfence(int cipher[], int len, int rails, int offset, int variant, int out[]);
 
-// Route transposition primitives. route_cells() fills cells[0..R*C-1] with the
-// row-major cell indices in reading order for route_id in [0, N_ROUTES); decrypt_route()
-// inverts one route over an R x C grid (`variant` swaps read/write directions).
-void route_cells(int R, int C, int route_id, int cells[]);
+// Route transposition primitives. route_cells() fills cells[] with the row-major
+// cell indices in reading order for route_id in [0, N_ROUTES), emitting only cells
+// that exist (row-major index < len, so a ragged final row is handled), and returns
+// the number of cells emitted. decrypt_route() inverts one route over an R x C grid
+// (complete or ragged: (R-1)*C < len <= R*C); `variant` swaps read/write directions.
+int route_cells(int R, int C, int len, int route_id, int cells[]);
 void decrypt_route(int cipher[], int len, int R, int C, int route_id, int variant, int out[]);
 
 // Amsco primitive: invert an alternating 1/2-letter columnar transposition over K
@@ -383,6 +386,11 @@ void solve_grille(char *ciphertext_str, char *cribtext_str,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
 
+void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs);
+
 // Hill Climber
 double shotgun_hill_climber(
     PolyalphabeticConfig *cfg,
@@ -478,8 +486,20 @@ void ord(char *text, int indices[]);
 // is < 0. Scoring and frequency stats skip these positions; printing restores the
 // original character. This lets pure-transposition solves permute the spaces along
 // with the letters and reveal word boundaries in the recovered plaintext.
+// Runtime alphabet. Defaults to the full 26-letter A..Z (g_alpha == 26,
+// g_idx_to_char_arr == "ABC..Z", g_char_to_idx the identity) so the historical
+// behaviour is bit-identical. -excludeletter / -alphabet shrink it (e.g. the
+// 25-letter A..Z-minus-P, mod 25) for ciphers built on a reduced alphabet.
+// Array sizes everywhere stay ALPHABET_SIZE (26, the max); only loop bounds,
+// modular arithmetic, and the n-gram packing base use g_alpha.
+extern int  g_alpha;              // runtime alphabet size (<= ALPHABET_SIZE)
+extern int  g_char_to_idx[128];   // ASCII (upper) -> alphabet index, or -1 if absent
+extern char g_idx_to_char_arr[ALPHABET_SIZE + 1];  // alphabet index -> char
+extern double g_monograms[ALPHABET_SIZE];          // English monogram freqs, reindexed to runtime alphabet
+void init_alphabet(const char *excluded);          // (re)build the maps; NULL => full A..Z
+
 static inline int index_to_char(int idx) {
-    return (idx >= 0) ? (idx + 'A') : (-(idx + 1));
+    return (idx >= 0) ? (unsigned char) g_idx_to_char_arr[idx] : (-(idx + 1));
 }
 
 float index_of_coincidence(int plaintext[], int len);

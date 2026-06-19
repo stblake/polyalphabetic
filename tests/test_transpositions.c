@@ -355,7 +355,7 @@ static void test_railfence(void) {
 
 static void ref_route_encrypt(int P[], int len, int R, int C, int route_id, int ct[]) {
     int cells[MAX_CIPHER_LENGTH];
-    route_cells(R, C, route_id, cells);
+    route_cells(R, C, len, route_id, cells);
     for (int k = 0; k < len; k++) ct[k] = P[cells[k]];
 }
 
@@ -378,7 +378,7 @@ static void test_route(void) {
         for (int route_id = 0; route_id < N_ROUTES; route_id++) {
 
             int cells[MAX_CIPHER_LENGTH];
-            route_cells(R, C, route_id, cells);
+            route_cells(R, C, len, route_id, cells);
             CHECK(is_permutation(cells, len),
                 "route %dx%d id=%d cell order not a bijection", R, C, route_id);
 
@@ -393,6 +393,41 @@ static void test_route(void) {
             decrypt_route(Pt, len, R, C, route_id, 1, out);
             CHECK(arrays_equal(out, ct, len),
                 "route %dx%d id=%d variant round-trip mismatch", R, C, route_id);
+        }
+    }
+}
+
+// Ragged grids (short final row, len not a multiple of C): every route must still
+// be a bijection over the surviving cells and round-trip cleanly in both directions.
+static void test_route_ragged(void) {
+    // (R,C,len) with (R-1)*C < len < R*C, so the last row is partial.
+    int cases[][3] = { {2,3,5}, {3,4,10}, {4,5,18}, {6,7,38}, {5,8,33}, {9,9,73} };
+
+    for (int p = 0; p < 6; p++) {
+        int R = cases[p][0], C = cases[p][1], len = cases[p][2];
+        for (int route_id = 0; route_id < N_ROUTES; route_id++) {
+
+            int cells[MAX_CIPHER_LENGTH];
+            int n = route_cells(R, C, len, route_id, cells);
+            CHECK(n == len, "ragged route %dx%d len=%d id=%d emitted %d cells",
+                R, C, len, route_id, n);
+            CHECK(is_permutation(cells, len),
+                "ragged route %dx%d len=%d id=%d cell order not a bijection",
+                R, C, len, route_id);
+
+            int Pt[MAX_CIPHER_LENGTH], ct[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+            random_text(Pt, len);
+            ref_route_encrypt(Pt, len, R, C, route_id, ct);
+
+            decrypt_route(ct, len, R, C, route_id, 0, out);
+            CHECK(arrays_equal(out, Pt, len),
+                "ragged route %dx%d len=%d id=%d standard round-trip mismatch",
+                R, C, len, route_id);
+
+            decrypt_route(Pt, len, R, C, route_id, 1, out);
+            CHECK(arrays_equal(out, ct, len),
+                "ragged route %dx%d len=%d id=%d variant round-trip mismatch",
+                R, C, len, route_id);
         }
     }
 }
@@ -703,6 +738,7 @@ int main(void) {
     test_railfence();
     test_route_known_answer();
     test_route();
+    test_route_ragged();
     test_amsco();
     test_myszkowski();
     test_redefence();

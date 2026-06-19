@@ -63,7 +63,7 @@ void derive_optimal_cycleword(
     // Position of each ciphertext character within the CT keyed alphabet
     // (ciphertext_keyword_indices is always a permutation of 0..25).
     int ct_key_lookup[ALPHABET_SIZE];
-    for (i = 0; i < ALPHABET_SIZE; i++) ct_key_lookup[ciphertext_keyword_indices[i]] = i;
+    for (i = 0; i < g_alpha; i++) ct_key_lookup[ciphertext_keyword_indices[i]] = i;
 
     // Quagmire I-IV are handled by a factored fast path (below); the cached 26x26
     // weight table is only built for the keyword-free ciphers.
@@ -99,10 +99,10 @@ void derive_optimal_cycleword(
     // unchanged.
     double Mext[2 * ALPHABET_SIZE];
     if (is_quag) {
-        for (i = 0; i < ALPHABET_SIZE; i++) {
-            double m = english_monograms[plaintext_keyword_indices[i]];
+        for (i = 0; i < g_alpha; i++) {
+            double m = g_monograms[plaintext_keyword_indices[i]];
             Mext[i] = m;
-            Mext[i + ALPHABET_SIZE] = m;
+            Mext[i + g_alpha] = m;
         }
     }
 
@@ -117,32 +117,32 @@ void derive_optimal_cycleword(
     if (!is_quag) {
         int rebuild = !w_valid || w_type != cfg->cipher_type || w_variant != (int)cfg->variant;
         if (!rebuild) {
-            for (i = 0; i < ALPHABET_SIZE; i++) {
+            for (i = 0; i < g_alpha; i++) {
                 if (w_pt[i] != plaintext_keyword_indices[i] ||
                     w_ct[i] != ciphertext_keyword_indices[i]) { rebuild = 1; break; }
             }
         }
         if (rebuild) {
-            for (s = 0; s < ALPHABET_SIZE; s++) {
-                for (c = 0; c < ALPHABET_SIZE; c++) {
+            for (s = 0; s < g_alpha; s++) {
+                for (c = 0; c < g_alpha; c++) {
                     int pt_char;
                     if (cfg->cipher_type == PORTA) {
                         int porta_shift = s / 2;
                         if (c < 13) pt_char = (c + porta_shift) % 13 + 13;
                         else        pt_char = (c - 13 - porta_shift + ALPHABET_SIZE) % 13;
                     } else if (cfg->cipher_type == BEAUFORT) {
-                        pt_char = (s - c + ALPHABET_SIZE) % ALPHABET_SIZE;
+                        pt_char = (s - c + g_alpha) % g_alpha;
                     } else {
                         // Vigenere. Must match vigenere_decrypt: standard
                         // P = (C - K), variant P = (C + K) mod 26.
-                        if (cfg->variant) pt_char = (c + s) % ALPHABET_SIZE;
-                        else              pt_char = (c - s + ALPHABET_SIZE) % ALPHABET_SIZE;
+                        if (cfg->variant) pt_char = (c + s) % g_alpha;
+                        else              pt_char = (c - s + g_alpha) % g_alpha;
                     }
-                    weight[s][c] = english_monograms[pt_char];
+                    weight[s][c] = g_monograms[pt_char];
                 }
             }
             w_valid = 1; w_type = cfg->cipher_type; w_variant = (int)cfg->variant;
-            for (i = 0; i < ALPHABET_SIZE; i++) {
+            for (i = 0; i < g_alpha; i++) {
                 w_pt[i] = plaintext_keyword_indices[i];
                 w_ct[i] = ciphertext_keyword_indices[i];
             }
@@ -160,7 +160,7 @@ void derive_optimal_cycleword(
             hist = hist_by_col + col * ALPHABET_SIZE;
         } else {
             // Standalone path: histogram this column's ciphertext chars locally.
-            for (c = 0; c < ALPHABET_SIZE; c++) local_hist[c] = 0;
+            for (c = 0; c < g_alpha; c++) local_hist[c] = 0;
             for (row = 0; row * cycleword_len + col < cipher_len; row++)
                 local_hist[cipher_indices[row * cycleword_len + col]]++;
             hist = local_hist;
@@ -174,7 +174,7 @@ void derive_optimal_cycleword(
         // inner dot product from 26 multiply-adds into (#distinct chars) of them,
         // and derive_optimal_cycleword is the dominant cost of the optimal climb.
         int nz_c[ALPHABET_SIZE], nz_n[ALPHABET_SIZE], n_nz = 0;
-        for (c = 0; c < ALPHABET_SIZE; c++) {
+        for (c = 0; c < g_alpha; c++) {
             if (hist[c]) { nz_c[n_nz] = c; nz_n[n_nz] = hist[c]; n_nz++; }
         }
 
@@ -187,21 +187,21 @@ void derive_optimal_cycleword(
             int pp[ALPHABET_SIZE];
             if (cfg->variant) {
                 for (int k = 0; k < n_nz; k++) pp[k] = ct_key_lookup[nz_c[k]];
-                for (s = 0; s < ALPHABET_SIZE; s++) {
+                for (s = 0; s < g_alpha; s++) {
                     double score = 0.0;
                     for (int k = 0; k < n_nz; k++) score += nz_n[k] * Mext[pp[k] + s];
                     if (score > best_score) { best_score = score; best_shift = s; }
                 }
             } else {
-                for (int k = 0; k < n_nz; k++) pp[k] = ct_key_lookup[nz_c[k]] + ALPHABET_SIZE;
-                for (s = 0; s < ALPHABET_SIZE; s++) {
+                for (int k = 0; k < n_nz; k++) pp[k] = ct_key_lookup[nz_c[k]] + g_alpha;
+                for (s = 0; s < g_alpha; s++) {
                     double score = 0.0;
                     for (int k = 0; k < n_nz; k++) score += nz_n[k] * Mext[pp[k] - s];
                     if (score > best_score) { best_score = score; best_shift = s; }
                 }
             }
         } else {
-            for (s = 0; s < ALPHABET_SIZE; s++) {
+            for (s = 0; s < g_alpha; s++) {
                 double score = 0.0;
                 const double *ws = weight[s];
                 for (int k = 0; k < n_nz; k++) score += nz_n[k] * ws[nz_c[k]];

@@ -78,7 +78,7 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     // that previously dominated the decrypt, with O(1) lookups. This is the hot
     // path: quagmire_decrypt runs once per hill-climber iteration.
     int ct_inverse[ALPHABET_SIZE];
-    for (i = 0; i < ALPHABET_SIZE; i++) ct_inverse[ciphertext_keyword_indices[i]] = i;
+    for (i = 0; i < g_alpha; i++) ct_inverse[ciphertext_keyword_indices[i]] = i;
 
     // The cycleword char's position in the CT keyword depends only on the period
     // index (i % cycleword_len), so resolve all of them up front.
@@ -94,12 +94,12 @@ void quagmire_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
         if (++cw_idx == cycleword_len) cw_idx = 0;
 
         if (variant) {
-            indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
+            indx = (posn_keyword + posn_cycleword)%g_alpha;
         } else {
-            indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
+            indx = (posn_keyword - posn_cycleword)%g_alpha;
         }
 
-        if (indx < 0) indx += ALPHABET_SIZE;
+        if (indx < 0) indx += g_alpha;
         decrypted[i] = plaintext_keyword_indices[indx];
     }
 }
@@ -115,7 +115,7 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     // Invert both keyed alphabets once (see quagmire_decrypt): the message char's
     // position comes from the PT keyword, the cycleword char's from the CT keyword.
     int pt_inverse[ALPHABET_SIZE], ct_inverse[ALPHABET_SIZE];
-    for (i = 0; i < ALPHABET_SIZE; i++) {
+    for (i = 0; i < g_alpha; i++) {
         pt_inverse[plaintext_keyword_indices[i]] = i;
         ct_inverse[ciphertext_keyword_indices[i]] = i;
     }
@@ -130,11 +130,11 @@ void quagmire_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
         if (++cw_idx == cycleword_len) cw_idx = 0;
 
         if (variant) {
-            indx = (posn_keyword - posn_cycleword)%ALPHABET_SIZE;
+            indx = (posn_keyword - posn_cycleword)%g_alpha;
         } else {
-            indx = (posn_keyword + posn_cycleword)%ALPHABET_SIZE;
+            indx = (posn_keyword + posn_cycleword)%g_alpha;
         }
-        if (indx < 0) indx += ALPHABET_SIZE;
+        if (indx < 0) indx += g_alpha;
         encrypted[i] = ciphertext_keyword_indices[indx];
     }
 }

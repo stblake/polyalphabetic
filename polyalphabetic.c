@@ -281,7 +281,11 @@ int main(int argc, char **argv) {
     seed_rand(rng_seed);
 
     init_config(&cfg);
-    
+
+    // Default to the full 26-letter A..Z alphabet; -excludeletter (parsed below)
+    // shrinks it (must happen before load_ngrams and any ord() call).
+    init_alphabet(NULL);
+
     // Initialize shared data pointers.
     shared.ngram_data = NULL;
     shared.dict = NULL;
@@ -312,6 +316,14 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-ngramfile") == 0) {
             strcpy(cfg.ngram_file, argv[++i]);
             printf("-ngramfile %s\n", cfg.ngram_file);
+        } else if (strcmp(argv[i], "-excludeletter") == 0) {
+            // Drop one (or more) letters from the alphabet, shrinking it to an
+            // N<26 letter alphabet with mod-N arithmetic. E.g. -excludeletter P
+            // gives the 25-letter A..Z-minus-P alphabet (mod 25). Must be set
+            // before the ngram table is loaded and before any ciphertext is read.
+            init_alphabet(argv[++i]);
+            printf("-excludeletter %s  (alphabet size now %d: %s)\n",
+                argv[i], g_alpha, g_idx_to_char_arr);
         } else if (strcmp(argv[i], "-maxkeywordlen") == 0) {
             cfg.plaintext_keyword_len = atoi(argv[++i]);
             cfg.ciphertext_keyword_len = cfg.plaintext_keyword_len;
@@ -532,6 +544,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Swagman transposition cipher (key-square hill climber).\n\n");
     } else if (cfg.cipher_type == GRILLE) {
         printf("\nAttacking a turning grille transposition cipher (orbit-assignment hill climber).\n\n");
+    } else if (cfg.cipher_type == INDEP_PERIODIC) {
+        printf("\nAttacking an independent-periodic substitution (P independent mixed alphabets, joint hill climber).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -720,7 +734,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
             for (int i = 0; i < cipher_len; i++) {
                 if (cribtext_str[i] != '_') {
                     crib_positions[n_cribs] = i;
-                    crib_indices[n_cribs] = cribtext_str[i] - 'A';
+                    crib_indices[n_cribs] = g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127];
                     n_cribs++;
                 }
             }
@@ -788,6 +802,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     }
     if (cfg->cipher_type == GRILLE) {
         solve_grille(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == INDEP_PERIODIC) {
+        solve_indep_periodic(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
         return ;
     }
@@ -942,8 +961,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
                     best_score = score;
                     best_cycleword_length = cycleword_lengths[i];
                     vec_copy(decrypted, best_decrypted, cipher_len);
-                    vec_copy(plaintext_keyword, best_plaintext_keyword, ALPHABET_SIZE);
-                    vec_copy(ciphertext_keyword, best_ciphertext_keyword, ALPHABET_SIZE);
+                    vec_copy(plaintext_keyword, best_plaintext_keyword, g_alpha);
+                    vec_copy(ciphertext_keyword, best_ciphertext_keyword, g_alpha);
                     vec_copy(cycleword, best_cycleword, cycleword_lengths[i]);
                 }
             }
@@ -1012,8 +1031,8 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
     res->score = best_score;
     res->n_words = n_words_found;
     res->cycleword_len = best_cycleword_length;
-    vec_copy(best_plaintext_keyword, res->plaintext_keyword, ALPHABET_SIZE);
-    vec_copy(best_ciphertext_keyword, res->ciphertext_keyword, ALPHABET_SIZE);
+    vec_copy(best_plaintext_keyword, res->plaintext_keyword, g_alpha);
+    vec_copy(best_ciphertext_keyword, res->ciphertext_keyword, g_alpha);
     vec_copy(best_cycleword, res->cycleword, best_cycleword_length);
     vec_copy(best_decrypted, res->decrypted, cipher_len);
     res->decrypted_len = cipher_len;
@@ -1048,9 +1067,9 @@ void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
     printf("\n");
 
     if (cfg->cipher_type != PORTA) {
-        print_text(res->plaintext_keyword, ALPHABET_SIZE);
+        print_text(res->plaintext_keyword, g_alpha);
         printf("\n");
-        print_text(res->ciphertext_keyword, ALPHABET_SIZE);
+        print_text(res->ciphertext_keyword, g_alpha);
         printf("\n");
     }
 
@@ -1068,7 +1087,7 @@ void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_"); // No crib defined for this position.
             } else {
-                int diff = abs(res->decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(res->decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) {
                     printf("%d", diff);
                 } else {
@@ -1104,9 +1123,9 @@ void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
     printf(", ");
 
     if (cfg->cipher_type != PORTA) {
-        print_text(res->plaintext_keyword, ALPHABET_SIZE);
+        print_text(res->plaintext_keyword, g_alpha);
         printf(", ");
-        print_text(res->ciphertext_keyword, ALPHABET_SIZE);
+        print_text(res->ciphertext_keyword, g_alpha);
         printf(", ");
     }
 
@@ -1206,6 +1225,7 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
     // Progress tracking for the verbose live display.
     clock_t start_time = clock();
     long n_iterations = 0;
+    long n_slips = 0, n_backtracks = 0;   // slip = -slipprob-accepted worse move
     double elapsed, n_iter_per_sec, entropy_score;
 
     for (int n = 0; n < cfg->n_restarts; n++) {
@@ -1214,6 +1234,7 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
             // Backtrack to the best known state.
             cur_p1 = *best_p1; cur_p2 = *best_p2; cur_p3 = *best_p3;
             current_score = best_score;
+            n_backtracks += 1;
         } else {
             random_transposition_params(cfg, cipher_len, &cur_p1, &cur_p2, &cur_p3);
             apply_transposition(cfg, cipher_indices, cipher_len, cur_p1, cur_p2, cur_p3, decrypted);
@@ -1235,7 +1256,10 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
                 cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
 
             // Accept if better, or slip to a worse state to escape local maxima.
-            if (local_score > current_score || frand() < cfg->slip_probability) {
+            bool better = local_score > current_score;
+            bool slip = !better && frand() < cfg->slip_probability;
+            if (better || slip) {
+                if (slip) n_slips += 1;
                 cur_p1 = loc_p1; cur_p2 = loc_p2; cur_p3 = loc_p3;
                 current_score = local_score;
             }
@@ -1258,6 +1282,8 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
                     printf("\n%.2f\t[sec]\n", elapsed);
                     printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
                     printf("%d\t[restarts]\n", n);
+                    printf("%ld\t[backtracks]\n", n_backtracks);
+                    printf("%ld\t[slips]\n", n_slips);
                     printf("%.4f\t[entropy]\n", entropy_score);
                     printf("%.2f\t[score]\n", best_score);
                     if (cfg->cipher_type == TRANSMATRIX) {
@@ -1332,7 +1358,7 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -1508,6 +1534,7 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
     // Progress tracking for the verbose live display.
     clock_t start_time = clock();
     long n_iterations = 0;
+    long n_slips = 0, n_backtracks = 0;   // slip = annealing-accepted worse move
     double elapsed, n_iter_per_sec, entropy_score;
 
     // Simulated-annealing schedule: each restart cools geometrically from a hot
@@ -1525,6 +1552,7 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
         if (have_best && frand() < cfg->backtracking_probability) {
             vec_copy(best_key, cur_key, cipher_len);
             current_score = best_score;
+            n_backtracks += 1;
         } else {
             // Restart: mostly from a structured columnar seed (random period and
             // column order), occasionally from a fully random permutation so
@@ -1566,6 +1594,7 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
             // Metropolis acceptance with the current temperature.
             double delta = local_score - current_score;
             if (delta > 0.0 || frand() < exp(delta / temp)) {
+                if (delta <= 0.0) n_slips += 1;   // accepted a worse (or equal) move
                 vec_copy(loc_key, cur_key, cipher_len);
                 current_score = local_score;
                 cur_period = loc_period;
@@ -1590,6 +1619,8 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
                     printf("\n%.2f\t[sec]\n", elapsed);
                     printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
                     printf("%d\t[restarts]\n", n);
+                    printf("%ld\t[backtracks]\n", n_backtracks);
+                    printf("%ld\t[slips]\n", n_slips);
                     printf("%.4f\t[entropy]\n", entropy_score);
                     printf("%.2f\t[score]\n", best_score);
                     printf("%d\t[period]\n", best_period);
@@ -1650,7 +1681,7 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -1801,6 +1832,7 @@ static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
 
     clock_t start_time = clock();
     long n_iterations = 0;
+    long n_slips = 0, n_backtracks = 0;   // slip = annealing-accepted worse move
     double elapsed, n_iter_per_sec, entropy_score;
 
     // Single: one restart slot per (K, restart). Double: just n_restarts.
@@ -1814,6 +1846,7 @@ static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
             columnar_copy_state(nstages, best_K, best_order, best_dir,
                 cur_K, cur_order, cur_dir);
             current_score = best_score;
+            n_backtracks += 1;
         } else {
             // Fresh restart: choose the column count(s) for this restart.
             if (nstages == 1) {
@@ -1851,6 +1884,7 @@ static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
 
             double delta = local_score - current_score;
             if (delta > 0.0 || frand() < exp(delta / temp)) {
+                if (delta <= 0.0) n_slips += 1;   // accepted a worse (or equal) move
                 columnar_copy_state(nstages, loc_K, loc_order, loc_dir,
                     cur_K, cur_order, cur_dir);
                 current_score = local_score;
@@ -1873,6 +1907,8 @@ static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
                     printf("\n%.2f\t[sec]\n", elapsed);
                     printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
                     printf("%ld\t[restarts]\n", rs);
+                    printf("%ld\t[backtracks]\n", n_backtracks);
+                    printf("%ld\t[slips]\n", n_slips);
                     printf("%.4f\t[entropy]\n", entropy_score);
                     printf("%.2f\t[score]\n", best_score);
                     for (int st = 0; st < nstages; st++) {
@@ -1941,7 +1977,7 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -2013,7 +2049,7 @@ static void report_transposition(PolyalphabeticConfig *cfg, SharedData *shared,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (cribtext_str[i] - 'A'));
+                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -2032,6 +2068,239 @@ static void report_transposition(PolyalphabeticConfig *cfg, SharedData *shared,
     printf(", ");
     print_text(best_decrypted, cipher_len);
     printf("\n");
+}
+
+
+// =====================================================================
+//  Independent periodic substitution (TYPE indep_periodic)
+// =====================================================================
+//
+// A period-P cipher in which each residue class i % P is enciphered with its OWN,
+// INDEPENDENT mixed substitution alphabet (unlike Quagmire, whose columns are all
+// shifts of one keyed alphabet). decrypted[i] = map[i % P][cipher[i]], where each
+// map[] is a permutation of the runtime alphabet sending a cipher letter to its
+// plaintext letter.
+//
+// The columns CANNOT be solved one at a time: column j read alone is every P-th
+// letter of the message and carries no n-gram signal. The only constraint tying
+// the P alphabets down is that CONSECUTIVE plaintext letters -- which come from
+// DIFFERENT columns -- must form English n-grams. So all P alphabets are climbed
+// JOINTLY against the reassembled text. With P alphabets x (alpha-1) d.o.f. this is
+// a hard search, so we use simulated annealing + iterated local search (restarts
+// that perturb the global best, not just fresh seeds) and frequency-seeded starts.
+
+// Build the plaintext (as indices) from the P per-column maps. Sentinels (<0,
+// carried-through spaces/punctuation) pass through unchanged.
+static void indep_decrypt(int cipher_indices[], int cipher_len, int period,
+    int maps[][ALPHABET_SIZE], int decrypted[]) {
+    for (int i = 0; i < cipher_len; i++) {
+        int c = cipher_indices[i];
+        decrypted[i] = (c >= 0) ? maps[i % period][c] : c;
+    }
+}
+
+// Frequency-seed each column's map: most-frequent cipher letter in the column ->
+// most-frequent English letter, etc. Gives the annealer a sensible starting point.
+static void indep_seed(int cipher_indices[], int cipher_len, int period,
+    int maps[][ALPHABET_SIZE]) {
+
+    // English letters (runtime alphabet indices) sorted by descending frequency.
+    int eng_rank[ALPHABET_SIZE];
+    for (int i = 0; i < g_alpha; i++) eng_rank[i] = i;
+    for (int a = 0; a < g_alpha; a++)
+        for (int b = a + 1; b < g_alpha; b++)
+            if (g_monograms[eng_rank[b]] > g_monograms[eng_rank[a]]) {
+                int t = eng_rank[a]; eng_rank[a] = eng_rank[b]; eng_rank[b] = t;
+            }
+
+    for (int j = 0; j < period; j++) {
+        int hist[ALPHABET_SIZE];
+        for (int c = 0; c < g_alpha; c++) hist[c] = 0;
+        for (int i = j; i < cipher_len; i += period)
+            if (cipher_indices[i] >= 0) hist[cipher_indices[i]]++;
+        // cipher letters sorted by descending column frequency (stable on ties)
+        int crank[ALPHABET_SIZE];
+        for (int c = 0; c < g_alpha; c++) crank[c] = c;
+        for (int a = 0; a < g_alpha; a++)
+            for (int b = a + 1; b < g_alpha; b++)
+                if (hist[crank[b]] > hist[crank[a]]) {
+                    int t = crank[a]; crank[a] = crank[b]; crank[b] = t;
+                }
+        for (int r = 0; r < g_alpha; r++) maps[j][crank[r]] = eng_rank[r];
+    }
+}
+
+// Coordinate ascent: fully local-optimize ONE column's alphabet (best-improving
+// pairwise swaps to convergence) holding the other columns fixed. This is the move
+// that breaks the coordination barrier -- single random swaps barely move the score
+// while neighbouring columns are still wrong, but greedily perfecting one column
+// against the (partially correct) others gives a real gradient. Returns the score.
+static double indep_column_opt(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len, int period, int j,
+    int maps[][ALPHABET_SIZE], int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int decrypted[], double cur_score) {
+
+    bool improved = true;
+    while (improved) {
+        improved = false;
+        for (int a = 0; a < g_alpha; a++) {
+            for (int b = a + 1; b < g_alpha; b++) {
+                int t = maps[j][a]; maps[j][a] = maps[j][b]; maps[j][b] = t;
+                indep_decrypt(cipher_indices, cipher_len, period, maps, decrypted);
+                double sc = state_score(decrypted, cipher_len,
+                    crib_indices, crib_positions, n_cribs, ngram_data, cfg->ngram_size,
+                    cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+                if (sc > cur_score) { cur_score = sc; improved = true; }
+                else { t = maps[j][a]; maps[j][a] = maps[j][b]; maps[j][b] = t; }
+            }
+        }
+    }
+    return cur_score;
+}
+
+static double shotgun_indep_climber(PolyalphabeticConfig *cfg,
+    int cipher_indices[], int cipher_len, int period,
+    int crib_indices[], int crib_positions[], int n_cribs,
+    float *ngram_data, int best_decrypted[], int best_maps[][ALPHABET_SIZE]) {
+
+    int cur[MAX_COLS][ALPHABET_SIZE], loc[MAX_COLS][ALPHABET_SIZE];
+    int seed[MAX_COLS][ALPHABET_SIZE];
+    int decrypted[MAX_CIPHER_LENGTH];
+    double best_score = 0., current_score = 0.;
+    bool have_best = false;
+    size_t state_bytes = (size_t) period * ALPHABET_SIZE * sizeof(int);
+    (void) loc;
+
+    indep_seed(cipher_indices, cipher_len, period, seed);
+
+    clock_t start_time = clock();
+    long n_iterations = 0, n_slips = 0, n_backtracks = 0;
+    double elapsed, n_iter_per_sec, entropy_score;
+
+    for (long rs = 0; rs < cfg->n_restarts; rs++) {
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            // Iterated local search: perturb the global best (basin hopping).
+            memcpy(cur, best_maps, state_bytes);
+            int kicks = rand_int(3, 9);
+            for (int k = 0; k < kicks; k++) {
+                int j = rand_int(0, period), a = rand_int(0, g_alpha), b = rand_int(0, g_alpha);
+                int t = cur[j][a]; cur[j][a] = cur[j][b]; cur[j][b] = t;
+            }
+            n_backtracks += 1;
+        } else {
+            // Fresh frequency-seeded start, lightly shuffled for diversity.
+            memcpy(cur, seed, state_bytes);
+            for (int k = 0; k < (int)(rs % 25); k++) {
+                int j = rand_int(0, period), a = rand_int(0, g_alpha), b = rand_int(0, g_alpha);
+                int t = cur[j][a]; cur[j][a] = cur[j][b]; cur[j][b] = t;
+            }
+        }
+        (void) n_slips;
+        indep_decrypt(cipher_indices, cipher_len, period, cur, decrypted);
+        current_score = state_score(decrypted, cipher_len,
+            crib_indices, crib_positions, n_cribs, ngram_data, cfg->ngram_size,
+            cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+
+        // Local search = coordinate-ascent sweeps over the columns: optimize each
+        // column fully given the others, repeating until a whole sweep makes no
+        // progress. Columns are visited in random order each sweep. n_hill_climbs
+        // caps the number of sweeps.
+        int order[MAX_COLS];
+        for (int j = 0; j < period; j++) order[j] = j;
+        int max_sweeps = cfg->n_hill_climbs > 0 ? cfg->n_hill_climbs : 1;
+        if (max_sweeps > 200) max_sweeps = 200;   // coordinate ascent converges fast
+        for (int sweep = 0; sweep < max_sweeps; sweep++) {
+            for (int x = period - 1; x > 0; x--) {   // shuffle column order
+                int y = rand_int(0, x + 1); int t = order[x]; order[x] = order[y]; order[y] = t;
+            }
+            double before = current_score;
+            for (int jj = 0; jj < period; jj++) {
+                n_iterations += 1;
+                current_score = indep_column_opt(cfg, cipher_indices, cipher_len, period,
+                    order[jj], cur, crib_indices, crib_positions, n_cribs,
+                    ngram_data, decrypted, current_score);
+            }
+            if (current_score <= before + 1.e-9) break;   // converged
+        }
+
+        if (!have_best || current_score > best_score) {
+            best_score = current_score;
+            memcpy(best_maps, cur, state_bytes);
+            have_best = true;
+            if (cfg->verbose) {
+                indep_decrypt(cipher_indices, cipher_len, period, best_maps, decrypted);
+                entropy_score = entropy(decrypted, cipher_len);
+                elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
+                n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
+                printf("\n%.2f\t[sec]\n%.0fK\t[col-opts/sec]\n%ld\t[restarts]\n%ld\t[backtracks]\n"
+                       "%.4f\t[entropy]\nperiod %d\t[params]\n%.2f\t[score]\n",
+                    elapsed, 1.e-3*n_iter_per_sec, rs, n_backtracks,
+                    entropy_score, period, best_score);
+                print_text(decrypted, cipher_len); printf("\n"); fflush(stdout);
+            }
+        }
+    }
+
+    indep_decrypt(cipher_indices, cipher_len, period, best_maps, best_decrypted);
+    return best_score;
+}
+
+void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
+    PolyalphabeticConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str;
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for an independent-periodic solve.\n\n");
+        return ;
+    }
+
+    // Period range: use -cyclewordlen if given, else sweep 2..max_cycleword_len
+    // (capped at MAX_COLS and len/2).
+    int plo, phi;
+    if (cfg->cycleword_len_present) {
+        plo = phi = cfg->cycleword_len;
+    } else {
+        plo = 2;
+        phi = cfg->max_cycleword_len;
+        if (phi > MAX_COLS) phi = MAX_COLS;
+        if (phi > cipher_len / 2) phi = cipher_len / 2;
+        if (phi < plo) phi = plo;
+    }
+
+    int best_decrypted[MAX_CIPHER_LENGTH], best_maps[MAX_COLS][ALPHABET_SIZE];
+    int try_decrypted[MAX_CIPHER_LENGTH], try_maps[MAX_COLS][ALPHABET_SIZE];
+    double best_score = -1.e18;
+    int best_period = plo;
+
+    for (int p = plo; p <= phi; p++) {
+        double sc = shotgun_indep_climber(cfg, cipher_indices, cipher_len, p,
+            crib_indices, crib_positions, n_cribs,
+            shared->ngram_data, try_decrypted, try_maps);
+        if (cfg->verbose)
+            printf("\nperiod %d: score %.2f\n", p, sc);
+        if (sc > best_score) {
+            best_score = sc;
+            best_period = p;
+            memcpy(best_decrypted, try_decrypted, (size_t) cipher_len * sizeof(int));
+            memcpy(best_maps, try_maps, (size_t) p * ALPHABET_SIZE * sizeof(int));
+        }
+    }
+
+    char param_summary[64];
+    snprintf(param_summary, sizeof(param_summary), "period=%d", best_period);
+    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
+        best_score, cribtext_str, n_cribs, param_summary);
+
+    // Recovered per-column alphabets (cipher A..Z -> plaintext), for reproduction.
+    for (int j = 0; j < best_period; j++) {
+        printf("col %d:", j);
+        for (int c = 0; c < g_alpha; c++) printf("%c", index_to_char(best_maps[j][c]));
+        printf("\n");
+    }
 }
 
 
@@ -2098,9 +2367,10 @@ void solve_railfence(char *ciphertext_str, char *cribtext_str,
 //  Route transposition solver (TYPE route)
 // =====================================================================
 //
-// Enumerate every rectangular grid that tiles the text exactly (R x C with
-// R*C == len, both >= 2) and every route in [0, N_ROUTES); invert each with
-// decrypt_route and keep the best-scoring plaintext. -variant swaps read/write.
+// Enumerate every rectangular grid that can hold the text -- including ragged ones
+// with a short final row -- by sweeping the column count C and taking R = ceil(len/C)
+// rows (both >= 2), times every route in [0, N_ROUTES); invert each with decrypt_route
+// and keep the best-scoring plaintext. -variant swaps read/write.
 void solve_route(char *ciphertext_str, char *cribtext_str,
     PolyalphabeticConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
@@ -2120,10 +2390,12 @@ void solve_route(char *ciphertext_str, char *cribtext_str,
     int best_R = 0, best_C = 0, best_route = 0;
     bool have_best = false;
 
-    for (int R = 2; R <= cipher_len / 2; R++) {
-        if (cipher_len % R != 0) continue;
-        int C = cipher_len / R;
-        if (C < 2) continue;
+    // Sweep the column count C; R = ceil(len/C) rows gives the (possibly ragged)
+    // grid with C columns. This subsumes the old "C divides len" complete grids and
+    // adds the ragged ones (short final row) the divisor sweep used to skip.
+    for (int C = 2; C <= cipher_len / 2; C++) {
+        int R = (cipher_len + C - 1) / C;
+        if (R < 2) continue;
         for (int route_id = 0; route_id < N_ROUTES; route_id++) {
             decrypt_route(cipher_indices, cipher_len, R, C, route_id, variant, decrypted);
             double score = state_score(decrypted, cipher_len,
@@ -2837,37 +3109,37 @@ double shotgun_hill_climber(
             // Backtrack to best state. 
             n_backtracks += 1;
             current_score = best_score;
-            vec_copy(best_plaintext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
-            vec_copy(best_ciphertext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+            vec_copy(best_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
+            vec_copy(best_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
             vec_copy(best_cycleword_state, current_cycleword_state, cycleword_len);
         } else {
             // Initialise random state.
             switch (cfg->cipher_type) {
                 case VIGENERE:
                     // Vigenere uses straight alphabets for PT/CT keywords, and the key is the cycleword.
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);                    
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);                    
                     break ;
                 case QUAGMIRE_1:
                     // PT keyword is scrambled, CT is straight.
                     if (cfg->user_plaintext_keyword_present) {
                         make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ;
                 case QUAGMIRE_2:
                     // PT straight, CT scrambled
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
                     if (cfg->user_ciphertext_keyword_present) {
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
                     } else {
-                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                     }
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ;
                 case QUAGMIRE_3:
                     // PT and CT are the same scrambled alphabet
@@ -2876,63 +3148,63 @@ double shotgun_hill_climber(
                     } else if (cfg->user_ciphertext_keyword_present) {
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ;
                 case QUAGMIRE_4:
                     // PT and CT are different scrambled alphabets
                     if (cfg->user_plaintext_keyword_present) {
                         make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
                     
                     if (cfg->user_ciphertext_keyword_present) {
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
                     } else {
-                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                     }
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ;
                 case BEAUFORT:
-                    plaintext_keyword_len = ALPHABET_SIZE;
-                    ciphertext_keyword_len = ALPHABET_SIZE;
-                    for (i = 0; i < ALPHABET_SIZE; i++) current_plaintext_keyword_state[i] = i;
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    plaintext_keyword_len = g_alpha;
+                    ciphertext_keyword_len = g_alpha;
+                    for (i = 0; i < g_alpha; i++) current_plaintext_keyword_state[i] = i;
+                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ; 
                 case PORTA: 
                     // Porta uses straight alphabets (fixed) for PT/CT keywords.
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break ;
                 case AUTOKEY_0:
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 case AUTOKEY_1:
                     // Keyed PT, Straight CT
                     if (cfg->user_plaintext_keyword_present) {
                         make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 case AUTOKEY_2:
                     // Straight PT, Keyed CT
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
                     if (cfg->user_ciphertext_keyword_present) {
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
                     } else {
-                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                     }
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 case AUTOKEY_3:
                     // Same keyed PT & CT
@@ -2942,40 +3214,40 @@ double shotgun_hill_climber(
                          // FIX: Allow ciphertext keyword to set the shared key state
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 case AUTOKEY_4:
                     // Diff keyed PT & CT
                     if (cfg->user_plaintext_keyword_present) {
                         make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
                     } else {
-                        random_keyword(current_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                     }
                     if (cfg->user_ciphertext_keyword_present) {
                         make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
                     } else {
-                        random_keyword(current_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                     }
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 case AUTOKEY_BEAU:
                 case AUTOKEY_PORTA:
-                    plaintext_keyword_len = ALPHABET_SIZE;
-                    ciphertext_keyword_len = ALPHABET_SIZE;
+                    plaintext_keyword_len = g_alpha;
+                    ciphertext_keyword_len = g_alpha;
                     // Both use standard straight alphabets for the underlying tableau.
-                    straight_alphabet(current_plaintext_keyword_state, ALPHABET_SIZE);
-                    straight_alphabet(current_ciphertext_keyword_state, ALPHABET_SIZE);
+                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
+                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
                     // The "cycleword" here is actually the primer.
-                    random_cycleword(current_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
                     break;
                 }
 
             if (cfg->same_key_cycle) {
-                vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
-                vec_copy(current_ciphertext_keyword_state, current_cycleword_state, ALPHABET_SIZE);
+                vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+                vec_copy(current_ciphertext_keyword_state, current_cycleword_state, g_alpha);
             }
 
             // If in optimal mode, fix the cycleword immediately for the initial random state
@@ -3003,8 +3275,8 @@ double shotgun_hill_climber(
             n_iterations += 1;
 
             // perturbate.
-            vec_copy(current_plaintext_keyword_state, local_plaintext_keyword_state, ALPHABET_SIZE);
-            vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+            vec_copy(current_plaintext_keyword_state, local_plaintext_keyword_state, g_alpha);
+            vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, g_alpha);
             // In optimal-cycleword mode derive_optimal_cycleword (below) rewrites
             // every entry of local_cycleword_state unconditionally before it is
             // read, so seeding it from current_cycleword_state here is dead work.
@@ -3031,20 +3303,20 @@ double shotgun_hill_climber(
                         break ; 
                     case QUAGMIRE_1:
                         if (!cfg->user_plaintext_keyword_present) {
-                            perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                             did_perturb_keyword = true;
                         }
                         break ;
                     case QUAGMIRE_2:
                         if (!cfg->user_ciphertext_keyword_present) {
-                            perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                            perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                             did_perturb_keyword = true;
                         }
                         break ;
                     case QUAGMIRE_3:
                         if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
-                            perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                            vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                            vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
                             did_perturb_keyword = true;
                         }
                         break ;
@@ -3056,18 +3328,18 @@ double shotgun_hill_climber(
                             did_perturb_keyword = false; // Force cycleword perturbation
                         } else if (cfg->user_plaintext_keyword_present) {
                             // Only perturb ciphertext
-                            perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                            perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                             did_perturb_keyword = true;
                         } else if (cfg->user_ciphertext_keyword_present) {
                             // Only perturb plaintext
-                            perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                             did_perturb_keyword = true;
                         } else {
                             // Standard Q4 stochastic choice
                             if (frand() < 0.5) {
-                                perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                                perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                             } else {
-                                perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                                perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                             }
                             did_perturb_keyword = true;
                         }
@@ -3075,22 +3347,22 @@ double shotgun_hill_climber(
                     case AUTOKEY_1:
                          // Only perturb PT
                          if (!cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                              did_perturb_keyword = true;
                          }
                          break;
                     case AUTOKEY_2:
                          // Only perturb CT
                          if (!cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                              did_perturb_keyword = true;
                          }
                          break;
                     case AUTOKEY_3:
                          // Perturb PT and copy to CT. Check BOTH flags. If either is present, the key is fixed.
                          if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                             vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                             vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
                              did_perturb_keyword = true;
                          }
                          break;
@@ -3099,14 +3371,14 @@ double shotgun_hill_climber(
                          if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
                              did_perturb_keyword = false;
                          } else if (cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                              did_perturb_keyword = true;
                          } else if (cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                              did_perturb_keyword = true;
                          } else {
-                             if (frand() < 0.5) perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                             else perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             if (frand() < 0.5) perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                             else perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                              did_perturb_keyword = true;
                          }
                          break;
@@ -3125,32 +3397,32 @@ double shotgun_hill_climber(
                     
                     // Force perturbation on valid alphabets
                     if (cfg->cipher_type == QUAGMIRE_3 && !(cfg->user_plaintext_keyword_present || cfg->user_ciphertext_keyword_present)) {
-                         perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
-                         vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
+                         perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                         vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
                          did_perturb_keyword = true;
                     } 
                     else if (cfg->cipher_type == QUAGMIRE_1 && !cfg->user_plaintext_keyword_present) {
-                        perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                        perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                         did_perturb_keyword = true;
                     }
                     else if (cfg->cipher_type == QUAGMIRE_2 && !cfg->user_ciphertext_keyword_present) {
-                        perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                        perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                         did_perturb_keyword = true;
                     }
                     else if (cfg->cipher_type == QUAGMIRE_4) {
                         // Random force
                         if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
                             if (frand() < 0.5) {
-                                perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                                perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                             } else {
-                                perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                                perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                             }
                             did_perturb_keyword = true;
                         } else if (!cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, ALPHABET_SIZE, plaintext_keyword_len);
+                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                              did_perturb_keyword = true;
                         } else if (!cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, ALPHABET_SIZE, ciphertext_keyword_len);
+                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
                              did_perturb_keyword = true;
                         }
                     }
@@ -3166,11 +3438,11 @@ double shotgun_hill_climber(
                 
                 // If it's Vigenere or Porta, we MUST perturb the cycleword if not optimal.
                 if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) { 
-                     perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                     perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
                 }
                 // If we decided NOT to perturb the keyword (Quagmire), we perturb the cycleword.
                 else if (!did_perturb_keyword) {
-                    perturbate_cycleword(local_cycleword_state, ALPHABET_SIZE, cycleword_len);
+                    perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
                 }
 
                 // Crib Contradiction Check (Only for Quagmire types that can change keywords.)
@@ -3192,8 +3464,8 @@ double shotgun_hill_climber(
             }
 
             if (cfg->same_key_cycle) {
-                vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, ALPHABET_SIZE);
-                vec_copy(local_ciphertext_keyword_state, local_cycleword_state, ALPHABET_SIZE);
+                vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
+                vec_copy(local_ciphertext_keyword_state, local_cycleword_state, g_alpha);
             }
 
             decrypt_state(cfg, cipher_indices, cipher_len, 
@@ -3208,21 +3480,21 @@ double shotgun_hill_climber(
 
             if (local_score > current_score) {
                 current_score = local_score;
-                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
-                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
+                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
                 vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
             } else if (frand() < cfg->slip_probability) {
                 n_explore += 1;
                 current_score = local_score;
-                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, ALPHABET_SIZE);
-                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, ALPHABET_SIZE);
+                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
+                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
                 vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
             }
 
             if (current_score > best_score) {
                 best_score = current_score;
-                vec_copy(current_plaintext_keyword_state, best_plaintext_keyword_state, ALPHABET_SIZE);
-                vec_copy(current_ciphertext_keyword_state, best_ciphertext_keyword_state, ALPHABET_SIZE);
+                vec_copy(current_plaintext_keyword_state, best_plaintext_keyword_state, g_alpha);
+                vec_copy(current_ciphertext_keyword_state, best_ciphertext_keyword_state, g_alpha);
                 vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
                 if (cfg->verbose) {
 
@@ -3271,8 +3543,8 @@ double shotgun_hill_climber(
                     printf("%.2f\t[score]\n", best_score);
                     
                     if (cfg->cipher_type != PORTA) {
-                        print_text(best_plaintext_keyword_state, ALPHABET_SIZE); printf("\n");
-                        print_text(best_ciphertext_keyword_state, ALPHABET_SIZE); printf("\n");
+                        print_text(best_plaintext_keyword_state, g_alpha); printf("\n");
+                        print_text(best_ciphertext_keyword_state, g_alpha); printf("\n");
                     }
                     print_text(best_cycleword_state, cycleword_len); printf("\n");
                     
@@ -3280,14 +3552,14 @@ double shotgun_hill_climber(
                     printf("\n");
                     if (cfg->cipher_type != PORTA) { 
                         for (k = 0; k < cycleword_len; k++) {
-                            for (j = 0; j < ALPHABET_SIZE; j++) {
+                            for (j = 0; j < g_alpha; j++) {
                                 if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) {
                                     offset = j;
                                 }
                             }
-                            for (j = 0; j < ALPHABET_SIZE; j++) {
-                                indx = (j + offset) % ALPHABET_SIZE;
-                                printf("%c", best_ciphertext_keyword_state[indx] + 'A');
+                            for (j = 0; j < g_alpha; j++) {
+                                indx = (j + offset) % g_alpha;
+                                printf("%c", index_to_char(best_ciphertext_keyword_state[indx]));
                             }
                             printf("\n");
                         }
@@ -3305,8 +3577,8 @@ double shotgun_hill_climber(
         if (det_done) break;
     }
 
-    vec_copy(best_plaintext_keyword_state, plaintext_keyword, ALPHABET_SIZE);
-    vec_copy(best_ciphertext_keyword_state, ciphertext_keyword, ALPHABET_SIZE);
+    vec_copy(best_plaintext_keyword_state, plaintext_keyword, g_alpha);
+    vec_copy(best_ciphertext_keyword_state, ciphertext_keyword, g_alpha);
     vec_copy(best_cycleword_state, cycleword, cycleword_len);
 
     // Final decryption for return value.
@@ -3428,8 +3700,8 @@ bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int ciph
         }
         column_length = k;
 
-        for (i = 0; i < ALPHABET_SIZE; i++) {
-            for (k = 0; k < ALPHABET_SIZE; k++) {
+        for (i = 0; i < g_alpha; i++) {
+            for (k = 0; k < g_alpha; k++) {
                 crib_frequencies[i][k] = 0;
             }
         }
@@ -3439,31 +3711,31 @@ bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int ciph
                 // Use mapped_crib_positions here instead of crib_positions
                 if (mapped_crib_positions[i] == ciphertext_column_indices[k]) {
                     if (verbose) {
-                        printf("CT = %c, PT = %c\n", ciphertext_column[k] + 'A', crib_indices[i] + 'A');
+                        printf("CT = %c, PT = %c\n", index_to_char(ciphertext_column[k]), index_to_char(crib_indices[i]));
                     }
                     
                     crib_frequencies[crib_indices[i]][ciphertext_column[k]] = 1;
 
-                    for (ii = 0; ii < ALPHABET_SIZE; ii++) {
+                    for (ii = 0; ii < g_alpha; ii++) {
                         total = 0;
-                        for (jj = 0; jj < ALPHABET_SIZE; jj++) {
+                        for (jj = 0; jj < g_alpha; jj++) {
                             total += crib_frequencies[ii][jj];
                             if (total > 1) {
                                 if (verbose) {
-                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, index_to_char(crib_indices[i]));
                                 }
                                 return false;
                             }
                         }
                     }
 
-                    for (jj = 0; jj < ALPHABET_SIZE; jj++) {
+                    for (jj = 0; jj < g_alpha; jj++) {
                         total = 0;
-                        for (ii = 0; ii < ALPHABET_SIZE; ii++) {
+                        for (ii = 0; ii < g_alpha; ii++) {
                             total += crib_frequencies[ii][jj];
                             if (total > 1) {
                                 if (verbose) {
-                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, crib_indices[i] + 'A');
+                                    printf("\n\nContradiction at col %d, crib char %c\n\n", j, index_to_char(crib_indices[i]));
                                 }
                                 return false;
                             }
@@ -3501,13 +3773,13 @@ bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int ci
                 crib_char = crib_indices[j];
                 ciphertext_char = cipher_indices[mapped_pos];
                 
-                for (k = 0; k < ALPHABET_SIZE; k++) {
+                for (k = 0; k < g_alpha; k++) {
                     if (ciphertext_keyword_indices[k] == ciphertext_char) {
                         posn_keyword = k; 
                         break ;
                     }
                 }
-                for (k = 0; k < ALPHABET_SIZE; k++) {
+                for (k = 0; k < g_alpha; k++) {
                     if (plaintext_keyword_indices[k] == crib_char) {
                         posn_cycleword = k; 
                         break ;
@@ -3515,12 +3787,12 @@ bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int ci
                 }
 
                 if (variant) {
-                    indx = (posn_cycleword - posn_keyword) % ALPHABET_SIZE;
+                    indx = (posn_cycleword - posn_keyword) % g_alpha;
                 } else {
-                    indx = (posn_keyword - posn_cycleword) % ALPHABET_SIZE;
+                    indx = (posn_keyword - posn_cycleword) % g_alpha;
                 }
                 
-                if (indx < 0) indx += ALPHABET_SIZE;                    
+                if (indx < 0) indx += g_alpha;                    
 
                 if (crib_cyclewords[i] == INACTIVE) {
                     crib_cyclewords[i] = ciphertext_keyword_indices[indx];
@@ -3529,7 +3801,7 @@ bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int ci
                     /*
                     if (verbose) {
                         printf("\n\nContradiction at crib %c, posn %d; rejecting keyword ", 
-                            crib_indices[j] + 'A', crib_positions[j]);
+                            index_to_char(crib_indices[j]), crib_positions[j]);
                     } */
                     return true; 
                 }
@@ -3638,7 +3910,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     int index, base;
     double score = 0.;
 
-    // pow(ALPHABET_SIZE, ngram_size) is a positive constant for the whole run
+    // pow(g_alpha, ngram_size) is a positive constant for the whole run
     // (ngram_size never changes), yet was previously recomputed via a libm pow()
     // on EVERY score -- i.e. every hill-climber iteration. Memoize it. pow()
     // returns the identical double for identical args, so the cached value equals
@@ -3646,7 +3918,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     static int cached_ngram_size = -1;
     static double scale = 0.;
     if (ngram_size != cached_ngram_size) {
-        scale = pow(ALPHABET_SIZE, ngram_size);
+        scale = pow(g_alpha, ngram_size);
         cached_ngram_size = ngram_size;
     }
 
@@ -3668,7 +3940,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     int n_windows = cipher_len - ngram_size + 1;
     if (n_windows > 0) {
         int top = 1;                    // 26^(ngram_size-1)
-        for (int j = 0; j < ngram_size - 1; j++) top *= ALPHABET_SIZE;
+        for (int j = 0; j < ngram_size - 1; j++) top *= g_alpha;
 
         index = 0;
         base = 1;
@@ -3677,7 +3949,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
             int v = decrypted[j];
             if (v < 0) { bad++; v = 0; }
             index += v*base;
-            base *= ALPHABET_SIZE;
+            base *= g_alpha;
         }
         if (bad == 0) score += ngram_data[index];
 
@@ -3687,7 +3959,7 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
             if (out_v < 0) { bad--; out_v = 0; }
             int in_iv = in_v;
             if (in_v < 0) { bad++; in_iv = 0; }
-            index = (index - out_v) / ALPHABET_SIZE + in_iv * top;
+            index = (index - out_v) / g_alpha + in_iv * top;
             if (bad == 0) score += ngram_data[index];
         }
     }
@@ -3738,7 +4010,7 @@ void random_keyword(int keyword[], int len, int keyword_len) {
     n_chars = 0;
     while (n_chars < keyword_len) {
         distinct = true;
-        candidate = rand_int(0, ALPHABET_SIZE);
+        candidate = rand_int(0, g_alpha);
         for (i = 0; i < n_chars; i++) {
             if (keyword[i] == candidate) {
                 distinct = false;
@@ -3748,7 +4020,7 @@ void random_keyword(int keyword[], int len, int keyword_len) {
         if (distinct) keyword[n_chars++] = candidate;
     }
     indx = keyword_len;
-    for (i = 0; i < ALPHABET_SIZE; i++) {
+    for (i = 0; i < g_alpha; i++) {
         present = false;
         for (j = 0; j < keyword_len; j++) {
             if (keyword[j] == i) {
@@ -3799,7 +4071,7 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
     float *ngram_data, total;
 
     if (verbose) printf("\nLoading ngrams...");
-    n_ngrams = int_pow(ALPHABET_SIZE, ngram_size);
+    n_ngrams = int_pow(g_alpha, ngram_size);
     ngram_data = malloc(n_ngrams*sizeof(float));
     for (i = 0; i < n_ngrams; i++) ngram_data[i] = 0.;
 
@@ -3809,6 +4081,7 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
     // line and would mis-assign on any trailing/malformed line.
     while (fscanf(fp, "%s\t%d", ngram, &freq) == 2) {
         indx = ngram_index_str(ngram, ngram_size);
+        if (indx < 0) continue;   // n-gram uses a letter not in the runtime alphabet
         ngram_data[indx] = freq;
     }
     fclose(fp);
@@ -3826,9 +4099,13 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
 int ngram_index_str(char *ngram, int ngram_size) {
     int c, index = 0, base = 1;
     for (int i = 0; i < ngram_size; i++) {
-        c = toupper(ngram[i]) - 'A';
+        c = g_char_to_idx[toupper((unsigned char) ngram[i]) & 127];
+        // An n-gram containing a letter outside the runtime alphabet (e.g. 'P'
+        // under -excludeletter P) cannot occur in the plaintext, so it has no
+        // slot; signal the caller to skip it.
+        if (c < 0) return -1;
         index += c*base;
-        base *= ALPHABET_SIZE;
+        base *= g_alpha;
     }
     return index;
 }
@@ -3837,7 +4114,7 @@ int ngram_index_int(int *ngram, int ngram_size) {
     int index = 0, base = 1;
     for (int i = 0; i < ngram_size; i++) {
         index += ngram[i]*base;
-        base *= ALPHABET_SIZE;
+        base *= g_alpha;
     }
     return index;
 }

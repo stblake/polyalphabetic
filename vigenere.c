@@ -37,7 +37,7 @@ void vigenere_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant) {
     
     int straight_alphabet_indices[ALPHABET_SIZE];
-    straight_alphabet(straight_alphabet_indices, ALPHABET_SIZE);
+    straight_alphabet(straight_alphabet_indices, g_alpha);
     
     // Vigenere: variant=false, beaufort=false, straight keywords
     quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
@@ -52,7 +52,7 @@ void vigenere_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant) {
     
     int straight_alphabet_indices[ALPHABET_SIZE];
-    straight_alphabet(straight_alphabet_indices, ALPHABET_SIZE);
+    straight_alphabet(straight_alphabet_indices, g_alpha);
 
     // Vigenere: variant=false, beaufort=false, straight keywords
     quagmire_encrypt(encrypted, plaintext_indices, cipher_len, 

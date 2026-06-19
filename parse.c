@@ -100,6 +100,10 @@ int parse_cipher_type(const char *arg) {
     // Turning grille
     if (str_eq(arg, "grille") || str_eq(arg, "turninggrille")) return GRILLE;
 
+    // Independent periodic substitution (P independent mixed alphabets)
+    if (str_eq(arg, "indep") || str_eq(arg, "indperiodic") || str_eq(arg, "periodicsub")
+        || str_eq(arg, "indepperiodic")) return INDEP_PERIODIC;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

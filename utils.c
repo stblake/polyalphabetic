@@ -6,6 +6,36 @@
 
 uint32_t rng_state = 123456789;
 
+// --- Runtime alphabet (see polyalphabetic.h). Defaults to the full A..Z so the
+// historical 26-letter behaviour is bit-identical until -excludeletter/-alphabet
+// is given. ---
+int  g_alpha = ALPHABET_SIZE;
+int  g_char_to_idx[128];
+char g_idx_to_char_arr[ALPHABET_SIZE + 1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+double g_monograms[ALPHABET_SIZE];
+
+// Build the index<->char maps and the reindexed monogram table. `excluded` is a
+// string of letters to drop from the standard A..Z ordering (NULL/"" => full A..Z).
+void init_alphabet(const char *excluded) {
+    for (int i = 0; i < 128; i++) g_char_to_idx[i] = -1;
+    int pos = 0;
+    for (char c = 'A'; c <= 'Z'; c++) {
+        bool drop = false;
+        if (excluded) {
+            for (const char *e = excluded; *e; e++) {
+                if (toupper((unsigned char) *e) == c) { drop = true; break; }
+            }
+        }
+        if (drop) continue;
+        g_idx_to_char_arr[pos] = c;
+        g_char_to_idx[(int) c] = pos;
+        g_monograms[pos] = english_monograms[c - 'A'];
+        pos++;
+    }
+    g_idx_to_char_arr[pos] = '\0';
+    g_alpha = pos;
+}
+
 int gcd(int a, int b) {
     while (b) { a %= b; int t = a; a = b; b = t; }
     return a;
@@ -33,9 +63,9 @@ double chi_squared(int plaintext[], int len) {
     int i, counts[ALPHABET_SIZE];
     double frequency, chi2 = 0.;
     tally(plaintext, len, counts, ALPHABET_SIZE);
-    for (i = 0; i < ALPHABET_SIZE; i++) {
+    for (i = 0; i < g_alpha; i++) {
         frequency = ((double) counts[i])/len;
-        chi2 += pow(frequency - english_monograms[i], 2)/english_monograms[i];
+        chi2 += pow(frequency - g_monograms[i], 2)/g_monograms[i];
     }
     return chi2;
 }
@@ -51,7 +81,8 @@ int unique_len(char *str) {
     for (i = 0; i < ALPHABET_SIZE; i++) seen[i] = 0;
 
     for (i = 0; str[i] != '\0'; i++) {
-        idx = toupper(str[i]) - 'A';
+        unsigned char ch = (unsigned char) toupper((unsigned char) str[i]);
+        idx = (ch < 128) ? g_char_to_idx[ch] : -1;
         if (idx >= 0 && idx < ALPHABET_SIZE) {
             if (!seen[idx]) {
                 seen[idx] = 1;
@@ -99,7 +130,10 @@ void print_text(int indices[], int len) {
 void ord(char *text, int indices[]) {
     for (int i = 0; i < strlen(text); i++) {
         unsigned char c = (unsigned char) text[i];
-        indices[i] = isalpha(c) ? (toupper(c) - 'A') : (-(int) c - 1);
+        int v = isalpha(c) ? g_char_to_idx[toupper(c)] : -1;
+        // Letters outside the runtime alphabet (e.g. 'P' under -excludeletter P)
+        // and all non-letters are carried as reversible negative sentinels.
+        indices[i] = (v >= 0) ? v : (-(int) c - 1);
     }
 }
 
@@ -144,7 +178,7 @@ void make_keyed_alphabet(char *keyword_str, int *output_indices) {
 
     // Process keyword string.
     for(i = 0; i < len; i++) {
-        char_idx = toupper(keyword_str[i]) - 'A';
+        char_idx = g_char_to_idx[toupper((unsigned char) keyword_str[i]) & 127];
         if(char_idx >= 0 && char_idx < ALPHABET_SIZE) {
             if(!seen[char_idx]) {
                 output_indices[current_pos++] = char_idx;
@@ -154,7 +188,7 @@ void make_keyed_alphabet(char *keyword_str, int *output_indices) {
     }
 
     // Fill remaining alphabet.
-    for(i = 0; i < ALPHABET_SIZE; i++) {
+    for(i = 0; i < g_alpha; i++) {
         if(!seen[i]) {
             output_indices[current_pos++] = i;
         }

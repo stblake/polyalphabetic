@@ -36,7 +36,7 @@ void beaufort_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
         if (++cw_idx == cycleword_len) cw_idx = 0;
 
         // Beaufort Decryption: P = K - C (mod 26)
-        p_val = (k_val - c_val + ALPHABET_SIZE) % ALPHABET_SIZE;
+        p_val = (k_val - c_val + g_alpha) % g_alpha;
         decrypted[i] = p_val;
     }
 }
