@@ -2237,6 +2237,14 @@ static double shotgun_indep_climber(PolyalphabeticConfig *cfg,
                        "%.4f\t[entropy]\nperiod %d\t[params]\n%.2f\t[score]\n",
                     elapsed, 1.e-3*n_iter_per_sec, rs, n_backtracks,
                     entropy_score, period, best_score);
+                // The N independent alphabets (each row maps cipher A.. -> plaintext),
+                // mirroring how the Quagmire climber prints its keyed alphabets.
+                for (int j = 0; j < period; j++) {
+                    printf("alphabet %d: ", j);
+                    for (int c = 0; c < g_alpha; c++) printf("%c", index_to_char(best_maps[j][c]));
+                    printf("\n");
+                }
+                printf("\n");
                 print_text(decrypted, cipher_len); printf("\n"); fflush(stdout);
             }
         }
@@ -2258,25 +2266,31 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
         return ;
     }
 
-    // Period range: use -cyclewordlen if given, else sweep 2..max_cycleword_len
-    // (capped at MAX_COLS and len/2).
-    int plo, phi;
+    // Candidate periods. With -cyclewordlen, use it; otherwise estimate them by
+    // columnar-IoC the same way the periodic polyalphabetic ciphers do (each
+    // residue class mod P is monoalphabetic, so the IoC peaks at the true P).
+    int periods[MAX_CYCLEWORD_LEN];
+    int n_periods = 0;
     if (cfg->cycleword_len_present) {
-        plo = phi = cfg->cycleword_len;
+        periods[n_periods++] = cfg->cycleword_len;
     } else {
-        plo = 2;
-        phi = cfg->max_cycleword_len;
-        if (phi > MAX_COLS) phi = MAX_COLS;
-        if (phi > cipher_len / 2) phi = cipher_len / 2;
-        if (phi < plo) phi = plo;
+        estimate_cycleword_lengths(cipher_indices, cipher_len,
+            cfg->max_cycleword_len, cfg->n_sigma_threshold, cfg->ioc_threshold,
+            &n_periods, periods, cfg->verbose);
+        if (n_periods == 0) {
+            printf("\nNo periodicities found above threshold; nothing to attack.\n");
+            return ;
+        }
     }
 
     int best_decrypted[MAX_CIPHER_LENGTH], best_maps[MAX_COLS][ALPHABET_SIZE];
     int try_decrypted[MAX_CIPHER_LENGTH], try_maps[MAX_COLS][ALPHABET_SIZE];
     double best_score = -1.e18;
-    int best_period = plo;
+    int best_period = periods[0];
 
-    for (int p = plo; p <= phi; p++) {
+    for (int pi = 0; pi < n_periods; pi++) {
+        int p = periods[pi];
+        if (p < 1 || p > MAX_COLS || p > cipher_len / 2) continue;
         double sc = shotgun_indep_climber(cfg, cipher_indices, cipher_len, p,
             crib_indices, crib_positions, n_cribs,
             shared->ngram_data, try_decrypted, try_maps);
