@@ -361,9 +361,6 @@ typedef struct CipherModel {
     void (*commit_neighbor)(const SolverCtx *ctx, const SolverConfig *cfg_c, int *cur_dec);
 } CipherModel;
 
-// Run `model` over `ctx`: enumerate configs, sweep/climb each, report the best.
-// Returns the best score (0 if no configuration produced a candidate).
-double run_solver(const CipherModel *model, SolverCtx *ctx);
 
 // --- Statistics Data ---
 
@@ -408,13 +405,6 @@ typedef struct {
     double s_backtracking_probability;
 } SearchDefaults;
 
-// Overlay the tuned per-type schedule for cfg->cipher_type onto cfg, choosing the
-// anneal or shotgun profile from cfg->method (falling back to the type's default
-// shape). Only fills fields the user has not already overridden on the CLI, so call
-// it after cfg->cipher_type and cfg->method are known but the per-field flags are
-// applied on top. No-op (and silent) for a type with no registry entry. Returns true
-// if a profile was applied. `announce` prints a one-line note when true.
-bool apply_cipher_defaults(ColossusConfig *cfg, bool announce);
 
 // Core Logic
 void init_config(ColossusConfig *cfg);
@@ -422,10 +412,6 @@ void init_config(ColossusConfig *cfg);
 void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     SharedData *shared, SolveResult *result);
 
-// Prints the human-readable block and the ">>> ..." one-line CSV summary for a
-// polyalphabetic solve, from the populated result.
-void report_solution(ColossusConfig *cfg, char *cribtext_str,
-    int cipher_indices[], SolveResult *res);
 
 // Porta cipher
 void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
@@ -520,96 +506,6 @@ void decrypt_swagman(int cipher[], int len, int N, int square[], int readmode, i
 // *n_orbits (the climbed key length) when non-NULL. `variant` swaps read/write.
 void decrypt_grille(int cipher[], int len, int N, int key[], int variant, int out[], int *n_orbits);
 
-// Transposition solvers (optimization over the transform parameters)
-void solve_transposition(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-// General transposition solver (AZDecrypt-style permutation-key hill climber)
-void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-// Dedicated columnar solver (single TRANSCOL and double TRANSCOL2). Optimizes the
-// small per-stage column-order permutation directly, rather than the full
-// N-length permutation key.
-void solve_columnar(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-// Enumerate-and-score solvers for the small-key-space transposition types. Both
-// exhaustively try every parameter setting (no hill climbing needed), score each
-// with the shared n-gram (+ optional crib) state_score, and report the best:
-//   solve_railfence : rails in [min_cols, max_cols] x starting phase offset
-//   solve_route     : every R x C factorization of len x N_ROUTES routes
-void solve_railfence(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_route(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-// Hill-climbing solvers for the small-permutation transposition types. Both sweep
-// the column count K = [min_cols, max_cols] and, per K, anneal a short key via the
-// cipher-agnostic engine (run_solver, SHAPE_ANNEAL):
-//   solve_amsco      : climbs the column order x start-chunk in {1,2}
-//   solve_myszkowski : climbs the per-column rank vector (ties allowed)
-void solve_amsco(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-// Remaining transposition solvers (all anneal a short key via run_solver):
-//   solve_redefence : sweeps rails x phase, climbs the rail read-order permutation
-//   solve_cadenus   : K = len/25, climbs the packed column order + per-column rotation
-//   solve_nihilist  : N = sqrt(len), climbs the single row+column permutation
-//   solve_swagman   : sweeps N (3..7) x readmode, climbs the N x N key square
-//   solve_grille    : N = sqrt(len), climbs the per-orbit turn assignment
-void solve_redefence(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_cadenus(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_nihilist(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_swagman(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_grille(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs);
-
-void solve_homophonic(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs, SymbolTable *tab);
 
 // Playfair cipher (playfair.c). Primitives operate on 0..g_alpha-1 alphabet indices,
 // with the grid a permutation of the active 25-letter alphabet (g_alpha == 25):
@@ -622,10 +518,6 @@ void playfair_decrypt(const int cipher[], int len, const int grid[], int out[]);
 int  playfair_prepare(const int raw[], int len, int filler, int alt, int out[], int out_cap);
 void playfair_grid_from_keyword(const int keyword[], int kwlen, int grid[]);
 
-void solve_playfair(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs, SolveResult *result);
 
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
 // histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher
@@ -639,34 +531,9 @@ void derive_optimal_cycleword(
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
     int cycleword_state[], int cycleword_len, int *hist_by_col);
 
-// Helpers
-int map_crib_to_cipher_pos(ColossusConfig *cfg, int crib_pos, int cipher_len);
-int get_matrix_rotate_old_idx(int target_idx, int len, int width, int clockwise);
-
-bool cribs_satisfied_p(ColossusConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
-    int crib_positions[], int n_cribs, int cycleword_len, bool verbose);
-
-bool constrain_cycleword(ColossusConfig *cfg, int cipher_indices[], int cipher_len, 
-    int crib_indices[], int crib_positions[], int n_cribs, 
-    int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
-    int cycleword_indices[], int cycleword_len,
-    bool variant, bool verbose);
-
-void decrypt_state(ColossusConfig *cfg, int cipher_indices[], int cipher_len, 
-                   int plaintext_keyword_state[], int ciphertext_keyword_state[], 
-                   int cycleword_state[], int cycleword_len, 
-                   int decrypted[]);
-
-double state_score(int decrypted[], int cipher_len, 
-            int crib_indices[], int crib_positions[], int n_cribs, 
-            float *ngram_data, int ngram_size, 
-            float weight_ngram, float weight_crib, 
-            float weight_ioc, float weight_entropy);
 
 void straight_alphabet(int keyword[], int len);
 void make_keyed_alphabet(char *keyword_str, int *output_indices); // NEW
-double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size);
-double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs);
 double entropy(int text[], int len);
 double chi_squared(int plaintext[], int len);
 
@@ -675,16 +542,7 @@ void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_d
 void free_dictionary(char **dict, int n_dict_words);
 int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int max_dict_word_len);
 
-float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);
-int ngram_index_int(int *ngram, int ngram_size);
-int ngram_index_str(char *ngram, int ngram_size);
 
-// Randomization
-void perturbate_keyword(int state[], int len, int keyword_len);
-void random_keyword(int keyword[], int len, int keyword_len);
-void random_cycleword(int cycleword[], int max, int keyword_len);
-void perturbate_cycleword(int state[], int max, int len);
-int rand_int_frequency_weighted(int state[], int min_index, int max_index);
 void shuffle(int *array, size_t n);
 
 // Stats

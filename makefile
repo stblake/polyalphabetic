@@ -4,10 +4,19 @@
 
 CC=gcc -Wall -O3 -funroll-loops
 
-# CC=gcc -Wall -lm -g -O0 
+# CC=gcc -Wall -lm -g -O0
+
+# Cipher primitives (decrypt math, shared by the solvers and the unit tests).
+PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c
+
+# Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
+SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c
+
+# The full solver translation-unit set (everything but the test harnesses).
+SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) colossus.c
 
 all:
-	$(CC) utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c colossus.c -o colossus
+	$(CC) $(SOLVER_SRC) -o colossus
 	cp colossus ..
 	cp colossus ../quagmire
 
@@ -30,9 +39,9 @@ test:
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
 # `make test` so the fast primitive checks stay in the quick edit/build loop.
 testopt:
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_solver.c utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c colossus.c -o tests/test_solver
+	$(CC) -DCOLOSSUS_NO_MAIN tests/test_solver.c $(SOLVER_SRC) -o tests/test_solver
 	./tests/test_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_playfair_solver.c utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c colossus.c -o tests/test_playfair_solver
+	$(CC) -DCOLOSSUS_NO_MAIN tests/test_playfair_solver.c $(SOLVER_SRC) -o tests/test_playfair_solver
 	./tests/test_playfair_solver
 
 # Everything.

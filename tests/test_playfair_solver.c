@@ -25,6 +25,8 @@
 //
 
 #include "../colossus.h"
+#include "../engine.h"   // apply_cipher_defaults (moved out of colossus.h)
+#include "../scoring.h"  // load_ngrams
 
 static int failures = 0;
 static int checks = 0;

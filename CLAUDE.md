@@ -22,8 +22,20 @@ crack the Kryptos sculpture's K1–K4. See `README.md` for the author's full wri
 ## Layout (flat — sources at the repo root)
 
 ```
-colossus.c     # main(): arg parsing, solve_cipher(), hill climber, scoring, optimal-cycleword solver
-colossus.h     # the single shared header: config struct, constants, all prototypes, inline RNG
+colossus.c     # main(): arg parsing, init_config(), solve_cipher() dispatcher
+colossus.h     # shared CORE header: config/ctx/model structs, constants, cipher-type codes,
+               #   globals, inline RNG, and the cipher-PRIMITIVE prototypes
+engine.c/.h          # cipher-agnostic search engine: run_solver(), run_one_config(),
+                     #   make_solver_ctx(), the SearchDefaults registry + apply_cipher_defaults()
+scoring.c/.h         # state_score / ngram_score / crib_score, load_ngrams, keyword/cycleword RNG
+trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
+                     #   TransKeyOps seed/move, perm_move/seed, sweep no-ops, exact_isqrt
+polyalpha_solver.c/.h    # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/cycleword helpers
+                         #   + solve_polyalpha(); solve_cipher() dispatches the polyalpha types here
+transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h   # transposition solvers
+railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
+redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
+indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h   # each: a CipherModel + solve_<type>()
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
@@ -56,6 +68,11 @@ Two caveats:
 - `make` also runs `cp colossus ..` (and `../quagmire`), copying the binary
   *outside* this directory. That predates the isolation of this repo; the in-tree
   `./colossus` is the one that matters here.
+- The translation-unit list lives in makefile variables: `PRIMITIVES` (the cipher
+  decrypt math + utils), `SOLVERS` (the engine/scoring/trans_common core + the
+  per-cipher-type solver modules), and `SOLVER_SRC = $(PRIMITIVES) $(SOLVERS) colossus.c`
+  (used by both `all` and the `testopt` harnesses). Add a new solver module to
+  `SOLVERS`.
 
 `make test` builds and runs the framework-free unit tests in
 `tests/test_transpositions.c` (the transposition primitives, including the columnar
@@ -243,8 +260,16 @@ the periodic key (sequence of shifts).
 
 ## Conventions & gotchas
 
-- **One shared header.** Every `.c` includes `colossus.h`; no per-module
-  headers. Add prototypes and constants there.
+- **Shared core header + thin per-module headers.** `colossus.h` is the shared
+  *core*: the config/ctx/model structs, constants, cipher-type codes, globals, inline
+  RNG, and the cipher-*primitive* prototypes (`vigenere_decrypt`, `decrypt_columnar`,
+  `playfair_decrypt`, …) — every `.c` includes it. The cipher-agnostic core (`engine`,
+  `scoring`, `trans_common`) and each per-cipher-type solver also get a *thin* `.h`
+  exposing only that module's public API (`solve_<type>()`, the engine/scoring entry
+  points); a `.c` includes the module headers it calls into. Put new solver prototypes
+  in the module header, new shared structs/constants/primitive prototypes in `colossus.h`.
+  (The already-split primitive files — `vigenere.c`, `beaufort.c`, … — keep their
+  prototypes in `colossus.h` rather than carrying their own headers.)
 - **`rng_state`** is a global in `utils.c`; the RNG (`fast_rand`, `frand`, `rand_int`,
   `rand_bounded`) is `static inline` in the header, seeded once in `main`. The
   `srand()` call in `main` is dead code — nothing uses libc `rand()`.
