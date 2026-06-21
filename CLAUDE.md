@@ -99,6 +99,11 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `colossus.h`). Output is a human-readable block followed by a `>>> ...` one-line CSV
 summary that batch runs grep/sort.
 
+By default only the **first line** of the `-cipher` file is read (the rest is ignored,
+e.g. a trailing `plaintext = ...` annotation). Pass **`-multiline`** to read the whole
+file, dropping newlines so a ciphertext laid out over several lines (e.g. a homophonic
+grid like Zodiac-408) is concatenated into one symbol stream.
+
 **Tokenized symbol I/O.** Ciphertext is decoded by `decode_cipher()` (utils.c), not the
 bare `ord()`. For every type except homophonic with no `-delimiter`, this is byte-for-byte
 the historical per-character / 0..25-letter encoding (so the regression suite stays

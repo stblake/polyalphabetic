@@ -149,6 +149,7 @@ typedef struct {
     // Flags
     bool verbose;
     bool skip_spaces;   // strip spaces/punctuation from the ciphertext entirely
+    bool multiline;     // read the entire cipher file, not just its first line
     bool cipher_present;
     bool batch_present;
     bool crib_present;

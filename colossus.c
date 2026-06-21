@@ -225,6 +225,7 @@ void init_config(ColossusConfig *cfg) {
     cfg->dictionary_present = false;
     cfg->verbose = false;
     cfg->skip_spaces = false;
+    cfg->multiline = false;
     cfg->variant = false;
     cfg->beaufort = false;
 
@@ -459,6 +460,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-skipspaces") == 0) {
             cfg.skip_spaces = true;
             printf("-skipspaces\n");
+        } else if (strcmp(argv[i], "-multiline") == 0) {
+            cfg.multiline = true;
+            printf("-multiline\n");
         } else if (strcmp(argv[i], "-logprob") == 0 || strcmp(argv[i], "-azdecrypt") == 0) {
             g_ngram_logprob = true;
             printf("-logprob (AZDecrypt-style n-gram fitness: log-probabilities with an unseen-n-gram floor)\n");
@@ -691,16 +695,20 @@ int main(int argc, char **argv) {
              return 0;
         }
 
-        // Read the first line of the cipher file as the ciphertext, preserving any
-        // internal spaces and punctuation (unlike fscanf("%s"), which stops at the
-        // first whitespace). Stopping at the newline keeps the historical behaviour
-        // of ignoring trailing lines (e.g. a "plaintext = ..." annotation). These
-        // non-alphabetic characters are kept as positions and carried through the
+        // Read the cipher file as the ciphertext, preserving any internal spaces and
+        // punctuation (unlike fscanf("%s"), which stops at the first whitespace). By
+        // default only the first line is read: stopping at the newline keeps the
+        // historical behaviour of ignoring trailing lines (e.g. a "plaintext = ..."
+        // annotation). With -multiline the whole file is read and newlines are dropped
+        // (not turned into cipher positions), so a ciphertext laid out over several
+        // lines -- e.g. a homophonic grid -- is concatenated into one symbol stream.
+        // These non-alphabetic characters are kept as positions and carried through the
         // decryption; scoring skips them. Use -skipspaces to drop them entirely.
         FILE *fp_cipher = fopen(cfg.ciphertext_file, "r");
         int ci = 0, ch;
-        while ((ch = fgetc(fp_cipher)) != EOF && ch != '\n' && ci < MAX_CIPHER_LENGTH - 1) {
-            if (ch == '\r') continue;
+        while ((ch = fgetc(fp_cipher)) != EOF && (cfg.multiline || ch != '\n')
+               && ci < MAX_CIPHER_LENGTH - 1) {
+            if (ch == '\r' || ch == '\n') continue;
             single_ciphertext_buffer[ci++] = (char) ch;
         }
         single_ciphertext_buffer[ci] = '\0';
@@ -2680,6 +2688,27 @@ static void report_transposition(ColossusConfig *cfg, SharedData *shared,
     printf("\n");
 }
 
+// Live (-verbose) progress block for the optimization-based transposition models, in
+// the same shape as permutation_report_verbose / columnar_model_report_verbose: timing
+// and search counters, a type-specific param line, and the current best plaintext.
+// best_decrypted is the just-accepted best decrypt the engine passes to report_verbose.
+static void report_transposition_verbose(const SolverCtx *ctx, double best_score,
+    int best_decrypted[], const EngineStats *stats, const char *param_summary) {
+
+    double elapsed = ((double) clock() - stats->start_time)/CLOCKS_PER_SEC;
+    double n_iter_per_sec = (elapsed > 0.) ? ((double) stats->n_iterations)/elapsed : 0.;
+    printf("\n%.2f\t[sec]\n", elapsed);
+    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+    printf("%d\t[restarts]\n", stats->n_restarts);
+    printf("%d\t[backtracks]\n", stats->n_backtracks);
+    printf("%d\t[slips]\n", stats->n_slips);
+    printf("%.4f\t[entropy]\n", entropy(best_decrypted, ctx->cipher_len));
+    printf("%.2f\t[score]\n", best_score);
+    printf("%s\t[params]\n\n", param_summary);
+    print_text(best_decrypted, ctx->cipher_len); printf("\n");
+    fflush(stdout);
+}
+
 
 // =====================================================================
 //  Independent periodic substitution (TYPE indep_periodic)
@@ -3061,6 +3090,15 @@ static void homophonic_decrypt(const SolverCtx *ctx, const SolverConfig *cc,
     *score_adjust = -homophonic_penalty(ctx, out);   // engine adds this to state_score
 }
 
+static void homophonic_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) cc; (void) st;
+    const HomophonicScratch *h = (const HomophonicScratch *) ctx->model_scratch;
+    char params[64];
+    snprintf(params, sizeof(params), "symbols=%d", h->n_symbols);
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void homophonic_report(const SolverCtx *ctx, const SolverConfig *cc,
                               const SolverState *st, double score, int *decrypted) {
     (void) cc;
@@ -3112,7 +3150,8 @@ static const CipherModel HOMOPHONIC_MODEL = {
     .name = "homophonic", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = homophonic_enumerate, .key_len = NULL,
     .seed = homophonic_seed, .perturb = homophonic_perturb, .copy_state = homophonic_copy,
-    .decrypt = homophonic_decrypt, .report = homophonic_report, .report_verbose = NULL,
+    .decrypt = homophonic_decrypt, .report = homophonic_report,
+    .report_verbose = homophonic_report_verbose,
 };
 
 void solve_homophonic(char *ciphertext_str, char *cribtext_str,
@@ -3170,6 +3209,16 @@ static void railfence_decrypt(const SolverCtx *ctx, const SolverConfig *cc, Solv
     decrypt_railfence(ctx->cipher, ctx->cipher_len, cc->period, cc->aux[0],
         ctx->cfg->variant ? 1 : 0, out);
 }
+static void railfence_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s",
+        cc->period, cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void railfence_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                              double score, int *decrypted) {
     (void) st;
@@ -3186,7 +3235,8 @@ static const CipherModel RAILFENCE_MODEL = {
     .name = "railfence", .shape = SHAPE_SHOTGUN, .needs_hist = false,
     .enumerate_configs = railfence_enumerate, .key_len = sweep_keylen,
     .seed = sweep_noop_seed, .perturb = NULL, .copy_state = sweep_noop_copy,
-    .decrypt = railfence_decrypt, .report = railfence_report, .report_verbose = NULL,
+    .decrypt = railfence_decrypt, .report = railfence_report,
+    .report_verbose = railfence_report_verbose,
 };
 
 void solve_railfence(char *ciphertext_str, char *cribtext_str,
@@ -3237,6 +3287,18 @@ static void route_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverSt
     int R = (ctx->cipher_len + C - 1) / C;
     decrypt_route(ctx->cipher, ctx->cipher_len, R, C, cc->aux[0], ctx->cfg->variant ? 1 : 0, out);
 }
+static void route_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int C = cc->period;
+    int R = (ctx->cipher_len + C - 1) / C;
+    char params[64];
+    snprintf(params, sizeof(params), "%dx%d route=%d%s",
+        R, C, cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void route_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                          double score, int *decrypted) {
     (void) st;
@@ -3258,7 +3320,8 @@ static const CipherModel ROUTE_MODEL = {
     .name = "route", .shape = SHAPE_SHOTGUN, .needs_hist = false,
     .enumerate_configs = route_enumerate, .key_len = sweep_keylen,
     .seed = sweep_noop_seed, .perturb = NULL, .copy_state = sweep_noop_copy,
-    .decrypt = route_decrypt, .report = route_report, .report_verbose = NULL,
+    .decrypt = route_decrypt, .report = route_report,
+    .report_verbose = route_report_verbose,
 };
 
 void solve_route(char *ciphertext_str, char *cribtext_str,
@@ -3368,6 +3431,16 @@ static void amsco_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverSt
     decrypt_amsco(ctx->cipher, ctx->cipher_len, cc->period, st->key,
         cc->aux[0] /* start */, ctx->cfg->variant ? 1 : 0, out);
 }
+static void amsco_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d start=%d%s",
+        cc->period, cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void amsco_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                          double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3386,7 +3459,8 @@ static const CipherModel AMSCO_MODEL = {
     .name = "amsco", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = amsco_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = amsco_decrypt, .report = amsco_report, .report_verbose = NULL,
+    .decrypt = amsco_decrypt, .report = amsco_report,
+    .report_verbose = amsco_report_verbose,
 };
 
 void solve_amsco(char *ciphertext_str, char *cribtext_str,
@@ -3446,6 +3520,15 @@ static void mysz_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverSta
     decrypt_myszkowski(ctx->cipher, ctx->cipher_len, cc->period, st->key,
         ctx->cfg->variant ? 1 : 0, out);
 }
+static void mysz_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", cc->period, variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void mysz_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                         double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3464,7 +3547,8 @@ static const CipherModel MYSZKOWSKI_MODEL = {
     .name = "myszkowski", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = mysz_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = mysz_decrypt, .report = mysz_report, .report_verbose = NULL,
+    .decrypt = mysz_decrypt, .report = mysz_report,
+    .report_verbose = mysz_report_verbose,
 };
 
 void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
@@ -3518,6 +3602,16 @@ static void redefence_decrypt(const SolverCtx *ctx, const SolverConfig *cc, Solv
     decrypt_redefence(ctx->cipher, ctx->cipher_len, cc->period /* rails */,
         cc->aux[0] /* offset */, st->key, ctx->cfg->variant ? 1 : 0, out);
 }
+static void redefence_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s",
+        cc->period, cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void redefence_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                              double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3536,7 +3630,8 @@ static const CipherModel REDEFENCE_MODEL = {
     .name = "redefence", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = redefence_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = redefence_decrypt, .report = redefence_report, .report_verbose = NULL,
+    .decrypt = redefence_decrypt, .report = redefence_report,
+    .report_verbose = redefence_report_verbose,
 };
 
 void solve_redefence(char *ciphertext_str, char *cribtext_str,
@@ -3596,6 +3691,15 @@ static void cadenus_decrypt(const SolverCtx *ctx, const SolverConfig *cc, Solver
     decrypt_cadenus(ctx->cipher, ctx->cipher_len, K, st->key, st->key + K,
         ctx->cfg->variant ? 1 : 0, out);
 }
+static void cadenus_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", cc->period / 2, variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void cadenus_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                            double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3615,7 +3719,8 @@ static const CipherModel CADENUS_MODEL = {
     .name = "cadenus", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = cadenus_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = cadenus_decrypt, .report = cadenus_report, .report_verbose = NULL,
+    .decrypt = cadenus_decrypt, .report = cadenus_report,
+    .report_verbose = cadenus_report_verbose,
 };
 
 void solve_cadenus(char *ciphertext_str, char *cribtext_str,
@@ -3671,6 +3776,16 @@ static void nihilist_decrypt(const SolverCtx *ctx, const SolverConfig *cc, Solve
     decrypt_nihilist(ctx->cipher, ctx->cipher_len, N, st->key, st->key + N,
         cc->aux[0] /* readmode */, ctx->cfg->variant ? 1 : 0, out);
 }
+static void nihilist_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s",
+        cc->period / 2, cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void nihilist_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                             double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3692,7 +3807,8 @@ static const CipherModel NIHILIST_MODEL = {
     .name = "nihilist", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = nihilist_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = nihilist_decrypt, .report = nihilist_report, .report_verbose = NULL,
+    .decrypt = nihilist_decrypt, .report = nihilist_report,
+    .report_verbose = nihilist_report_verbose,
 };
 
 void solve_nihilist(char *ciphertext_str, char *cribtext_str,
@@ -3748,6 +3864,16 @@ static void swagman_decrypt(const SolverCtx *ctx, const SolverConfig *cc, Solver
     decrypt_swagman(ctx->cipher, ctx->cipher_len, N, st->key,
         cc->aux[0] /* readmode */, ctx->cfg->variant ? 1 : 0, out);
 }
+static void swagman_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s",
+        exact_isqrt(cc->period), cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void swagman_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                            double score, int *decrypted) {
     int variant = ctx->cfg->variant ? 1 : 0;
@@ -3767,7 +3893,8 @@ static const CipherModel SWAGMAN_MODEL = {
     .name = "swagman", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = swagman_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = swagman_decrypt, .report = swagman_report, .report_verbose = NULL,
+    .decrypt = swagman_decrypt, .report = swagman_report,
+    .report_verbose = swagman_report_verbose,
 };
 
 void solve_swagman(char *ciphertext_str, char *cribtext_str,
@@ -3820,6 +3947,15 @@ static void grille_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverS
     decrypt_grille(ctx->cipher, ctx->cipher_len, cc->aux[0] /* N */, st->key,
         ctx->cfg->variant ? 1 : 0, out, NULL);
 }
+static void grille_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d%s", cc->aux[0], variant ? " var" : "");
+    report_transposition_verbose(ctx, score, decrypted, stats, params);
+}
+
 static void grille_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
                           double score, int *decrypted) {
     (void) st;
@@ -3837,7 +3973,8 @@ static const CipherModel GRILLE_MODEL = {
     .name = "grille", .shape = SHAPE_ANNEAL, .needs_hist = false,
     .enumerate_configs = grille_enumerate, .key_len = NULL,
     .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
-    .decrypt = grille_decrypt, .report = grille_report, .report_verbose = NULL,
+    .decrypt = grille_decrypt, .report = grille_report,
+    .report_verbose = grille_report_verbose,
 };
 
 void solve_grille(char *ciphertext_str, char *cribtext_str,
