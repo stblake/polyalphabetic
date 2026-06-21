@@ -98,6 +98,8 @@ fast | example_autokey_beaufort        | autobeau | example_autokey_beaufort.txt
 fast | example_autokey_beaufort_longer | autobeau | example_autokey_beaufort_longer.txt | -cyclewordlen 14 -nrestarts 4000 -nhillclimbs 800
 # --- homophonic substitution (ciphertext alphabet > plaintext; comma-separated symbols) ---
 fast | homophonic_test | homophonic | homophonic_test.txt | -nrestarts 12 -nhillclimbs 30000
+# --- Playfair (digraphic substitution, 5x5 grid; 25-letter alphabet forced, J->I) ---
+slow | playfair_pride | playfair | playfair_pride.txt | -logprob -nrestarts 6 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

@@ -4,4 +4,8 @@ tests/test_transpositions
 tests/test_ciphers
 tests/test_optimal_cycleword
 tests/test_solver
+tests/test_playfair
+tests/test_playfair_solver
+tools/homophonic_gen
+tools/playfair_gen
 *.o

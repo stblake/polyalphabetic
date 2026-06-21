@@ -46,6 +46,10 @@
 #define GRILLE         27   // Turning grille
 #define INDEP_PERIODIC 28   // period-P substitution with P INDEPENDENT mixed alphabets
 #define HOMOPHONIC     29   // homophonic substitution (ciphertext alphabet > plaintext)
+#define PLAYFAIR       30   // Playfair (digraphic substitution over a 5x5 keyed grid)
+
+#define PLAYFAIR_SIDE 5         // Playfair grid side (the classic 5x5)
+#define PLAYFAIR_GRID 25        // Playfair grid size (PLAYFAIR_SIDE * PLAYFAIR_SIDE)
 
 #define ALPHABET_SIZE 26        // compile-time MAX alphabet size (sizes all arrays)
 #define MAX_CIPHER_LENGTH 10000
@@ -378,6 +382,40 @@ static double english_monograms[] = {
 	0.017214, 0.001138
 };
 
+// Per-cipher-type tuned search defaults. The global init_config() values suit the
+// polyalphabetic / transposition score scale; substitution types with a very
+// different scale (Playfair's mean log-probability, in particular) need their own
+// schedule. Each entry carries a profile for BOTH search shapes, so -method
+// shotgun|anneal each get sane defaults on that type. Precedence is:
+//   init_config globals  <  this registry  <  explicit CLI flags
+// (the registry only fills fields the user did not set). Types with no entry keep
+// the global defaults exactly, so existing solves stay bit-identical.
+typedef struct {
+    int         cipher_type;     // which type this profile is for
+    SearchShape default_shape;   // the model's own shape (which profile applies when
+                                 // -method is not given)
+    // Simulated-annealing profile (used when the effective shape is SHAPE_ANNEAL).
+    int    a_n_restarts;
+    int    a_n_hill_climbs;
+    double a_init_temp;
+    double a_min_temp;
+    double a_cooling_rate;       // <= 0 => derive the geometric schedule
+    double a_backtracking_probability;
+    // Shotgun profile (used when the effective shape is SHAPE_SHOTGUN).
+    int    s_n_restarts;
+    int    s_n_hill_climbs;
+    double s_slip_probability;
+    double s_backtracking_probability;
+} SearchDefaults;
+
+// Overlay the tuned per-type schedule for cfg->cipher_type onto cfg, choosing the
+// anneal or shotgun profile from cfg->method (falling back to the type's default
+// shape). Only fills fields the user has not already overridden on the CLI, so call
+// it after cfg->cipher_type and cfg->method are known but the per-field flags are
+// applied on top. No-op (and silent) for a type with no registry entry. Returns true
+// if a profile was applied. `announce` prints a one-line note when true.
+bool apply_cipher_defaults(ColossusConfig *cfg, bool announce);
+
 // Core Logic
 void init_config(ColossusConfig *cfg);
 // result may be NULL (CLI use); when supplied it receives the recovered solution.
@@ -572,6 +610,22 @@ void solve_homophonic(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs, SymbolTable *tab);
+
+// Playfair cipher (playfair.c). Primitives operate on 0..g_alpha-1 alphabet indices,
+// with the grid a permutation of the active 25-letter alphabet (g_alpha == 25):
+// grid[p] is the letter at grid position p (row p/5, col p%5); pos[] is its inverse.
+// The solver needs only playfair_decrypt(); encrypt/prepare/grid_from_keyword serve
+// the test-data generator and the round-trip + known-answer unit tests.
+void playfair_build_inverse(const int grid[], int pos[]);
+void playfair_encrypt(const int plain[], int len, const int grid[], int out[]);
+void playfair_decrypt(const int cipher[], int len, const int grid[], int out[]);
+int  playfair_prepare(const int raw[], int len, int filler, int alt, int out[], int out_cap);
+void playfair_grid_from_keyword(const int keyword[], int kwlen, int grid[]);
+
+void solve_playfair(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs, SolveResult *result);
 
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
 // histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher

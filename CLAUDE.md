@@ -27,6 +27,7 @@ colossus.h     # the single shared header: config struct, constants, all prototy
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
+playfair.c           # Playfair primitives: grid build / prepare / encrypt / decrypt (5x5 keyed grid)
 transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
 dict.c               # dictionary load + word-finding (scores plaintext readability)
 utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
@@ -35,6 +36,7 @@ README.md  LICENSE
 example.sh           # canonical usage example
 cipher.txt  crib.txt # sample ciphertext + crib
 tools/homophonic_gen.c       # standalone homophonic-cipher test-data generator (make homophonic_gen)
+tools/playfair_gen.c         # standalone Playfair test-data generator (make playfair_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -58,13 +60,22 @@ Two caveats:
 `make test` builds and runs the framework-free unit tests in
 `tests/test_transpositions.c` (the transposition primitives, including the columnar
 `decrypt_columnar`: known-answer, round-trip across complete/incomplete grids and both
-read directions, double-columnar composition). `ciphers/tests/` additionally holds
+read directions, double-columnar composition), `tests/test_ciphers.c`,
+`tests/test_optimal_cycleword.c`, and `tests/test_playfair.c` (the Playfair primitives:
+the Wikipedia known-answer vector, the prepare/X-insertion rules, encrypt/decrypt
+round-trips over random grids, and the cyclic row/column key-square equivalence).
+`make testopt` additionally runs the in-process solver regressions
+`tests/test_solver.c` (polyalphabetic) and `tests/test_playfair_solver.c` (Playfair:
+validates the per-type schedule registry, asserts an 800-char capability floor, and
+prints recovery vs ciphertext length to characterize the short-text cliff).
+`ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
-`transcol_*_solve.sh` columnar recovery tests) you can run by hand.
+`transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-31 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
-`q*_p1xx` puzzles, pure-transposition types, and a homophonic substitution) that each
+32 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+`q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, and a Playfair
+cipher) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -75,7 +86,8 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 20-case fast tier in ~45s (use while iterating),
-`--slow` the 11 heavier ciphers, no flag runs both. Add a case by appending a
+`--slow` the 12 heavier ciphers (incl. the ~24s Playfair solve), no flag runs both.
+Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
 
@@ -95,9 +107,9 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
-`transcol2`/`18`, `indep`/`28`, `homophonic`/`29` (full list in `parse.c`; codes in
-`colossus.h`). Output is a human-readable block followed by a `>>> ...` one-line CSV
-summary that batch runs grep/sort.
+`transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30` (full list in
+`parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
+`>>> ...` one-line CSV summary that batch runs grep/sort.
 
 By default only the **first line** of the `-cipher` file is read (the rest is ignored,
 e.g. a trailing `plaintext = ...` annotation). Pass **`-multiline`** to read the whole
@@ -164,6 +176,38 @@ equal-frequency ambiguities like W<->M that single-symbol moves cannot). Seeds d
 symbol's letter from the English monogram distribution. With quadgrams it recovers
 ~98%/~99%+ depending on homophone density; `-logprob` + quintgrams take it to ~100%.
 Generate test ciphers with `tools/homophonic_gen.c` (`make homophonic_gen`).
+
+The **Playfair** type (`solve_playfair()`, `PLAYFAIR_MODEL`, `SHAPE_ANNEAL`) is a
+digraphic substitution over a **5x5 keyed grid** of 25 letters. The binary forces a
+25-letter alphabet for `-type playfair` (J merged into I by ACA convention) via
+`init_alphabet("J")` *before* `load_ngrams`, so the n-gram table is built over the same
+25 letters (base-25 packing) and the grid is simply a permutation of `0..24` carried in
+the `key` lane. The primitives live in `playfair.c` (`playfair_decrypt` is all the solver
+needs; `encrypt`/`prepare`/`grid_from_keyword` serve the generator + unit tests). The
+attack hill-climbs / anneals the grid with n-gram scoring (the classic SA Playfair
+break): the move set is a single **cell swap** (dominant) plus **row/column swaps** and
+**grid reflections** — the larger moves jump the local optima a cell swap can't escape;
+cyclic row/column *rotations* are deliberately excluded (they re-encipher identically, so
+the recovered grid is unique only up to such a rotation, but the recovered plaintext is
+not). No anti-collapse penalty is needed (a grid is a bijection). Playfair is genuinely
+near the limit of a quadgram attack: `-logprob` is effectively required, and recovery is
+reliable from ~600+ characters and falls off a cliff below a few hundred (see
+`tests/test_playfair_solver.c`, which prints the curve). Like every type it honours
+`-method shotgun|anneal`; annealing is the default and far stronger here. Generate test
+ciphers with `tools/playfair_gen.c` (`make playfair_gen`).
+
+**Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
+`init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
+transposition reward-score scale; a type whose score lives on a very different scale
+needs its own schedule. A small compiled-in registry (`g_search_defaults[]` in
+`colossus.c`) keyed by cipher type carries a tuned profile for **both** search shapes
+(anneal + shotgun). `main()` pre-scans `-type`/`-method` and overlays the matching profile
+*before* the main arg loop, so precedence is **globals < registry < explicit CLI flags**.
+Types with no entry keep the global defaults bit-for-bit (so the regression suite is
+unaffected) — currently only Playfair has a tuned entry (`SHAPE_ANNEAL`, `6x400000`,
+`inittemp 0.08`, `backtrack 0.30`). This is the mechanism for moving the magic
+per-type budgets out of the run scripts and into the binary; add tuned entries for other
+types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
 
 ## How the solver works (mental model)
 
