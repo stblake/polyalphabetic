@@ -2,14 +2,14 @@
 // Autokey Cipher
 //
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 // Plaintext autokey encryption -- the exact inverse of autokey_decrypt below.
 // The key stream is the primer followed by the plaintext itself; character i is
 // enciphered against key_stream[i]. Tableau conventions (and therefore the
 // standard/variant sign) mirror autokey_decrypt one-for-one, so
 // autokey_decrypt(autokey_encrypt(P)) == P for every supported type.
-void autokey_encrypt(PolyalphabeticConfig *cfg, int ciphertext[], int plaintext_indices[], int plaintext_len,
+void autokey_encrypt(ColossusConfig *cfg, int ciphertext[], int plaintext_indices[], int plaintext_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
     int primer_indices[], int primer_len) {
 
@@ -68,7 +68,7 @@ void autokey_encrypt(PolyalphabeticConfig *cfg, int ciphertext[], int plaintext_
     }
 }
 
-void autokey_decrypt(PolyalphabeticConfig *cfg, int decrypted[], int cipher_indices[], int cipher_len,
+void autokey_decrypt(ColossusConfig *cfg, int decrypted[], int cipher_indices[], int cipher_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
     int primer_indices[], int primer_len) {
     

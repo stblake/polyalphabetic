@@ -8,7 +8,7 @@
 # Stochastic — raise -nrestarts / -nhillclimbs for a harder cipher.
 SRC="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-out=$("$SRC/polyalphabetic" -type transcol -cipher "$HERE/transcol_single_tb.txt" \
+out=$("$SRC/colossus" -type transcol -cipher "$HERE/transcol_single_tb.txt" \
   -ngramsize 4 -ngramfile "$SRC/english_quadgrams.txt" \
   -nrestarts 40 -nhillclimbs 8000 2>/dev/null)
 echo "$out" | grep -E 'Result Score|columnar,'

@@ -1,7 +1,7 @@
 
 // Periodic index of coincidence
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 /*
    estimate_cycleword_lengths

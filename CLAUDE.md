@@ -5,13 +5,13 @@ Guidance for working in this repository.
 ## Scope
 
 This directory is the **entire project** and the git root. It tracks
-`https://github.com/stblake/polyalphabetic` (branch `main`). Everything outside this
+`https://github.com/stblake/colossus` (branch `main`). Everything outside this
 directory is out of scope — git can't see it, and neither should you. (The parent
 folder holds unrelated experiment runs, logs, and candidate dumps; ignore it.)
 
 ## What this is
 
-A polyalphabetic substitution cipher solver in C by Sam Blake (started 14 July 2023).
+Colossus is a polyalphabetic substitution cipher solver in C by Sam Blake (started 14 July 2023).
 It attacks **Vigenère, Beaufort, Porta, Quagmire I–IV, and Autokey** ciphers (plus
 their variants and Beaufort/Porta autokey tableaus), optionally composed with a
 transposition stage. The engine is a **stochastic, slippery, shotgun-restarted hill
@@ -22,8 +22,8 @@ crack the Kryptos sculpture's K1–K4. See `README.md` for the author's full wri
 ## Layout (flat — sources at the repo root)
 
 ```
-polyalphabetic.c     # main(): arg parsing, solve_cipher(), hill climber, scoring, optimal-cycleword solver
-polyalphabetic.h     # the single shared header: config struct, constants, all prototypes, inline RNG
+colossus.c     # main(): arg parsing, solve_cipher(), hill climber, scoring, optimal-cycleword solver
+colossus.h     # the single shared header: config struct, constants, all prototypes, inline RNG
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
@@ -43,16 +43,16 @@ ciphers/tests/       # per-cipher test cases (cipher + expected solution)
 ## Build
 
 ```bash
-make            # gcc -Wall -O3; builds ./polyalphabetic
+make            # gcc -Wall -O3; builds ./colossus
 make clean
 ```
 
 Two caveats:
 - The active `CC` line does **not** include `-lm`. Links on macOS (clang folds libm
   into libc) but fails on Linux — add `-lm` there.
-- `make` also runs `cp polyalphabetic ..` (and `../quagmire`), copying the binary
+- `make` also runs `cp colossus ..` (and `../quagmire`), copying the binary
   *outside* this directory. That predates the isolation of this repo; the in-tree
-  `./polyalphabetic` is the one that matters here.
+  `./colossus` is the one that matters here.
 
 `make test` builds and runs the framework-free unit tests in
 `tests/test_transpositions.c` (the transposition primitives, including the columnar
@@ -85,7 +85,7 @@ ciphertext from the current working directory.
 ```bash
 ./example.sh
 # or, minimally:
-./polyalphabetic -type q3 -cipher cipher.txt -ngramsize 4 -ngramfile english_quadgrams.txt
+./colossus -type q3 -cipher cipher.txt -ngramsize 4 -ngramfile english_quadgrams.txt
 ```
 
 Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
@@ -93,7 +93,7 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
-`transcol2`/`18` (full list in `parse.c`; codes in `polyalphabetic.h`). Output is a
+`transcol2`/`18` (full list in `parse.c`; codes in `colossus.h`). Output is a
 human-readable block followed by a `>>> ...` one-line CSV summary that batch runs
 grep/sort.
 
@@ -126,7 +126,7 @@ stage* flags, which apply a fixed, user-supplied transposition after a polyalpha
 
 ## How the solver works (mental model)
 
-`solve_cipher()` (in `polyalphabetic.c`) is the pipeline:
+`solve_cipher()` (in `colossus.c`) is the pipeline:
 
 1. **Period estimation.** For periodic ciphers, `estimate_cycleword_lengths`
    (`perioc.c`) picks candidate cycleword lengths via columnar IoC Z-scores. For
@@ -155,7 +155,7 @@ the periodic key (sequence of shifts).
 
 ## Conventions & gotchas
 
-- **One shared header.** Every `.c` includes `polyalphabetic.h`; no per-module
+- **One shared header.** Every `.c` includes `colossus.h`; no per-module
   headers. Add prototypes and constants there.
 - **`rng_state`** is a global in `utils.c`; the RNG (`fast_rand`, `frand`, `rand_int`,
   `rand_bounded`) is `static inline` in the header, seeded once in `main`. The
@@ -182,7 +182,7 @@ the periodic key (sequence of shifts).
   mis-assigning a stale `freq` on any trailing/malformed line. Now loops on
   `fscanf(...) == 2`. Test: `bug3_ngram_load.sh`.
 - A cipher/ngram/crib path longer than `MAX_FILENAME_LEN` overflowed the fixed
-  `char[]` in `PolyalphabeticConfig` (`main()` `strcpy`s the CLI arg in unbounded),
+  `char[]` in `ColossusConfig` (`main()` `strcpy`s the CLI arg in unbounded),
   corrupting the struct and crashing with SIGILL — any absolute path past the old
   100-byte limit triggered it. `MAX_FILENAME_LEN` raised to 4096.
   Test: `bug4_long_path.sh`.
@@ -195,5 +195,5 @@ the periodic key (sequence of shifts).
 - Match the existing style: 4-space indent, `snake_case`, integer-index text arrays,
   explicit per-cipher-type `switch`/`if` ladders. The code favors explicitness over
   abstraction — don't refactor the cipher-type dispatch into clever generic code.
-- The binary `polyalphabetic`, `*.o`, and `.DS_Store` are git-ignored.
+- The binary `colossus`, `*.o`, and `.DS_Store` are git-ignored.
 - Don't commit or push unless asked.

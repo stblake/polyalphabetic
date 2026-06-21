@@ -9,7 +9,7 @@
 # When solved, the partial-crib row should read all 0s (exact match) under each
 # crib word and '_' everywhere else -- perfectly aligned with the crib line above.
 cd "$(dirname "$0")/../../.." || exit 1
-./polyalphabetic -type vig \
+./colossus -type vig \
   -cipher ciphers/tests/bugfixes/bug1_cipher.txt \
   -crib   ciphers/tests/bugfixes/bug1_crib.txt \
   -ngramsize 4 -ngramfile english_quadgrams.txt \

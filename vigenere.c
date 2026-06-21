@@ -2,7 +2,7 @@
 // Vigenere Cipher
 //
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 /*
    Vigenère Cipher Logic

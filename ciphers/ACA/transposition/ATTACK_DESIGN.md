@@ -47,12 +47,12 @@ has the right words in a shuffled block order. This is a scoring limit, not a so
 supplying a `-crib` (honoured by every solver via `state_score`) pins the alignment and
 resolves it.
 
-The permutation-style solvers share `transposition_anneal()` (in `polyalphabetic.c`): a
+The permutation-style solvers share `transposition_anneal()` (in `colossus.c`): a
 shotgun/Metropolis key climber taking per-type `decrypt`/`move`/`seed` callbacks, so each
 new type supplies only those three small functions. Every new type follows the same
 modular slice: a `decrypt_<type>(…, int variant, int out[])` primitive in
 `transpositions.c` (with a round-trip unit test in `tests/test_transpositions.c`), a
-`solve_<type>()` in `polyalphabetic.c` sharing `report_transposition()` for output, a
+`solve_<type>()` in `colossus.c` sharing `report_transposition()` for output, a
 `-type` alias in `parse.c`, a code in the header, and a banner + dispatch in
 `main`/`solve_cipher`. `-variant` swaps the encrypt/decrypt direction per the global
 convention (handled uniformly by the `apply_perm()` helper).
@@ -66,7 +66,7 @@ The 625 untyped, frequency-detected files (`transposition_*_digitalcons_*.txt`) 
 
 The solver already isolates pure-transposition types in an early branch of
 `solve_cipher()` and solves them by optimization, not the keyword/cycleword machinery.
-Three solvers exist today (`polyalphabetic.c` / `transpositions.c`):
+Three solvers exist today (`colossus.c` / `transpositions.c`):
 
 - `solve_columnar` / `shotgun_columnar_climber` — optimizes a **column-order
   permutation** (length `K`) via `decrypt_columnar()`; `transcol` sweeps `K` over
@@ -252,10 +252,10 @@ the expensive budget.
   `decrypt_nihilist`, `decrypt_route`, `decrypt_swagman`, `decrypt_grille`. Each a pure
   `(ct, key, dims) → pt` index-array function with a round-trip unit test in
   `tests/test_transpositions.c`.
-- `polyalphabetic.c` — `transposition_anneal` shared helper (refactored out of the two
+- `colossus.c` — `transposition_anneal` shared helper (refactored out of the two
   existing climbers) + one `solve_<type>()` per cipher + `solve_transposition_auto`;
   hook them into the early transposition `switch` in `solve_cipher`.
-- `parse.c` / `polyalphabetic.h` — new `-type` aliases & codes (`railfence`, `redefence`,
+- `parse.c` / `colossus.h` — new `-type` aliases & codes (`railfence`, `redefence`,
   `amsco`, `myszkowski`, `cadenus`, `nihilist`, `route`, `swagman`, `grille`,
   `transauto`), continuing from code 18.
 - `ciphers/tests/run_tests.sh` — add one fixed-seed end-to-end case per new type, sourced

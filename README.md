@@ -1,4 +1,4 @@
-# Polyalphabetic Cipher Solver
+# Colossus — a Polyalphabetic Cipher Solver
 A prototype slippery stochastic shotgun-restarted hill climber with backtracking for Vigenere, Beaufort, Porta, Quagmire I, II, III, IV, and Autokey ciphers (including variants.) 
 
 This program is inspired by various explanations of Jim Gillogly's cipher solving program (that he used for solving the first three ciphers on Kryptos): 
@@ -7,7 +7,7 @@ https://groups.google.com/g/sci.crypt/c/hOCNN6L13CM/m/s85aEvsmrl0J
 
 The effort to make this program as efficient as possible was inspired by the homophonic solver in [AZDecrypt](https://github.com/doranchak/azdecrypt). 
 
-## Algorithmic Description of the Polyalphabetic Solver
+## Algorithmic Description of the Colossus Solver
 
 ### Stochastic Shotgun Hill Climbing Architecture
 The core engine of this program is a **Shotgun Hill Climber**, a heuristic search algorithm designed to navigate the rugged energy landscapes typical of polyalphabetic substitution ciphers. Unlike brute-force methods, which are computationally infeasible for (poly-)alphabetic permutations, this approach relies on iterative improvement.
@@ -49,7 +49,7 @@ The Vigenère cipher is a method of encrypting alphabetic text by using a keywor
 
 Here we solve a simple Vigenère cipher:
 
-```$ ./polyalphabetic -type vig -cipher cipher_vigenere.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
+```$ ./colossus -type vig -cipher cipher_vigenere.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
 
 ```
 0.00	[sec]
@@ -76,7 +76,7 @@ The Beaufort cipher is a polyalphabetic substitution cipher that encrypts text b
 
 For example, we solve a beaufort cipher which contains the famous opening line from _Pride and Prejudice_ by Jane Austen.
 
-```$ ./polyalphabetic -type beaufort -cipher cipher_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 7 -verbose```
+```$ ./colossus -type beaufort -cipher cipher_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 7 -verbose```
 
 ```
 0.01	[sec]
@@ -103,7 +103,7 @@ Note, there is a small bug here where the cycleword is messed-up, but we success
 The Porta cipher is a reciprocal polyalphabetic substitution cipher. We implement the Porta cipher as defined by the ACA (https://www.cryptogram.org/downloads/aca.info/ciphers/Porta.pdf)
 
 ```
-./polyalphabetic -type porta -cipher porta_aca.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 250 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.05 -cyclewordlen 11 -stochasticcycle -verbose
+./colossus -type porta -cipher porta_aca.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 250 -nrestarts 100 -backtrackprob 0.15 -slipprob 0.05 -cyclewordlen 11 -stochasticcycle -verbose
 ```
 
 We quickly obtain the decryption:
@@ -131,7 +131,7 @@ Note that many equivalent cyclewords are possible for Porta ciphers.
 Below we solve an autokey cipher (using a straight alphabet, or Vigenere tableau.) 
 
 ```
-$ ./polyalphabetic -type autokey -cipher autokey_len97_wl21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 21 -verbose
+$ ./colossus -type autokey -cipher autokey_len97_wl21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -cyclewordlen 21 -verbose
 ```
 
 And we obtain the solution: 
@@ -159,7 +159,7 @@ So the primer (or indicator) is `JAMESHERBERTSANBORNJR`.
 We can also solve Autokey ciphers that use a Beaufort tableau (with `-type autobeau`): 
 
 ```
-./polyalphabetic -type autobeau -cipher cipher_autokey_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 --cyclewordlen 7 -verbose
+./colossus -type autobeau -cipher cipher_autokey_beaufort.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 --cyclewordlen 7 -verbose
 ```
 
 And almost instantly we get the following solution:
@@ -207,7 +207,7 @@ We get out the solution, and the primer word is close to the correct primer `GIR
 Solving autokey ciphers that use a Quagmire I-IV tableau are much harder to solve as the multidimensional search space is rugged. If we can guess the key for the keyed alphabet, then we can solve these ciphers as quickly as we did previously for the Vigenere, Beaufort, and Porta tableau - encrypted autokey ciphers. For example, the following is an autokey cipher that uses a Quagmire III tableau. We have guessed the key for the keyed alphabet is KRYPTOS. 
 
 ```
-./polyalphabetic -type auto3 -cipher cipher_autokey_quag3.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -verbose -cyclewordlen 7 -plaintextkeyword KRYPTOS
+./colossus -type auto3 -cipher cipher_autokey_quag3.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 1000 -backtrackprob 0.15 -slipprob 0.0005 -verbose -cyclewordlen 7 -plaintextkeyword KRYPTOS
 ```
 
 ```
@@ -233,7 +233,7 @@ The Quagmire I cipher uses plaintext keyword, a straight ciphertext alphabet (`A
 
 For example, we solve a length 370 Quagmire I cipher (which we store in `cipher_quagmire_1_longer.txt`) with a length 5 plaintext keyword, and a length 7 cycleword.
 
-```$ ./polyalphabetic -type quag1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
+```$ ./colossus -type quag1 -cipher cipher_quagmire_1_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 500 -nrestarts 500 -backtrackprob 0.25 -slipprob 0.0005 -plaintextkeywordlen 5 -cyclewordlen 7 -verbose```
 
 We quickly obtain the following decryption: 
 
@@ -262,7 +262,7 @@ The Quagmire II cipher uses a straight plaintext alphabet, a ciphertext keyword,
 
 Similarly to the previous cipher, we can solve a Quagmire II cipher as follows:
 
-```$ ./polyalphabetic -type quag2 -cipher cipher_quagmire_2_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -ciphertextkeywordlen 6 -cyclewordlen 7```
+```$ ./colossus -type quag2 -cipher cipher_quagmire_2_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -ciphertextkeywordlen 6 -cyclewordlen 7```
 
 ```
 8.27	[sec]
@@ -297,7 +297,7 @@ with the following cribs (which we store in `cribs.txt`)
 
 We use a dataset of 5-grams English letter frequencies (`english_quintgrams.txt`) and fix the (plaintext and ciphertext) keyword lengths to 7:
 
-```$ ./polyalphabetic -type quag3 -cipher cipher.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -plaintextkeywordlen 7 -nsigmathreshold 1. -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 7 -cyclewordlen 7 -verbose```
+```$ ./colossus -type quag3 -cipher cipher.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -plaintextkeywordlen 7 -nsigmathreshold 1. -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 7 -cyclewordlen 7 -verbose```
 
 After about 2 seconds we arrive at the following decryption: 
 
@@ -356,7 +356,7 @@ Quagmire IV ciphers use a plaintext keyword, a ciphertext keyword, and a cyclewo
 
 Here we solve a relatively easy Quagmire IV cipher, with a plaintext keyword of length 7, a ciphertext keyword of length 3, and a cycleword of length 3. 
 
-```$ ./polyalphabetic -type quag4 -cipher cipher_quagmire_4_easier.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 3 -cyclewordlen 3```
+```$ ./colossus -type quag4 -cipher cipher_quagmire_4_easier.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.25 -slipprob 0.0005 -verbose -plaintextkeywordlen 7 -ciphertextkeywordlen 3 -cyclewordlen 3```
 
 ```
 15.81	[sec]
@@ -380,7 +380,7 @@ The keywords are `KRYPTOS`, `CIA`, and `USA`.
 
 The following cipher is significantly harder for this program to solve: 
 
-```$ ./polyalphabetic -type quag4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
+```$ ./colossus -type quag4 -cipher cipher_quagmire_4_longer.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 5000 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -maxcyclewordlen 12 -plaintextkeywordlen 5 -ciphertextkeywordlen 6 -cyclewordlen 6 -verbose```
 
 After around a minutes we get the following solution (keywords should be `WIL[L]IAM`, `WEBST[E]R`, and `ENIGMA`): 
 
@@ -412,7 +412,7 @@ ITWASTOTALLYINVISIBLEHOWSTHATPOSSIBLETHEYUSEDTHEEARTHSMAGNETICFIELDXTHEINFORMATI
 ## Variants
 We can solve Quagmire-type variant ciphers (where the encryption and decryption steps are swapped.) For example, we use the `-variant` flag to solve a variant Quagmire-3 cipher: 
 
-```$ ./polyalphabetic -type quag3 -variant -cipher cipher_variant.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 7 -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
+```$ ./colossus -type quag3 -variant -cipher cipher_variant.txt -crib crib.txt -ngramsize 5 -ngramfile english_quintgrams.txt -keywordlen 7 -cyclewordlen 7 -nhillclimbs 2500 -nrestarts 15000 -backtrackprob 0.15 -slipprob 0.0005 -verbose```
 
 ```
 19.34	[sec]
@@ -435,7 +435,7 @@ MAINTAININGAHEADINGOFEASTNORTHEASTTHIRTYTHREEDEGREESFROMTHEWESTBERLINCLOCKYOUWIL
 ## Indicator keys
 We can solve Quagmire-type ciphers when the indicator key is not under the first letter of the plaintext keyword. In the following example, the cycleword is `FLOWER`. You need to do your own search for the cycleword, as we do not use a dictionary search for any of the keywords. 
 
-```$ ./polyalphabetic -type quag1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
+```$ ./colossus -type quag1 -cipher cipher_quagmire_1_indicator.txt -ngramsize 5 -ngramfile english_quintgrams.txt -nhillclimbs 2500 -nrestarts 10000 -backtrackprob 0.15 -slipprob 0.0005 -plaintextkeywordlen 6 -cyclewordlen 6 -verbose```
 
 ```
 8.89	[sec]

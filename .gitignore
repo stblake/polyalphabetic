@@ -1,5 +1,5 @@
 .DS_Store
-polyalphabetic
+colossus
 tests/test_transpositions
 tests/test_ciphers
 tests/test_optimal_cycleword

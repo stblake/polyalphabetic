@@ -12,7 +12,7 @@
 //  argmax regression.
 //
 
-#include "../polyalphabetic.h"
+#include "../colossus.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -61,7 +61,7 @@ static void check_recovery(const char *name, int cipher_type, int variant,
     for (int i = 0; i < cwlen; i++) planted_cw[i] = ct[rand_int(0, ALPHABET_SIZE)];
 
     // Encrypt with the matching primitive.
-    PolyalphabeticConfig cfg;
+    ColossusConfig cfg;
     cfg.cipher_type = cipher_type;
     cfg.variant = variant;
 
@@ -106,7 +106,7 @@ int main(void) {
         for (int i = 0; i < len; i++) P[i] = sample_english_letter();
         for (int i = 0; i < cwlen; i++) planted[i] = 2 * rand_int(0, 13); // even chars
         porta_encrypt(C, P, len, planted, cwlen);
-        PolyalphabeticConfig cfg; cfg.cipher_type = cipher_type; cfg.variant = 0;
+        ColossusConfig cfg; cfg.cipher_type = cipher_type; cfg.variant = 0;
         derive_optimal_cycleword(&cfg, C, len, straight, straight, recovered, cwlen, NULL);
         int ok = 1;
         for (int i = 0; i < cwlen; i++) if (recovered[i] / 2 != planted[i] / 2) ok = 0;

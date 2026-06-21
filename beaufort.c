@@ -2,7 +2,7 @@
 // Beaufort Cipher
 //
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 /*
    Beaufort Cipher (ACA Standard)

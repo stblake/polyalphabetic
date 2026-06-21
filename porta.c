@@ -42,7 +42,7 @@
 */
 
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 void porta_core(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 

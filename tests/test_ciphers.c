@@ -11,7 +11,7 @@
 //  in the modular arithmetic is caught, not just a self-consistent round-trip).
 //
 
-#include "../polyalphabetic.h"
+#include "../colossus.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -185,7 +185,7 @@ static void test_quagmire_matches_vigenere(void) {
 // implementation in autokey.ipynb and pin the actual convention per tableau.
 
 // cfg carries only cipher_type + variant for the autokey primitives.
-static void autokey_cfg(PolyalphabeticConfig *cfg, int cipher_type, int variant) {
+static void autokey_cfg(ColossusConfig *cfg, int cipher_type, int variant) {
     memset(cfg, 0, sizeof *cfg);
     cfg->cipher_type = cipher_type;
     cfg->variant = variant;
@@ -195,7 +195,7 @@ static void autokey_kat(const char *name, int cipher_type, int variant,
     const char *pt_kw, const char *ct_kw, const char *primer,
     const char *pt, const char *expected) {
 
-    PolyalphabeticConfig cfg;
+    ColossusConfig cfg;
     autokey_cfg(&cfg, cipher_type, variant);
 
     int len = (int) strlen(pt);
@@ -262,7 +262,7 @@ static void test_autokey_roundtrip(void) {
             for (int pi = 0; pi < 3; pi++) {
                 int prlen = prlens[pi];
                 for (int variant = 0; variant <= 1; variant++) {
-                    PolyalphabeticConfig cfg;
+                    ColossusConfig cfg;
                     autokey_cfg(&cfg, types[ti], variant);
 
                     int pt[ALPHABET_SIZE], ct[ALPHABET_SIZE], pr[MAX_CYCLEWORD_LEN];

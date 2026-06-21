@@ -2,11 +2,11 @@
 // Cryptanalytic and general software utilities 
 
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 uint32_t rng_state = 123456789;
 
-// --- Runtime alphabet (see polyalphabetic.h). Defaults to the full A..Z so the
+// --- Runtime alphabet (see colossus.h). Defaults to the full A..Z so the
 // historical 26-letter behaviour is bit-identical until -excludeletter/-alphabet
 // is given. ---
 int  g_alpha = ALPHABET_SIZE;

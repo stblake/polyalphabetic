@@ -1,8 +1,8 @@
 //
 //  In-process regression tests for the polyalphabetic optimizer (solve_cipher).
 //
-//  Framework-free: build with `make test`. polyalphabetic.c is compiled with
-//  -DPOLY_NO_MAIN and this file supplies its own main, so solve_cipher can be
+//  Framework-free: build with `make test`. colossus.c is compiled with
+//  -DCOLOSSUS_NO_MAIN and this file supplies its own main, so solve_cipher can be
 //  driven directly and its SolveResult inspected -- no stdout scraping. A fixed
 //  -seed makes each stochastic solve deterministic.
 //
@@ -19,7 +19,7 @@
 //  found in the cwd.
 //
 
-#include "../polyalphabetic.h"
+#include "../colossus.h"
 
 static int failures = 0;
 static int checks = 0;
@@ -64,7 +64,7 @@ static void run_case(const char *name, int cipher_type, int variant,
     if (pt_kw) make_keyed_alphabet((char *) pt_kw, ptkw); else straight_alphabet(ptkw, ALPHABET_SIZE);
     if (ct_kw) make_keyed_alphabet((char *) ct_kw, ctkw); else straight_alphabet(ctkw, ALPHABET_SIZE);
 
-    PolyalphabeticConfig cfg;
+    ColossusConfig cfg;
     init_config(&cfg);
     cfg.cipher_type = cipher_type;
     cfg.variant = variant;

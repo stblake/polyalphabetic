@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# run_tests.sh — accuracy regression suite for the polyalphabetic solver.
+# run_tests.sh — accuracy regression suite for the colossus solver.
 #
 # Each test in the manifest below is solved with a FIXED -seed (so a given build
 # is fully reproducible), the recovered plaintext is pulled from the last field
@@ -25,7 +25,7 @@
 # correct — generation bakes the current output in as the regression baseline.
 
 cd "$(dirname "$0")" || exit 2
-BIN=../../polyalphabetic
+BIN=../../colossus
 NGRAMS=../../english_quadgrams.txt
 NG="-ngramsize 4 -ngramfile $NGRAMS"
 COMMON="-backtrackprob 0.15 -slipprob 0.0005"

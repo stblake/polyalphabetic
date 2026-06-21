@@ -1,7 +1,7 @@
 
 // Dictionary utilities
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_dict_word_len, bool verbose) {
     FILE *fp;

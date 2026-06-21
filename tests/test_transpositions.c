@@ -11,7 +11,7 @@
 //  and non-coprime decimation rejection).
 //
 
-#include "../polyalphabetic.h"
+#include "../colossus.h"
 
 // rng_state and the transform/gcd/vec_copy symbols come from utils.c +
 // transpositions.c at link time (see the `test` target in the makefile).

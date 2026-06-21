@@ -1,7 +1,7 @@
 
 // Transpositions
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 void transperoffset(int plaintext[], int len, int d, int n) {
 

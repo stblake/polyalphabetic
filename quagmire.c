@@ -2,7 +2,7 @@
 // Quagmire I - IV ciphers
 //
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 /*
    Quagmire Ciphers: The General Case (Quagmire IV) and Specializations

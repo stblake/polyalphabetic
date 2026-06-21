@@ -8,7 +8,7 @@
 # if it does not converge. It should recover transcol_solution.txt.
 SRC="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-out=$("$SRC/polyalphabetic" -type transcol2 -cipher "$HERE/transcol_double.txt" \
+out=$("$SRC/colossus" -type transcol2 -cipher "$HERE/transcol_double.txt" \
   -ngramsize 4 -ngramfile "$SRC/english_quadgrams.txt" \
   -mincols 4 -maxcols 12 -nrestarts 400 -nhillclimbs 12000 2>/dev/null)
 echo "$out" | grep -E 'Result Score|columnar,'

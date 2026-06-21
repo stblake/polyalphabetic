@@ -7,7 +7,7 @@
 # the plaintext beginning THEUNITEDSTATESCONSTITUTION...
 SRC="$(cd "$(dirname "$0")/../.." && pwd)"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-"$SRC/polyalphabetic" -type transperoffset -cipher "$HERE/transperoffset_solve.txt" \
+"$SRC/colossus" -type transperoffset -cipher "$HERE/transperoffset_solve.txt" \
   -crib "$HERE/transperoffset_crib.txt" \
   -ngramsize 4 -ngramfile "$SRC/english_quadgrams.txt" \
   -nrestarts 300 -nhillclimbs 8000 2>/dev/null | grep -E 'transperiodoffset:|Result Score'

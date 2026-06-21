@@ -1,9 +1,9 @@
 # Bug-fix demonstrations
 
 End-to-end tests for the three "Known issues" that were listed in `CLAUDE.md`.
-Each script builds/uses the in-tree `./polyalphabetic` and shows the behaviour
+Each script builds/uses the in-tree `./colossus` and shows the behaviour
 after the fix. Run them from anywhere; they resolve the repo root themselves.
-Build first: `make` (or `gcc -Wall -O3 -o polyalphabetic *.c`).
+Build first: `make` (or `gcc -Wall -O3 -o colossus *.c`).
 
 ## Bug 1 — partial-crib match row (`bug1_partial_crib.sh`)
 

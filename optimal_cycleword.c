@@ -2,7 +2,7 @@
 // Optimal cycleword derivation
 //
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 /*
    derive_optimal_cycleword
@@ -53,7 +53,7 @@
 */
 
 void derive_optimal_cycleword(
-    PolyalphabeticConfig *cfg,
+    ColossusConfig *cfg,
     int cipher_indices[], int cipher_len,
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[],
     int cycleword_state[], int cycleword_len, int *hist_by_col) {

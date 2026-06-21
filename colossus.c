@@ -1,5 +1,5 @@
 //
-//  Polyalphabetic cipher solver
+//  Colossus - a polyalphabetic cipher solver
 //
 
 // A stochastic, slippery shotgun-restarted hill climber with backtracking for solving
@@ -47,7 +47,7 @@
 
 /* Usage
     -----
-    $ ./polyalphabetic [options]
+    $ ./colossus [options]
 
     Parameters
     ----------
@@ -198,9 +198,9 @@
 
 */
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
-void init_config(PolyalphabeticConfig *cfg) {
+void init_config(ColossusConfig *cfg) {
     // Set Defaults
     cfg->cipher_type = -1;
     cfg->ngram_size = 0;
@@ -263,16 +263,16 @@ void init_config(PolyalphabeticConfig *cfg) {
 
 // Guarded so the regression tests can link the whole solver (solve_cipher and
 // its dependencies live in this file) while supplying their own main:
-// compile this translation unit with -DPOLY_NO_MAIN.
-#ifndef POLY_NO_MAIN
+// compile this translation unit with -DCOLOSSUS_NO_MAIN.
+#ifndef COLOSSUS_NO_MAIN
 int main(int argc, char **argv) {
-    PolyalphabeticConfig cfg;
+    ColossusConfig cfg;
     SharedData shared;
     int i;
     char single_ciphertext_buffer[MAX_CIPHER_LENGTH];
     char cribtext[MAX_CIPHER_LENGTH];
 
-    printf("\n\nPOLYALPHABETIC Cipher Solver\n\n");
+    printf("\n\nCOLOSSUS Cipher Solver\n\n");
     printf("Written by Sam Blake, started 14 July 2023.\n\n");
 
     // Seed the PRNG with the current Unix time (seconds since Epoch).
@@ -674,13 +674,13 @@ int main(int argc, char **argv) {
 
     return 1;
 }
-#endif // POLY_NO_MAIN
+#endif // COLOSSUS_NO_MAIN
 
 
 
 // Core Solver
 
-void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig *cfg,
+void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     SharedData *shared, SolveResult *result) {
 
     // Default to "not solved": every early return (transposition dispatch, no
@@ -1045,7 +1045,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, PolyalphabeticConfig
 // Prints the human-readable result block and the ">>> ..." one-line CSV summary
 // from a populated SolveResult. Output is byte-for-byte the same as the inline
 // reporting it replaced, so batch grep/sort over the ">>>" lines is unaffected.
-void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
+void report_solution(ColossusConfig *cfg, char *cribtext_str,
     int cipher_indices[], SolveResult *res) {
 
     int cipher_len = res->decrypted_len;
@@ -1148,7 +1148,7 @@ void report_solution(PolyalphabeticConfig *cfg, char *cribtext_str,
 //   - TRANSPEROFFSET : params (p1,p2)    = (period d, offset n)
 
 // Apply a candidate transform to a fresh copy of the ciphertext.
-static void apply_transposition(PolyalphabeticConfig *cfg, int cipher_indices[],
+static void apply_transposition(ColossusConfig *cfg, int cipher_indices[],
     int cipher_len, int p1, int p2, int p3, int decrypted[]) {
 
     vec_copy(cipher_indices, decrypted, cipher_len);
@@ -1160,7 +1160,7 @@ static void apply_transposition(PolyalphabeticConfig *cfg, int cipher_indices[],
 }
 
 // Pick a random valid parameter triple for the current transposition type.
-static void random_transposition_params(PolyalphabeticConfig *cfg, int cipher_len,
+static void random_transposition_params(ColossusConfig *cfg, int cipher_len,
     int *p1, int *p2, int *p3) {
 
     if (cfg->cipher_type == TRANSMATRIX) {
@@ -1179,7 +1179,7 @@ static void random_transposition_params(PolyalphabeticConfig *cfg, int cipher_le
 }
 
 // Perturb a single parameter (one local neighbour move).
-static void perturbate_transposition_params(PolyalphabeticConfig *cfg, int cipher_len,
+static void perturbate_transposition_params(ColossusConfig *cfg, int cipher_len,
     int *p1, int *p2, int *p3) {
 
     if (cfg->cipher_type == TRANSMATRIX) {
@@ -1211,7 +1211,7 @@ static void perturbate_transposition_params(PolyalphabeticConfig *cfg, int ciphe
     }
 }
 
-double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
+double shotgun_transposition_climber(ColossusConfig *cfg,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int best_decrypted[],
@@ -1306,7 +1306,7 @@ double shotgun_transposition_climber(PolyalphabeticConfig *cfg,
 }
 
 void solve_transposition(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -1519,7 +1519,7 @@ static void build_columnar_seed(int key[], int len, int p, int ord[]) {
     }
 }
 
-double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
+double shotgun_permutation_climber(ColossusConfig *cfg,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int best_decrypted[], int best_key[]) {
@@ -1637,7 +1637,7 @@ double shotgun_permutation_climber(PolyalphabeticConfig *cfg,
 }
 
 void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -1775,7 +1775,7 @@ static void perturbate_column_order(int order[], int K, int *dir, int search_dir
 }
 
 // Seed a fresh restart: random column order(s), direction(s) per read_direction.
-static void columnar_seed(PolyalphabeticConfig *cfg, int nstages,
+static void columnar_seed(ColossusConfig *cfg, int nstages,
     int K[2], int order[2][MAX_COLS], int dir[2]) {
     for (int s = 0; s < nstages; s++) {
         for (int c = 0; c < K[s]; c++) order[s][c] = c;
@@ -1800,7 +1800,7 @@ static void columnar_copy_state(int nstages,
 // n_restarts restarts per K; double columnar (TRANSCOL2) randomises (K1,K2) per
 // restart. Scoring is the n-gram (+ optional crib) state_score only -- no
 // structure-score guard is needed because the candidates are all columnar.
-static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
+static double shotgun_columnar_climber(ColossusConfig *cfg,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int best_decrypted[],
@@ -1929,7 +1929,7 @@ static double shotgun_columnar_climber(PolyalphabeticConfig *cfg,
 }
 
 void solve_columnar(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2020,7 +2020,7 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
 // (and, crucially, the recovered plaintext as the final CSV field that the
 // regression suite scrapes) is identical across types. `param_summary` is one
 // already-formatted CSV field describing the recovered key (e.g. "rails=5 off=0").
-static void report_transposition(PolyalphabeticConfig *cfg, SharedData *shared,
+static void report_transposition(ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len, int best_decrypted[],
     double best_score, char *cribtext_str, int n_cribs,
     const char *param_summary) {
@@ -2135,7 +2135,7 @@ static void indep_seed(int cipher_indices[], int cipher_len, int period,
 // that breaks the coordination barrier -- single random swaps barely move the score
 // while neighbouring columns are still wrong, but greedily perfecting one column
 // against the (partially correct) others gives a real gradient. Returns the score.
-static double indep_column_opt(PolyalphabeticConfig *cfg,
+static double indep_column_opt(ColossusConfig *cfg,
     int cipher_indices[], int cipher_len, int period, int j,
     int maps[][ALPHABET_SIZE], int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int decrypted[], double cur_score) {
@@ -2158,7 +2158,7 @@ static double indep_column_opt(PolyalphabeticConfig *cfg,
     return cur_score;
 }
 
-static double shotgun_indep_climber(PolyalphabeticConfig *cfg,
+static double shotgun_indep_climber(ColossusConfig *cfg,
     int cipher_indices[], int cipher_len, int period,
     int crib_indices[], int crib_positions[], int n_cribs,
     float *ngram_data, int best_decrypted[], int best_maps[][ALPHABET_SIZE]) {
@@ -2255,7 +2255,7 @@ static double shotgun_indep_climber(PolyalphabeticConfig *cfg,
 }
 
 void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2327,7 +2327,7 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
 // and every starting phase offset, invert the zigzag with decrypt_railfence and
 // keep the highest-scoring plaintext. -variant swaps the read/write directions.
 void solve_railfence(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2386,7 +2386,7 @@ void solve_railfence(char *ciphertext_str, char *cribtext_str,
 // rows (both >= 2), times every route in [0, N_ROUTES); invert each with decrypt_route
 // and keep the best-scoring plaintext. -variant swaps read/write.
 void solve_route(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2465,7 +2465,7 @@ typedef struct {
     int *crib_positions;
     int n_cribs;
     float *ngram_data;
-    PolyalphabeticConfig *cfg;
+    ColossusConfig *cfg;
     int param[4];               // type-specific fixed parameters (e.g. Amsco start/variant)
 } TransAnnealCtx;
 
@@ -2474,7 +2474,7 @@ typedef void (*trans_move_fn)(int *key, int key_len);
 typedef void (*trans_seed_fn)(int *key, int key_len);
 
 static double trans_score(const TransAnnealCtx *ctx, int *decrypted) {
-    PolyalphabeticConfig *cfg = ctx->cfg;
+    ColossusConfig *cfg = ctx->cfg;
     return state_score(decrypted, ctx->cipher_len,
         ctx->crib_indices, ctx->crib_positions, ctx->n_cribs,
         ctx->ngram_data, cfg->ngram_size,
@@ -2587,7 +2587,7 @@ static void amsco_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *
 // Sweep the column count K and the start-chunk (1 or 2); for each, climb the
 // column order with the shared annealer and keep the best plaintext.
 void solve_amsco(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2668,7 +2668,7 @@ static void mysz_move(int *key, int K) {
 // Sweep the column count K; for each, climb the per-column rank vector with the
 // shared annealer and keep the best plaintext.
 void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2741,7 +2741,7 @@ static void redefence_decrypt_cb(const int *key, int key_len, const TransAnnealC
 // Sweep rail count and starting phase; for each, climb the rail read-order
 // permutation with the shared annealer.
 void solve_redefence(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2814,7 +2814,7 @@ static void cadenus_move(int *key, int key_len) {
 }
 
 void solve_cadenus(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2877,7 +2877,7 @@ static void nihilist_move(int *key, int key_len) {   // perturb one of the two h
 }
 
 void solve_nihilist(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -2950,7 +2950,7 @@ static void swagman_move(int *key, int key_len) {
 }
 
 void solve_swagman(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -3014,7 +3014,7 @@ static void grille_move(int *key, int key_len) {
 }
 
 void solve_grille(char *ciphertext_str, char *cribtext_str,
-    PolyalphabeticConfig *cfg, SharedData *shared,
+    ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
@@ -3057,7 +3057,7 @@ void solve_grille(char *ciphertext_str, char *cribtext_str,
 // Hill Climber
 
 double shotgun_hill_climber(
-    PolyalphabeticConfig *cfg,
+    ColossusConfig *cfg,
     int cipher_indices[], int cipher_len, 
     int crib_indices[], int crib_positions[], int n_cribs,
     int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
@@ -3666,7 +3666,7 @@ int get_matrix_rotate_old_idx(int target_idx, int len, int width, int clockwise)
     return target_idx;
 }
 
-int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_len) {
+int map_crib_to_cipher_pos(ColossusConfig *cfg, int crib_pos, int cipher_len) {
     int pos = crib_pos;
 
     // Un-map transmatrix (in reverse order of decryption: w2, then w1)
@@ -3687,7 +3687,7 @@ int map_crib_to_cipher_pos(PolyalphabeticConfig *cfg, int crib_pos, int cipher_l
 
 
 
-bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
+bool cribs_satisfied_p(ColossusConfig *cfg, int cipher_indices[], int cipher_len, int crib_indices[], 
     int crib_positions[], int n_cribs, int cycleword_len, bool verbose) {
 
     int i, j, k, ii, jj, total, column_length, ciphertext_column_indices[MAX_CIPHER_LENGTH], 
@@ -3764,7 +3764,7 @@ bool cribs_satisfied_p(PolyalphabeticConfig *cfg, int cipher_indices[], int ciph
 
 
 
-bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
+bool constrain_cycleword(ColossusConfig *cfg, int cipher_indices[], int cipher_len, 
     int crib_indices[], int crib_positions[], int n_cribs, 
     int plaintext_keyword_indices[], int ciphertext_keyword_indices[], 
     int cycleword_indices[], int cycleword_len, 
@@ -3827,7 +3827,7 @@ bool constrain_cycleword(PolyalphabeticConfig *cfg, int cipher_indices[], int ci
 
 
 
-void decrypt_state(PolyalphabeticConfig *cfg, int cipher_indices[], int cipher_len, 
+void decrypt_state(ColossusConfig *cfg, int cipher_indices[], int cipher_len, 
                    int plaintext_keyword_state[], int ciphertext_keyword_state[], 
                    int cycleword_state[], int cycleword_len, 
                    int decrypted[]) {

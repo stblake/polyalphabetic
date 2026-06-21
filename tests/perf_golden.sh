@@ -8,7 +8,7 @@
 #
 # Run from the repo root (the binary loads ngram/dict/cipher from cwd).
 set -u
-BIN=./polyalphabetic
+BIN=./colossus
 NG="-ngramsize 4 -ngramfile english_quadgrams.txt"
 run() { $BIN "$@" -seed 42 2>/dev/null | grep '^>>>'; }
 

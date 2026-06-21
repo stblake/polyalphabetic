@@ -2,7 +2,7 @@
 // Parser for cipher types
 
 
-#include "polyalphabetic.h"
+#include "colossus.h"
 
 
 // Helper for case-insensitive comparison
