@@ -768,6 +768,102 @@ static double engine_score(const SolverCtx *ctx, int *decrypted, double adjust) 
         cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy) + adjust;
 }
 
+// Incremental variant of run_one_config (same restart / annealing / backtrack /
+// best-tracking skeleton) for models that supply the score_neighbor/commit/sync
+// hooks. The current state's decryption (cur_dec) is kept live; each neighbour is
+// scored as a delta and only committed into cur_dec + the model caches on accept,
+// so the per-iteration cost is O(positions the move touched) rather than O(N).
+static double run_one_config_incremental(const CipherModel *m, SolverCtx *ctx,
+                                         const SolverConfig *cfg_c,
+                                         SolverState *out_best, int *out_decrypted) {
+
+    static SolverState cur, loc, best;
+    static int cur_dec[MAX_CIPHER_LENGTH], best_dec[MAX_CIPHER_LENGTH];
+    ColossusConfig *cfg = ctx->cfg;
+
+    double best_score = 0.0, cur_score, loc_score, adjust;
+    bool have_best = false;
+    bool force_primary = true;
+
+    SearchShape shape = m->shape;
+    if (cfg->method == METHOD_SHOTGUN) shape = SHAPE_SHOTGUN;
+    else if (cfg->method == METHOD_ANNEAL) shape = SHAPE_ANNEAL;
+    bool done = false;
+
+    EngineStats st;
+    memset(&st, 0, sizeof st);
+    st.start_time = clock();
+
+    double temp_start = cfg->init_temp;
+    double cooling;
+    if (cfg->cooling_rate > 0.0) {
+        cooling = cfg->cooling_rate;
+    } else {
+        cooling = 1.0;
+        if (cfg->n_hill_climbs > 1)
+            cooling = pow(cfg->min_temp / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
+    }
+
+    for (int rs = 0; rs < cfg->n_restarts && !done; rs++) {
+        st.n_restarts = rs;
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            m->copy_state(cfg_c, &best, &cur);
+            vec_copy(best_dec, cur_dec, ctx->cipher_len);
+            cur_score = best_score;
+            st.n_backtracks++;
+        } else {
+            m->seed(ctx, cfg_c, &cur);
+            adjust = 0.0;
+            m->decrypt(ctx, cfg_c, &cur, cur_dec, &adjust);
+            cur_score = engine_score(ctx, cur_dec, adjust);
+        }
+        // (Re)build the model caches so they describe the current decryption.
+        m->sync_caches(ctx, cfg_c, cur_dec);
+
+        force_primary = true;
+
+        double temp = temp_start;
+        for (int it = 0; it < cfg->n_hill_climbs && !done; it++) {
+            st.n_iterations++;
+
+            m->copy_state(cfg_c, &cur, &loc);
+            m->perturb(ctx, cfg_c, &loc, &force_primary);
+
+            loc_score = m->score_neighbor(ctx, cfg_c, &cur, &loc, cur_dec, cur_score);
+
+            bool accept;
+            if (loc_score > cur_score) {
+                accept = true;
+            } else if (shape == SHAPE_ANNEAL) {
+                accept = frand() < exp((loc_score - cur_score) / temp);
+            } else {
+                accept = frand() < cfg->slip_probability;
+            }
+            if (accept) {
+                if (loc_score <= cur_score) st.n_slips++;
+                m->commit_neighbor(ctx, cfg_c, cur_dec);   // advance cur_dec + caches
+                m->copy_state(cfg_c, &loc, &cur);
+                cur_score = loc_score;
+            }
+            temp *= cooling;
+
+            if (!have_best || cur_score > best_score) {
+                best_score = cur_score; have_best = true;
+                m->copy_state(cfg_c, &cur, &best);
+                vec_copy(cur_dec, best_dec, ctx->cipher_len);
+                if (cfg->verbose && m->report_verbose)
+                    m->report_verbose(ctx, cfg_c, &best, best_score, cur_dec, &st);
+                if (shape == SHAPE_DETERMINISTIC) done = true;
+            }
+        }
+    }
+
+    m->copy_state(cfg_c, &best, out_best);
+    vec_copy(best_dec, out_decrypted, ctx->cipher_len);
+    return best_score;
+}
+
 // Hill-climb one outer config: shotgun restarts + per-iteration neighbour move,
 // with SHOTGUN slip / ANNEAL Metropolis acceptance and best-state tracking. Writes
 // the config's best state to *out_best and its decryption to out_decrypted, and
@@ -775,6 +871,11 @@ static double engine_score(const SolverCtx *ctx, int *decrypted, double adjust) 
 static double run_one_config(const CipherModel *m, SolverCtx *ctx,
                              const SolverConfig *cfg_c,
                              SolverState *out_best, int *out_decrypted) {
+
+    // Models exposing the incremental hooks take the fast path; all others fall
+    // through to the unchanged generic climber below.
+    if (m->score_neighbor && m->commit_neighbor && m->sync_caches)
+        return run_one_config_incremental(m, ctx, cfg_c, out_best, out_decrypted);
 
     static SolverState cur, loc, best;
     static int decrypted[MAX_CIPHER_LENGTH];
@@ -2979,6 +3080,29 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
 typedef struct {
     SymbolTable *tab;     // the interned ciphertext symbols (for display)
     int          n_symbols;
+
+    // --- incremental-scoring caches (see the fast-path hooks below) ---
+    // These describe the CURRENT (accepted) decryption, kept live by sync_caches /
+    // commit_neighbor so each neighbour is scored as a delta over only the touched
+    // cipher positions instead of an O(cipher_len) re-decrypt + n-gram rescan.
+    double  scale;                 // n-gram scale factor (matches ngram_score())
+    double  ngsum;                 // running raw sum of ngram_data[] over all windows
+    int     counts[ALPHABET_SIZE]; // letter histogram of the current decryption
+    // Position index: pos[pos_off[s] .. pos_off[s+1]) lists the cipher positions
+    // carrying symbol s (so a one-symbol move maps straight to the positions, and
+    // thus the n-gram windows, it changes). Built once per solve.
+    int    *pos;                   // length cipher_len
+    int    *pos_off;               // length n_symbols + 1
+    // Per-call scratch for the touched-window set (win_mark stays all-zero between
+    // calls; score_neighbor clears every entry it set before returning).
+    char   *win_mark;              // length cipher_len (>= n_windows)
+    int    *win_list;              // length cipher_len
+    // Pending delta stashed by score_neighbor, applied by commit_neighbor.
+    double  pend_ngsum;
+    int     pend_counts[ALPHABET_SIZE];
+    int     pend_nsym;             // number of changed symbols
+    int    *pend_sym;              // length n_symbols: which symbols changed
+    int    *pend_newc;             // length n_symbols: their new plaintext letters
 } HomophonicScratch;
 
 // One config: the whole map is climbed at once. period carries the key length.
@@ -3019,64 +3143,178 @@ static double homophonic_penalty(const SolverCtx *ctx, const int *dec) {
     return ctx->cfg->weight_monogram * chi_squared((int *) dec, ctx->cipher_len);
 }
 
-// Score the map `key` by decrypting into `dec` and running the shared n-gram (+ crib)
-// score minus the anti-collapse penalty. Used by the greedy move below to pick a
-// symbol's best plaintext letter; must match the engine's score (decrypt's
-// score_adjust applies the same penalty) so greedy and acceptance optimise the same
-// objective.
-static double homophonic_score(const SolverCtx *ctx, const int *key, int *dec) {
-    ColossusConfig *cfg = ctx->cfg;
-    for (int i = 0; i < ctx->cipher_len; i++) dec[i] = key[ctx->cipher[i]];
-    return state_score(dec, ctx->cipher_len, ctx->crib_indices, ctx->crib_positions,
-        ctx->n_cribs, ctx->ngram_data, cfg->ngram_size,
-        cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
-        - homophonic_penalty(ctx, dec);
-}
-
-// Neighbour move. The dominant move is a GREEDY coordinate step -- pick one symbol and
-// set it to the plaintext letter that maximises the score with every other symbol
-// held fixed. Simple random reassignment alone collapses homophonic climbs into a
-// high-n-gram-score but wrong fixed point (many symbols folded onto E/T/A...); the
-// greedy step gives a real gradient on each symbol, the way the independent-periodic
-// solver coordinate-optimises a whole column. Random reassignment and pair swaps are
-// retained at low probability for exploration / to escape the greedy basin.
+// Neighbour move (AZDecrypt-style). The dominant move is a single random symbol
+// reassignment -- pick one symbol, give it a random plaintext letter -- accepted or
+// rejected by the engine's Metropolis annealing. The old greedy coordinate step
+// (try all 26 letters for one symbol, every trial a full re-decrypt + n-gram rescan)
+// was the dominant cost AND actively drove the homophonic collapse it then needed the
+// chi-squared penalty to undo; a single random reassignment scored incrementally is
+// hundreds of times cheaper per iteration and lets annealing find the basin. Two
+// auxiliary moves aid exploration: a symbol-pair letter swap, and a letter-class swap
+// (exchange the WHOLE homophone classes of two plaintext letters at once, to cross
+// equal-frequency ambiguities like W<->M that single-symbol moves cannot, since
+// flipping one symbol first makes it worse). Every move stays a small edit to the
+// key, so score_neighbor can score it as a delta over the touched positions only.
 static void homophonic_perturb(const SolverCtx *ctx, const SolverConfig *cc,
                                SolverState *st, bool *force_primary) {
-    (void) force_primary;
-    static int dec[MAX_CIPHER_LENGTH];
+    (void) ctx; (void) force_primary;
     int n = cc->period;
     if (n < 1) return;
     double r = frand();
-    if (r < 0.65) {
-        // Greedy coordinate step: best plaintext letter for one symbol.
-        int s = rand_int(0, n);
-        int best_c = st->key[s];
-        double best = -1.e18;
-        for (int c = 0; c < g_alpha; c++) {
-            st->key[s] = c;
-            double sc = homophonic_score(ctx, st->key, dec);
-            if (sc > best) { best = sc; best_c = c; }
-        }
-        st->key[s] = best_c;
-    } else if (r < 0.85) {
-        // Letter-class swap: exchange the WHOLE homophone classes of two plaintext
-        // letters at once. Greedy single-symbol moves cannot cross a two-letter swap
-        // (e.g. W<->M, near-identical monogram frequency), since flipping one symbol
-        // first makes it worse; swapping both classes together crosses that barrier.
+    if (r < 0.85) {
+        // Single random reassignment (the workhorse move).
+        st->key[rand_int(0, n)] = rand_int(0, g_alpha);
+    } else if (n >= 2 && r < 0.93) {
+        // Swap two symbols' letters (fine-grained exploration).
+        int a = rand_int(0, n), b = rand_int(0, n);
+        int t = st->key[a]; st->key[a] = st->key[b]; st->key[b] = t;
+    } else {
+        // Letter-class swap (cross equal-frequency two-letter ambiguities).
         int a = rand_int(0, g_alpha), b = rand_int(0, g_alpha);
         if (a != b)
             for (int s = 0; s < n; s++) {
                 if (st->key[s] == a) st->key[s] = b;
                 else if (st->key[s] == b) st->key[s] = a;
             }
-    } else if (n >= 2 && r < 0.93) {
-        // Swap two symbols' letters (fine-grained exploration).
-        int a = rand_int(0, n), b = rand_int(0, n);
-        int t = st->key[a]; st->key[a] = st->key[b]; st->key[b] = t;
-    } else {
-        // Random reassignment (escape).
-        st->key[rand_int(0, n)] = rand_int(0, g_alpha);
     }
+}
+
+// Packed little-endian base-g_alpha index of the n-gram window at start `w`, reading
+// each position's letter through `letter(p)`. Matches ngram_score()'s packing exactly
+// (idx = sum_j letter(w+j) * g_alpha^j), so the same ngram_data[] entry is selected.
+#define HOMO_WINDOW_INDEX(w, ng, letter) ({                 \
+    int _idx = 0, _base = 1;                                \
+    for (int _j = 0; _j < (ng); _j++) {                     \
+        _idx += letter((w) + _j) * _base; _base *= g_alpha; \
+    }                                                       \
+    _idx; })
+
+// Rebuild the incremental caches (letter histogram + running n-gram sum) from a full
+// decryption `dec`. Called once per restart/backtrack, after the engine has reset the
+// current state with a full decrypt -- the per-iteration deltas ride on top of this.
+static void homophonic_sync_caches(const SolverCtx *ctx, const SolverConfig *cc, const int *dec) {
+    (void) cc;
+    HomophonicScratch *h = (HomophonicScratch *) ctx->model_scratch;
+    int len = ctx->cipher_len, ng = ctx->cfg->ngram_size;
+    tally((int *) dec, len, h->counts, ALPHABET_SIZE);
+    h->ngsum = 0.0;
+    int n_windows = len - ng + 1;
+    #define dec_at(q) (dec[q])
+    for (int w = 0; w < n_windows; w++)
+        h->ngsum += ctx->ngram_data[HOMO_WINDOW_INDEX(w, ng, dec_at)];
+    #undef dec_at
+}
+
+// chi-squared of a letter histogram vs English monograms -- the same quantity as
+// chi_squared() (utils.c) but from a precomputed count[] (no re-tally).
+static double homophonic_chi2_from_counts(const int *counts, int len) {
+    double chi2 = 0.0;
+    for (int c = 0; c < g_alpha; c++) {
+        double f = ((double) counts[c]) / len;
+        chi2 += pow(f - g_monograms[c], 2) / g_monograms[c];
+    }
+    return chi2;
+}
+
+// Score the neighbour `loc` (= `cur` after one perturb) incrementally. Diffs loc vs
+// cur to find the changed symbols, recomputes only the n-gram windows touching those
+// symbols' positions and the two affected histogram bins, and reassembles the score
+// to equal decrypt()+state_score()+score_adjust for loc. Stashes the delta (new
+// ngsum + new counts + changed symbols) for commit_neighbor.
+static double homophonic_score_neighbor(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *cur, const SolverState *loc, const int *cur_dec, double cur_score) {
+    (void) cur_score;
+    HomophonicScratch *h = (HomophonicScratch *) ctx->model_scratch;
+    ColossusConfig *cfg = ctx->cfg;
+    int len = ctx->cipher_len, ng = cfg->ngram_size, n = cc->period;
+    const int *cipher = ctx->cipher;
+
+    // 1. Changed symbols, and the histogram delta (each symbol's whole class of
+    //    positions moves from its old letter to its new one).
+    for (int c = 0; c < g_alpha; c++) h->pend_counts[c] = h->counts[c];
+    h->pend_nsym = 0;
+    for (int s = 0; s < n; s++) {
+        if (loc->key[s] == cur->key[s]) continue;
+        int oldc = cur->key[s], newc = loc->key[s];
+        int m = h->pos_off[s + 1] - h->pos_off[s];
+        h->pend_counts[oldc] -= m;
+        h->pend_counts[newc] += m;
+        h->pend_sym[h->pend_nsym]  = s;
+        h->pend_newc[h->pend_nsym] = newc;
+        h->pend_nsym++;
+    }
+
+    // 2. n-gram delta over the windows touching any changed position. Mark the
+    //    distinct touched window starts, then for each re-score old vs new.
+    double dsum = 0.0;
+    int n_windows = len - ng + 1;
+    if (cfg->weight_ngram > 1.e-4 && n_windows > 0) {
+        int nlist = 0;
+        for (int k = 0; k < h->pend_nsym; k++) {
+            int s = h->pend_sym[k];
+            for (int pi = h->pos_off[s]; pi < h->pos_off[s + 1]; pi++) {
+                int p = h->pos[pi];
+                int lo = p - ng + 1; if (lo < 0) lo = 0;
+                int hi = p;          if (hi > n_windows - 1) hi = n_windows - 1;
+                for (int w = lo; w <= hi; w++)
+                    if (!h->win_mark[w]) { h->win_mark[w] = 1; h->win_list[nlist++] = w; }
+            }
+        }
+        // loc's letter at position q (only changed symbols differ from cur_dec).
+        #define dec_at(q) (cur_dec[q])
+        #define loc_at(q) (loc->key[cipher[q]])
+        for (int i = 0; i < nlist; i++) {
+            int w = h->win_list[i];
+            int old_idx = HOMO_WINDOW_INDEX(w, ng, dec_at);
+            int new_idx = HOMO_WINDOW_INDEX(w, ng, loc_at);
+            dsum += ctx->ngram_data[new_idx] - ctx->ngram_data[old_idx];
+            h->win_mark[w] = 0;            // clear for next call
+        }
+        #undef loc_at
+        #undef dec_at
+    }
+    h->pend_ngsum = h->ngsum + dsum;
+
+    // 3. Reassemble the score exactly as engine_score (state_score + score_adjust).
+    double ng_score = 0.0;
+    if (cfg->weight_ngram > 1.e-4 && n_windows > 0)
+        ng_score = h->scale * h->pend_ngsum / (len - ng);
+
+    double score;
+    if (ctx->n_cribs > 0) {
+        double crib = 0.0;
+        if (cfg->weight_crib > 1.e-4) {
+            for (int i = 0; i < ctx->n_cribs; i++) {
+                int got = loc->key[cipher[ctx->crib_positions[i]]];
+                int diff = abs(got - ctx->crib_indices[i]);
+                crib += (diff == 0) ? 1.0 : 1.0 / (1.0 + diff * diff);
+            }
+            crib /= (double) ctx->n_cribs;
+        }
+        score = (cfg->weight_ngram * ng_score + cfg->weight_crib * crib)
+                / (cfg->weight_ngram + cfg->weight_crib);
+    } else {
+        score = ng_score;
+    }
+
+    if (cfg->weight_monogram > 1.e-9)
+        score -= cfg->weight_monogram * homophonic_chi2_from_counts(h->pend_counts, len);
+
+    return score;
+}
+
+// Apply the delta stashed by the most recent score_neighbor: advance cur_dec at the
+// changed symbols' positions and adopt the precomputed histogram + n-gram sum.
+static void homophonic_commit_neighbor(const SolverCtx *ctx, const SolverConfig *cc, int *cur_dec) {
+    (void) cc;
+    HomophonicScratch *h = (HomophonicScratch *) ctx->model_scratch;
+    for (int k = 0; k < h->pend_nsym; k++) {
+        int s = h->pend_sym[k], c = h->pend_newc[k];
+        for (int pi = h->pos_off[s]; pi < h->pos_off[s + 1]; pi++)
+            cur_dec[h->pos[pi]] = c;
+    }
+    for (int c = 0; c < g_alpha; c++) h->counts[c] = h->pend_counts[c];
+    h->ngsum = h->pend_ngsum;
 }
 
 static void homophonic_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
@@ -3152,6 +3390,9 @@ static const CipherModel HOMOPHONIC_MODEL = {
     .seed = homophonic_seed, .perturb = homophonic_perturb, .copy_state = homophonic_copy,
     .decrypt = homophonic_decrypt, .report = homophonic_report,
     .report_verbose = homophonic_report_verbose,
+    .sync_caches = homophonic_sync_caches,
+    .score_neighbor = homophonic_score_neighbor,
+    .commit_neighbor = homophonic_commit_neighbor,
 };
 
 void solve_homophonic(char *ciphertext_str, char *cribtext_str,
@@ -3169,9 +3410,50 @@ void solve_homophonic(char *ciphertext_str, char *cribtext_str,
 
     SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
         cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
-    HomophonicScratch scratch = { tab, tab->n };
+
+    int n_sym = tab->n;
+    HomophonicScratch scratch;
+    memset(&scratch, 0, sizeof scratch);
+    scratch.tab = tab;
+    scratch.n_symbols = n_sym;
+    // n-gram scale factor: must match ngram_score() (legacy g_alpha^ngramsize, or 1
+    // in -logprob mode where the table already holds O(1) log10 probabilities).
+    scratch.scale = g_ngram_logprob ? 1.0 : pow((double) g_alpha, cfg->ngram_size);
+
+    // Position index: bucket each cipher position by its symbol so a one-symbol move
+    // maps straight to the positions (and thus n-gram windows) it changes. Built once.
+    scratch.pos     = malloc(sizeof(int) * (cipher_len > 0 ? cipher_len : 1));
+    scratch.pos_off = malloc(sizeof(int) * (n_sym + 1));
+    scratch.win_mark = calloc(cipher_len > 0 ? cipher_len : 1, sizeof(char));
+    scratch.win_list = malloc(sizeof(int) * (cipher_len > 0 ? cipher_len : 1));
+    scratch.pend_sym  = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
+    scratch.pend_newc = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
+    if (!scratch.pos || !scratch.pos_off || !scratch.win_mark ||
+        !scratch.win_list || !scratch.pend_sym || !scratch.pend_newc) {
+        printf("\n\nERROR: out of memory in homophonic solve.\n\n");
+        free(scratch.pos); free(scratch.pos_off); free(scratch.win_mark);
+        free(scratch.win_list); free(scratch.pend_sym); free(scratch.pend_newc);
+        return ;
+    }
+    // Counting sort of positions by symbol id into pos[]/pos_off[].
+    for (int s = 0; s <= n_sym; s++) scratch.pos_off[s] = 0;
+    for (int i = 0; i < cipher_len; i++) scratch.pos_off[cipher_indices[i] + 1]++;
+    for (int s = 0; s < n_sym; s++) scratch.pos_off[s + 1] += scratch.pos_off[s];
+    {
+        int *cursor = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
+        for (int s = 0; s < n_sym; s++) cursor[s] = scratch.pos_off[s];
+        for (int i = 0; i < cipher_len; i++) {
+            int s = cipher_indices[i];
+            scratch.pos[cursor[s]++] = i;
+        }
+        free(cursor);
+    }
+
     ctx.model_scratch = &scratch;
     run_solver(&HOMOPHONIC_MODEL, &ctx);
+
+    free(scratch.pos); free(scratch.pos_off); free(scratch.win_mark);
+    free(scratch.win_list); free(scratch.pend_sym); free(scratch.pend_newc);
 }
 
 

@@ -328,6 +328,33 @@ typedef struct CipherModel {
     // Optional: live display on each best-improvement when -verbose.
     void (*report_verbose)(const SolverCtx *ctx, const SolverConfig *cfg_c, const SolverState *st,
                            double score, int *decrypted, const EngineStats *stats);
+
+    // --- Optional incremental fast path (all three NULL => generic path) ---
+    // When a model supplies these three hooks the engine drives an incremental
+    // inner loop instead of the generic copy/perturb/decrypt/full-rescore one: it
+    // keeps the CURRENT (accepted) state's decryption live and scores each
+    // neighbour as a cheap delta over only the cipher positions the move touched,
+    // avoiding the per-iteration O(cipher_len) re-decrypt + n-gram rescan. The
+    // returned score must equal what decrypt()+state_score()+score_adjust would
+    // produce for the neighbour (verified by the regression suite). Used by the
+    // homophonic model; every other type leaves these NULL and is byte-for-byte
+    // unaffected.
+    //
+    // sync_caches: rebuild the model's incremental caches from `dec` (the current
+    //   state's full decryption). Called once per restart/backtrack after a full
+    //   decrypt resets the current state.
+    void (*sync_caches)(const SolverCtx *ctx, const SolverConfig *cfg_c, const int *dec);
+    // score_neighbor: score `loc` (= `cur` after one perturb) incrementally from
+    //   the caches (synced to `cur`, whose decryption is `cur_dec`, score
+    //   `cur_score`). Stashes the pending delta for a possible commit; must not
+    //   mutate the caches or cur_dec.
+    double (*score_neighbor)(const SolverCtx *ctx, const SolverConfig *cfg_c,
+                             const SolverState *cur, const SolverState *loc,
+                             const int *cur_dec, double cur_score);
+    // commit_neighbor: apply the delta stashed by the most recent score_neighbor
+    //   to the caches and to cur_dec, advancing the current state's decryption to
+    //   the just-accepted neighbour. Called only when the engine accepts the move.
+    void (*commit_neighbor)(const SolverCtx *ctx, const SolverConfig *cfg_c, int *cur_dec);
 } CipherModel;
 
 // Run `model` over `ctx`: enumerate configs, sweep/climb each, report the best.
