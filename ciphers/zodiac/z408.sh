@@ -1,12 +1,18 @@
 #!/bin/bash
 
-# Z408 is short (408 symbols) and contains the Zodiac's own misspellings, so the
-# homophonic climb needs many backtracking restarts to escape partial basins. With
-# the incremental scorer each iteration is cheap, so ~40M iterations (~50s) reliably
-# lands the full plaintext; fewer can stall in a near-miss basin (try another -seed).
+# Z408 is short (408 symbols) and carries the Zodiac's own misspellings, so the
+# homophonic climb has sticky near-miss basins. Tuned schedule (vs the defaults):
+#   -inittemp 0.02   a cooler anneal settles into the true basin instead of
+#                    wandering at high temperature (default 0.10 stalls ~1/6 seeds);
+#   -weightmono 1.5  a slightly stronger monogram (anti-collapse) penalty makes the
+#                    real plaintext the clear global maximum over the collapse fixed
+#                    point that high-frequency-letter folding would otherwise win.
+# With the incremental scorer each iteration is cheap, so ~7.5M iterations land the
+# full plaintext in a couple of seconds, reliably across seeds (was 8/8 in testing).
 ../../colossus -type homophonic -multiline \
     -cipher z408.txt \
     -ngramsize 5 -ngramfile ../../english_quintgrams.txt -logprob  \
-    -nrestarts 400 -nhillclimbs 100000 \
+    -nrestarts 150 -nhillclimbs 50000 \
+    -inittemp 0.02 -weightmono 1.5 \
     -backtrackprob 0.15 -seed 1 -verbose
 
