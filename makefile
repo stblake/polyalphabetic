@@ -33,6 +33,12 @@ testopt:
 # Everything.
 testall: test testopt
 
+# Standalone test-data generator for homophonic ciphers (not part of the solver
+# build). Emits a comma-separated homophonic ciphertext + its plaintext solution;
+# used to mint ciphers/tests/homophonic_test.*.
+homophonic_gen:
+	$(CC) tools/homophonic_gen.c -o tools/homophonic_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tools/homophonic_gen
 

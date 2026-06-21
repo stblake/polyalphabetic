@@ -1,5 +1,5 @@
 //
-//  Colossus - a polyalphabetic cipher solver
+//  Colossus - a classical cipher solver
 //
 
 // A stochastic, slippery shotgun-restarted hill climber with backtracking for solving
@@ -239,6 +239,7 @@ void init_config(ColossusConfig *cfg) {
     cfg->weight_ioc = 0.0;
     cfg->weight_entropy = 0.0;
     cfg->weight_structure = 4.0;
+    cfg->weight_monogram = 1.0;   // homophonic anti-collapse penalty (chi-squared vs English)
 
     cfg->optimal_cycleword = true;
     cfg->same_key_cycle = false;
@@ -260,6 +261,9 @@ void init_config(ColossusConfig *cfg) {
     cfg->min_cols = 2;
     cfg->max_cols = 30;
     cfg->read_direction = COL_READ_TB; // canonical only; bottom-to-top is opt-in
+
+    cfg->delimiter = 0;                 // 0 => per-character / 0..25 letter decode (ord())
+    cfg->delimiter_present = false;
 }
 
 
@@ -455,6 +459,23 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-skipspaces") == 0) {
             cfg.skip_spaces = true;
             printf("-skipspaces\n");
+        } else if (strcmp(argv[i], "-logprob") == 0 || strcmp(argv[i], "-azdecrypt") == 0) {
+            g_ngram_logprob = true;
+            printf("-logprob (AZDecrypt-style n-gram fitness: log-probabilities with an unseen-n-gram floor)\n");
+        } else if (strcmp(argv[i], "-weightmono") == 0) {
+            cfg.weight_monogram = atof(argv[++i]);
+            printf("-weightmono %.3f\n", cfg.weight_monogram);
+        } else if (strcmp(argv[i], "-delimiter") == 0) {
+            // Field separator for tokenized input. The literal word "space" / "char"
+            // (or an empty arg) selects per-character tokenization; otherwise the
+            // first character of the argument is the delimiter (e.g. -delimiter ,).
+            const char *d = argv[++i];
+            if (str_eq(d, "space") || str_eq(d, "char") || str_eq(d, "none") || d[0] == '\0')
+                cfg.delimiter = 0;
+            else
+                cfg.delimiter = d[0];
+            cfg.delimiter_present = true;
+            printf("-delimiter '%c' (code %d)\n", cfg.delimiter ? cfg.delimiter : ' ', cfg.delimiter);
         } else if (strcmp(argv[i], "-optimalcycle") == 0) {
             cfg.optimal_cycleword = true;
             printf("-optimalcycle\n");
@@ -572,6 +593,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a turning grille transposition cipher (orbit-assignment hill climber).\n\n");
     } else if (cfg.cipher_type == INDEP_PERIODIC) {
         printf("\nAttacking an independent-periodic substitution (P independent mixed alphabets, joint hill climber).\n\n");
+    } else if (cfg.cipher_type == HOMOPHONIC) {
+        printf("\nAttacking a homophonic substitution (ciphertext alphabet larger than the plaintext alphabet).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1511,11 +1534,16 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     // periodicities found, no valid configuration) then leaves a correct result.
     if (result) result->solved = false;
 
+    // Tokenized (symbol) input: HOMOPHONIC always, or any cipher run with -delimiter.
+    // In this mode delimiters and symbol tokens are significant, so -skipspaces (which
+    // would strip them) is suppressed and the ciphertext is decoded into symbol ids.
+    bool symbol_mode = (cfg->cipher_type == HOMOPHONIC) || cfg->delimiter_present;
+
     // -skipspaces: drop spaces/punctuation from the ciphertext entirely, so they
     // are not even carried as transposition positions. Default (flag off) keeps
     // them -- ord() encodes them as negative sentinels that ride through the
     // decryption and are skipped only by scoring.
-    if (cfg->skip_spaces) {
+    if (cfg->skip_spaces && !symbol_mode) {
         int w = 0;
         for (int r = 0; ciphertext_str[r] != '\0'; r++) {
             if (isalpha((unsigned char) ciphertext_str[r]))
@@ -1524,14 +1552,16 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
         ciphertext_str[w] = '\0';
     }
 
-    int cipher_len = (int)strlen(ciphertext_str);
     int cipher_indices[MAX_CIPHER_LENGTH];
     int n_cribs = 0;
     int crib_positions[MAX_CIPHER_LENGTH];
     int crib_indices[MAX_CIPHER_LENGTH];
+    SymbolTable symtab;
 
-    // Prepare Indices
-    ord(ciphertext_str, cipher_indices);
+    // Prepare indices. Letter ciphers get the historical 0..25/sentinel encoding
+    // (decode_cipher reproduces ord() byte-for-byte); HOMOPHONIC fills symtab with the
+    // distinct ciphertext symbols and emits one symbol id per position.
+    int cipher_len = decode_cipher(ciphertext_str, cfg, cipher_indices, &symtab);
 
     // Process Cribs (Local to this cipher)
     if (strlen(cribtext_str) > 0) {
@@ -1616,6 +1646,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     if (cfg->cipher_type == INDEP_PERIODIC) {
         solve_indep_periodic(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == HOMOPHONIC) {
+        solve_homophonic(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, &symtab);
         return ;
     }
 
@@ -2894,6 +2929,214 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
 
 
 // =====================================================================
+//  Homophonic substitution solver (TYPE homophonic)
+// =====================================================================
+//
+// A monoalphabetic-in-meaning substitution whose CIPHERTEXT alphabet is larger than
+// the plaintext alphabet: each plaintext letter is enciphered by any of several
+// distinct ciphertext symbols (its homophones), chosen to flatten the ciphertext
+// frequency profile (Zodiac-408 style). The ciphertext is decoded (decode_cipher)
+// into a sequence of symbol ids 0..N-1 indexing a SymbolTable; the key is the
+// many-to-one map symbol_id -> plaintext letter, so decrypted[i] = key[cipher[i]].
+//
+// There is no period or transposition to recover -- positions are preserved -- so the
+// solver just hill-climbs the N-entry map against the n-gram score, exactly like the
+// other CipherModels. It plugs into the shared shotgun/anneal engine (run_solver):
+// SHAPE_ANNEAL (Metropolis) acceptance, shotgun restarts, backtracking. Seeds are
+// frequency-flattening (symbols drawn from the English monogram distribution, so
+// common letters naturally receive more homophones); the move set reassigns one
+// symbol's letter (dominant) or swaps two symbols' letters.
+
+typedef struct {
+    SymbolTable *tab;     // the interned ciphertext symbols (for display)
+    int          n_symbols;
+} HomophonicScratch;
+
+// One config: the whole map is climbed at once. period carries the key length.
+static int homophonic_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    const HomophonicScratch *h = (const HomophonicScratch *) ctx->model_scratch;
+    if (cap < 1) return 0;
+    out[0].period = h->n_symbols;
+    out[0].j = 0; out[0].k = 0; out[0].aux[0] = 0; out[0].aux[1] = 0;
+    return 1;
+}
+
+// Frequency-flattening seed: draw each symbol's plaintext letter from the English
+// monogram distribution. Randomised (so shotgun restarts diversify) yet biased so the
+// recovered ciphertext frequencies start out roughly English-shaped.
+static void homophonic_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    (void) ctx;
+    int n = cc->period;
+    double cum[ALPHABET_SIZE], total = 0.;
+    for (int c = 0; c < g_alpha; c++) { total += g_monograms[c]; cum[c] = total; }
+    for (int s = 0; s < n; s++) {
+        double r = frand() * total;
+        int c = 0;
+        while (c < g_alpha - 1 && r > cum[c]) c++;
+        st->key[s] = c;
+    }
+    st->key_len = n;
+}
+
+// The anti-collapse penalty: chi-squared of the decrypted letter-frequency profile
+// against English monograms. Unlike a 26->26 substitution (a bijection, which cannot
+// pile multiple symbols onto one letter), a homophonic map is free to fold many symbols
+// onto E/T/A... to tile high-frequency n-grams -- a fixed point that out-scores the
+// true plaintext on raw n-grams alone. Penalising the resulting (wildly non-English)
+// monogram distribution removes that fixed point. Returned as a positive quantity to be
+// SUBTRACTED from the score.
+static double homophonic_penalty(const SolverCtx *ctx, const int *dec) {
+    if (ctx->cfg->weight_monogram <= 1.e-9) return 0.0;
+    return ctx->cfg->weight_monogram * chi_squared((int *) dec, ctx->cipher_len);
+}
+
+// Score the map `key` by decrypting into `dec` and running the shared n-gram (+ crib)
+// score minus the anti-collapse penalty. Used by the greedy move below to pick a
+// symbol's best plaintext letter; must match the engine's score (decrypt's
+// score_adjust applies the same penalty) so greedy and acceptance optimise the same
+// objective.
+static double homophonic_score(const SolverCtx *ctx, const int *key, int *dec) {
+    ColossusConfig *cfg = ctx->cfg;
+    for (int i = 0; i < ctx->cipher_len; i++) dec[i] = key[ctx->cipher[i]];
+    return state_score(dec, ctx->cipher_len, ctx->crib_indices, ctx->crib_positions,
+        ctx->n_cribs, ctx->ngram_data, cfg->ngram_size,
+        cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
+        - homophonic_penalty(ctx, dec);
+}
+
+// Neighbour move. The dominant move is a GREEDY coordinate step -- pick one symbol and
+// set it to the plaintext letter that maximises the score with every other symbol
+// held fixed. Simple random reassignment alone collapses homophonic climbs into a
+// high-n-gram-score but wrong fixed point (many symbols folded onto E/T/A...); the
+// greedy step gives a real gradient on each symbol, the way the independent-periodic
+// solver coordinate-optimises a whole column. Random reassignment and pair swaps are
+// retained at low probability for exploration / to escape the greedy basin.
+static void homophonic_perturb(const SolverCtx *ctx, const SolverConfig *cc,
+                               SolverState *st, bool *force_primary) {
+    (void) force_primary;
+    static int dec[MAX_CIPHER_LENGTH];
+    int n = cc->period;
+    if (n < 1) return;
+    double r = frand();
+    if (r < 0.65) {
+        // Greedy coordinate step: best plaintext letter for one symbol.
+        int s = rand_int(0, n);
+        int best_c = st->key[s];
+        double best = -1.e18;
+        for (int c = 0; c < g_alpha; c++) {
+            st->key[s] = c;
+            double sc = homophonic_score(ctx, st->key, dec);
+            if (sc > best) { best = sc; best_c = c; }
+        }
+        st->key[s] = best_c;
+    } else if (r < 0.85) {
+        // Letter-class swap: exchange the WHOLE homophone classes of two plaintext
+        // letters at once. Greedy single-symbol moves cannot cross a two-letter swap
+        // (e.g. W<->M, near-identical monogram frequency), since flipping one symbol
+        // first makes it worse; swapping both classes together crosses that barrier.
+        int a = rand_int(0, g_alpha), b = rand_int(0, g_alpha);
+        if (a != b)
+            for (int s = 0; s < n; s++) {
+                if (st->key[s] == a) st->key[s] = b;
+                else if (st->key[s] == b) st->key[s] = a;
+            }
+    } else if (n >= 2 && r < 0.93) {
+        // Swap two symbols' letters (fine-grained exploration).
+        int a = rand_int(0, n), b = rand_int(0, n);
+        int t = st->key[a]; st->key[a] = st->key[b]; st->key[b] = t;
+    } else {
+        // Random reassignment (escape).
+        st->key[rand_int(0, n)] = rand_int(0, g_alpha);
+    }
+}
+
+static void homophonic_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    for (int i = 0; i < cc->period; i++) dst->key[i] = src->key[i];
+}
+
+static void homophonic_decrypt(const SolverCtx *ctx, const SolverConfig *cc,
+                               SolverState *st, int *out, double *score_adjust) {
+    (void) cc;
+    for (int i = 0; i < ctx->cipher_len; i++) out[i] = st->key[ctx->cipher[i]];
+    *score_adjust = -homophonic_penalty(ctx, out);   // engine adds this to state_score
+}
+
+static void homophonic_report(const SolverCtx *ctx, const SolverConfig *cc,
+                              const SolverState *st, double score, int *decrypted) {
+    (void) cc;
+    ColossusConfig *cfg = ctx->cfg;
+    const HomophonicScratch *h = (const HomophonicScratch *) ctx->model_scratch;
+    SymbolTable *tab = h->tab;
+    int n = h->n_symbols, len = ctx->cipher_len;
+
+    int n_words_found = 0;
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < len; i++) plaintext_string[i] = index_to_char(decrypted[i]);
+    plaintext_string[len] = '\0';
+    if (cfg->dictionary_present && ctx->shared->dict != NULL)
+        n_words_found = find_dictionary_words(plaintext_string, ctx->shared->dict,
+            ctx->shared->n_dict_words, ctx->shared->max_dict_word_len);
+
+    printf("\nResult Score: %.2f | Words: %d | symbols=%d\n", score, n_words_found, n);
+
+    print_cipher(ctx->cipher, len, tab);
+    printf("\n");
+    print_text(decrypted, len);
+    printf("\n");
+    printf("%s\n", ctx->cribtext);
+
+    // Recovered homophone classes: each plaintext letter and the symbols decoding to it.
+    printf("\nhomophone key (plaintext <- symbols):\n");
+    for (int c = 0; c < g_alpha; c++) {
+        int any = 0;
+        for (int s = 0; s < n; s++) if (st->key[s] == c) {
+            if (!any) { printf("  %c <-", index_to_char(c)); any = 1; }
+            printf(" %s", tab->tokens[s]);
+        }
+        if (any) printf("\n");
+    }
+
+    // One-liner summary: >>> score, [words,] type, symbols=N, file, CIPHER, PLAINTEXT
+    if (cfg->dictionary_present)
+        printf(">>> %.2f, %d, %d, symbols=%d, ", score, n_words_found, cfg->cipher_type, n);
+    else
+        printf(">>> %.2f, %d, symbols=%d, ", score, cfg->cipher_type, n);
+    printf("%s, ", cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
+    print_cipher(ctx->cipher, len, tab);
+    printf(", ");
+    print_text(decrypted, len);
+    printf("\n");
+}
+
+static const CipherModel HOMOPHONIC_MODEL = {
+    .name = "homophonic", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = homophonic_enumerate, .key_len = NULL,
+    .seed = homophonic_seed, .perturb = homophonic_perturb, .copy_state = homophonic_copy,
+    .decrypt = homophonic_decrypt, .report = homophonic_report, .report_verbose = NULL,
+};
+
+void solve_homophonic(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs, SymbolTable *tab) {
+
+    (void) ciphertext_str;
+    if (cipher_len < 4 || tab == NULL || tab->n < 1) {
+        printf("\n\nERROR: ciphertext too short for a homophonic solve.\n\n");
+        return ;
+    }
+    if (cfg->verbose)
+        printf("\nhomophonic: %d positions, %d distinct symbols\n", cipher_len, tab->n);
+
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    HomophonicScratch scratch = { tab, tab->n };
+    ctx.model_scratch = &scratch;
+    run_solver(&HOMOPHONIC_MODEL, &ctx);
+}
+
+
+// =====================================================================
 //  Rail fence solver (TYPE railfence) -- covers variant rail fence too
 // =====================================================================
 //
@@ -3916,7 +4159,11 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     static int cached_ngram_size = -1;
     static double scale = 0.;
     if (ngram_size != cached_ngram_size) {
-        scale = pow(g_alpha, ngram_size);
+        // Legacy table entries are ~1/n_ngrams, so the historical g_alpha^ngram_size
+        // factor brings the mean back to O(1). The log-prob table already holds O(1)
+        // log10 values, so it needs no rescaling (scale = 1) -- the score is then a
+        // mean log-probability, the AZDecrypt fitness.
+        scale = g_ngram_logprob ? 1.0 : pow(g_alpha, ngram_size);
         cached_ngram_size = ngram_size;
     }
 
@@ -4084,12 +4331,28 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
     }
     fclose(fp);
 
-    total = 0.;
-    for (i = 0; i < n_ngrams; i++) {
-        ngram_data[i] = log(1. + ngram_data[i]);
-        total += ngram_data[i];
+    if (g_ngram_logprob) {
+        // AZDecrypt / Practical-Cryptography fitness: each cell holds log10 P(n-gram),
+        // and every UNSEEN n-gram is set to a floor probability so implausible n-grams
+        // are penalised (the legacy table leaves them at 0, i.e. merely unrewarded).
+        // The per-window sum of these log-probs is the standard n-gram fitness; ngram_score
+        // keeps the scale at 1 in this mode so the result is a mean log-probability.
+        double count_total = 0.;
+        for (i = 0; i < n_ngrams; i++) count_total += ngram_data[i];   // raw counts
+        if (count_total <= 0.) count_total = 1.;
+        double floor = log10(0.01 / count_total);   // ~ a rare-but-not-impossible n-gram
+        for (i = 0; i < n_ngrams; i++)
+            ngram_data[i] = (ngram_data[i] > 0.) ? (float) log10(ngram_data[i] / count_total)
+                                                 : (float) floor;
+    } else {
+        // Legacy reward-only scheme: normalized log(1 + count); unseen -> 0.
+        total = 0.;
+        for (i = 0; i < n_ngrams; i++) {
+            ngram_data[i] = log(1. + ngram_data[i]);
+            total += ngram_data[i];
+        }
+        for (i = 0; i < n_ngrams; i++) ngram_data[i] /= total;
     }
-    for (i = 0; i < n_ngrams; i++) ngram_data[i] /= total;  
     if (verbose) printf("...finished.\n\n");
     return ngram_data;
 }

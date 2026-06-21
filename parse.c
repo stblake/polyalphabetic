@@ -104,6 +104,10 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "indep") || str_eq(arg, "indperiodic") || str_eq(arg, "periodicsub")
         || str_eq(arg, "indepperiodic")) return INDEP_PERIODIC;
 
+    // Homophonic substitution (ciphertext alphabet larger than the plaintext alphabet)
+    if (str_eq(arg, "homophonic") || str_eq(arg, "homophone") || str_eq(arg, "homo"))
+        return HOMOPHONIC;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

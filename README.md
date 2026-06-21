@@ -471,3 +471,17 @@ If you know the key lengths for the ciphertext keyword, the plaintext keyword, o
 - `-cyclewordlen /positive integer/` 
 
 Otherwise, for any unspecified keyword length, `quagmire` will search through keyword lengths up to `-maxkeywordlen` and it will estimate which cycleword lengths to test based on periodic index of coincidence statistics. (TODO: explain this in more detail with examples.)
+
+## Homophonic substitution
+
+A homophonic substitution cipher uses a **ciphertext alphabet larger than the plaintext alphabet**: each plaintext letter is enciphered by any of several distinct ciphertext symbols (its *homophones*), chosen to flatten the ciphertext frequency profile (the Zodiac-408 cipher is the classic example). Colossus reads such ciphertexts as **comma-separated symbol tokens** (or, with `-delimiter`, any other separator; or one symbol per character), so the ciphertext alphabet is not limited to A–Z:
+
+```
+$ ./colossus -type homophonic -cipher homophonic_test.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 60 -nhillclimbs 2500 -backtrackprob 0.15 -slipprob 0.0005 -verbose
+```
+
+where `homophonic_test.txt` is e.g. `57,22,16,44,58,27,...`. The solver is a `CipherModel` plugged into the same slippery-shotgun / simulated-annealing engine as every other type. Its state is the many-to-one map `symbol → plaintext letter`; it hill-climbs that map with a **greedy coordinate move** (best letter for one symbol) plus a **letter-class swap** (exchange the homophone classes of two letters), and adds a **monogram chi-squared penalty** (`-weightmono`, default 1.0) that stops the map collapsing many symbols onto a few common letters — the failure mode that lets a wrong map out-score the truth on raw n-grams alone.
+
+Because a homophonic map has far more degrees of freedom than a 26→26 substitution, **higher-order n-grams matter**: with quadgrams the solver typically recovers ~98% of a few-hundred-symbol cipher, and with quintgrams (`-ngramsize 5 -ngramfile english_quintgrams.txt`) it reaches ~100%. The `-logprob` flag selects an AZDecrypt-style n-gram fitness — log-probabilities with a floor that *penalises* implausible (unseen) n-grams rather than merely not rewarding them — which is cipher-agnostic and can be used on any cipher type, but is most useful here and with high-order n-grams.
+
+Test ciphers can be minted with the standalone generator (`make homophonic_gen`, then `./tools/homophonic_gen plaintext.txt 60 1 > cipher.txt 2> solution.txt`).

@@ -14,6 +14,12 @@ int  g_char_to_idx[128];
 char g_idx_to_char_arr[ALPHABET_SIZE + 1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 double g_monograms[ALPHABET_SIZE];
 
+// n-gram scoring mode. false (default) keeps the historical reward-only normalized
+// log(1+count) table, so every existing solve is bit-identical. true selects the
+// AZDecrypt / Practical-Cryptography fitness: log10 probabilities with a floor that
+// PENALISES unseen n-grams (set via -logprob, recommended with quintgrams).
+bool g_ngram_logprob = false;
+
 // Build the index<->char maps and the reindexed monogram table. `excluded` is a
 // string of letters to drop from the standard A..Z ordering (NULL/"" => full A..Z).
 void init_alphabet(const char *excluded) {
@@ -134,6 +140,104 @@ void ord(char *text, int indices[]) {
         // Letters outside the runtime alphabet (e.g. 'P' under -excludeletter P)
         // and all non-letters are carried as reversible negative sentinels.
         indices[i] = (v >= 0) ? v : (-(int) c - 1);
+    }
+}
+
+
+
+// Map a single character to a letter index, the way ord() does: A..Z (runtime
+// alphabet) -> 0..g_alpha-1, anything else a reversible negative sentinel.
+static int char_to_index(unsigned char c) {
+    int v = isalpha(c) ? g_char_to_idx[toupper(c)] : -1;
+    return (v >= 0) ? v : (-(int) c - 1);
+}
+
+// The field separator to use for this decode. An explicit -delimiter wins; otherwise
+// a homophonic ciphertext containing commas auto-selects ',' (its conventional form)
+// and everything else stays per-character (0 => no delimiter).
+static char resolve_delimiter(const ColossusConfig *cfg, const char *text) {
+    if (cfg->delimiter_present) return cfg->delimiter;
+    if (cfg->cipher_type == HOMOPHONIC && strchr(text, ',')) return ',';
+    return 0;
+}
+
+// Intern a token into the symbol table, returning its id (new id if unseen).
+static int symbol_intern(SymbolTable *tab, const char *tok) {
+    for (int i = 0; i < tab->n; i++)
+        if (strcmp(tab->tokens[i], tok) == 0) { tab->freq[i]++; return i; }
+    if (tab->n >= MAX_SYMBOLS) {
+        fprintf(stderr, "\nERROR: ciphertext uses more than %d distinct symbols.\n", MAX_SYMBOLS);
+        exit(1);
+    }
+    int id = tab->n++;
+    strncpy(tab->tokens[id], tok, MAX_TOKEN_LEN - 1);
+    tab->tokens[id][MAX_TOKEN_LEN - 1] = '\0';
+    tab->freq[id] = 1;
+    return id;
+}
+
+int decode_cipher(const char *text, const ColossusConfig *cfg, int indices[], SymbolTable *tab) {
+    char delim = resolve_delimiter(cfg, text);
+    int n = 0;
+
+    if (cfg->cipher_type != HOMOPHONIC) {
+        // LETTER mapping: each token resolves to a 0..g_alpha-1 letter (or a sentinel).
+        if (delim == 0) {
+            // Per character -- byte-for-byte ord(); preserves spaces/punctuation as
+            // sentinels so the existing letter ciphers stay bit-identical.
+            for (int i = 0; text[i] != '\0'; i++)
+                indices[n++] = char_to_index((unsigned char) text[i]);
+        } else {
+            // Delimited letters (e.g. -delimiter , over "H,E,L,L,O"): one field per
+            // letter, whitespace trimmed.
+            for (int i = 0; ; i++) {
+                char ch = text[i];
+                if (ch == delim || ch == '\0') {
+                    // (a run of separators / a trailing separator yields no field)
+                    if (ch == '\0') break;
+                } else if (!isspace((unsigned char) ch)) {
+                    indices[n++] = char_to_index((unsigned char) ch);
+                }
+            }
+        }
+        return n;
+    }
+
+    // SYMBOL mapping (homophonic): split into surface tokens and intern them.
+    if (tab == NULL) return 0;
+    tab->n = 0;
+    tab->delimiter = delim;
+
+    if (delim == 0) {
+        // One symbol per non-whitespace character.
+        for (int i = 0; text[i] != '\0'; i++) {
+            unsigned char c = (unsigned char) text[i];
+            if (isspace(c)) continue;
+            char tok[2] = { (char) c, '\0' };
+            indices[n++] = symbol_intern(tab, tok);
+        }
+    } else {
+        char tok[MAX_TOKEN_LEN];
+        int t = 0;
+        for (int i = 0; ; i++) {
+            char ch = text[i];
+            if (ch == delim || ch == '\0') {
+                if (t > 0) { tok[t] = '\0'; indices[n++] = symbol_intern(tab, tok); t = 0; }
+                if (ch == '\0') break;
+            } else if (!isspace((unsigned char) ch)) {
+                if (t < MAX_TOKEN_LEN - 1) tok[t++] = ch;
+            }
+        }
+    }
+    return n;
+}
+
+void print_cipher(const int indices[], int len, const SymbolTable *tab) {
+    if (tab == NULL) { print_text((int *) indices, len); return; }
+    char sep = tab->delimiter ? tab->delimiter : ' ';
+    for (int i = 0; i < len; i++) {
+        if (i) printf("%c", sep);
+        printf("%s", tab->tokens[indices[i]]);
     }
 }
 

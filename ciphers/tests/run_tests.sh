@@ -96,6 +96,8 @@ fast | autokey_len97_wl8               | auto     | autokey_len97_wl8.txt       
 fast | autokey_len97_wl21              | auto     | autokey_len97_wl21.txt              | -cyclewordlen 21 -nrestarts 4000 -nhillclimbs 800
 fast | example_autokey_beaufort        | autobeau | example_autokey_beaufort.txt        | -cyclewordlen 7  -nrestarts 8000 -nhillclimbs 800
 fast | example_autokey_beaufort_longer | autobeau | example_autokey_beaufort_longer.txt | -cyclewordlen 14 -nrestarts 4000 -nhillclimbs 800
+# --- homophonic substitution (ciphertext alphabet > plaintext; comma-separated symbols) ---
+fast | homophonic_test | homophonic | homophonic_test.txt | -nrestarts 12 -nhillclimbs 1000
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

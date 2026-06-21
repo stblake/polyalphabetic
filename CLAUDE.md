@@ -29,12 +29,13 @@ perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-sc
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
 transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
 dict.c               # dictionary load + word-finding (scores plaintext readability)
-utils.c              # ord/print, IoC, chi-squared, entropy, gcd, rng_state def, etc.
+utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
 makefile
 README.md  LICENSE
 example.sh           # canonical usage example
 cipher.txt  crib.txt # sample ciphertext + crib
-english_quadgrams.txt        # n-gram table (quadgrams)
+tools/homophonic_gen.c       # standalone homophonic-cipher test-data generator (make homophonic_gen)
+english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
 ciphers/tests/       # per-cipher test cases (cipher + expected solution)
@@ -62,18 +63,19 @@ end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e
 `transcol_*_solve.sh` columnar recovery tests) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-21 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
-`q*_p1xx` puzzles, and pure-transposition types) that each solve to 100% with a
-**fixed `-seed`** and quadgrams. It runs the solver, pulls the recovered plaintext
-from the last field of the `>>>` CSV line, compares it character-for-character to a
-sibling `<name>.solution` (bare A–Z plaintext), and prints per-test accuracy + time +
-mean, exiting non-zero if any test drops below the threshold (default 99%). Because
-the seed is fixed, a bit-identical refactor keeps every score at 100% and any
-behavioural regression shows up immediately. Each test's `-nrestarts`/`-nhillclimbs`
-are trimmed to the smallest that still lands on the solution at the seed, so the full
-run is ~2 min (was ~45 before trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 14-case fast tier in ~20s (use while iterating),
-`--slow` the 7 heavier ciphers, no flag runs both. Add a case by appending a
+31 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+`q*_p1xx` puzzles, pure-transposition types, and a homophonic substitution) that each
+solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
+recovered plaintext from the last field of the `>>>` CSV line, compares it
+character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
+per-test accuracy + time + mean, exiting non-zero if any test drops below the threshold
+(default 99%; the homophonic case lands ~99.9%). Because the seed is fixed, a
+bit-identical refactor keeps every score at 100% and any behavioural regression shows up
+immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
+still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
+trimming). The manifest tags each case `fast` or `slow`:
+`./run_tests.sh --fast` runs the 20-case fast tier in ~45s (use while iterating),
+`--slow` the 11 heavier ciphers, no flag runs both. Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
 
@@ -93,9 +95,28 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
-`transcol2`/`18` (full list in `parse.c`; codes in `colossus.h`). Output is a
-human-readable block followed by a `>>> ...` one-line CSV summary that batch runs
-grep/sort.
+`transcol2`/`18`, `indep`/`28`, `homophonic`/`29` (full list in `parse.c`; codes in
+`colossus.h`). Output is a human-readable block followed by a `>>> ...` one-line CSV
+summary that batch runs grep/sort.
+
+**Tokenized symbol I/O.** Ciphertext is decoded by `decode_cipher()` (utils.c), not the
+bare `ord()`. For every type except homophonic with no `-delimiter`, this is byte-for-byte
+the historical per-character / 0..25-letter encoding (so the regression suite stays
+bit-identical). For `homophonic` (or any type run with `-delimiter <char>`) it tokenizes
+the input into a `SymbolTable` of distinct surface tokens and emits one **symbol id** per
+position, so a ciphertext alphabet larger than A..Z -- comma-separated numbers
+(`12,5,99,12`) or arbitrary ASCII symbols -- can be entered and displayed consistently
+(`print_cipher()`). Default delimiter: auto (comma if the homophonic input contains one,
+else per-character).
+
+**`-logprob` (a.k.a. `-azdecrypt`).** Opt-in AZDecrypt / Practical-Cryptography n-gram
+fitness: `load_ngrams` builds log10-probabilities with a floor that **penalises unseen
+n-grams**, instead of the default reward-only normalized `log(1+count)` table (which
+leaves unseen n-grams at 0). `ngram_score` keeps the score at scale 1 in this mode (a
+mean log-probability). Default off => the table and every existing solve are unchanged.
+Recommended with higher-order n-grams (e.g. `-ngramsize 5 -ngramfile english_quintgrams.txt`)
+for hard substitution attacks; quintgrams take a homophonic solve from ~98% (quadgrams)
+to ~100%.
 
 Five **pure transposition** cipher types bypass the keyword/cycleword/period machinery
 and are solved by optimization instead (all isolated from the polyalphabetic pipeline by
@@ -124,6 +145,21 @@ an early branch in `solve_cipher`):
 These `-type` values are distinct from the `-transmatrix`/`-transperoffset` *post-decrypt
 stage* flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
 
+The **homophonic** type (`solve_homophonic()`) is a `CipherModel` plugged into the shared
+`run_solver()` engine just like every other type (`HOMOPHONIC_MODEL`, `SHAPE_ANNEAL`). Its
+state is the many-to-one map `symbol_id -> plaintext letter` (carried in the `key` lane);
+`decrypted[i] = key[cipher[i]]`. Unlike a 26->26 substitution (a bijection), a homophonic
+map is free to fold many symbols onto E/T/A... to tile common n-grams -- a fixed point that
+out-scores the true plaintext on raw n-grams. Two things prevent that collapse: (1) a
+**monogram chi-squared penalty** on the decrypted letter distribution (`-weightmono`,
+default 1.0), folded in via the decrypt hook's `score_adjust` and the greedy move; and (2) a
+move set built around a **greedy coordinate step** (best plaintext letter for one symbol)
+plus a **letter-class swap** (exchange the whole homophone classes of two letters, to cross
+equal-frequency ambiguities like W<->M that single-symbol moves cannot). Seeds draw each
+symbol's letter from the English monogram distribution. With quadgrams it recovers
+~98%/~99%+ depending on homophone density; `-logprob` + quintgrams take it to ~100%.
+Generate test ciphers with `tools/homophonic_gen.c` (`make homophonic_gen`).
+
 ## How the solver works (mental model)
 
 `solve_cipher()` (in `colossus.c`) is the pipeline:
@@ -145,7 +181,10 @@ stage* flags, which apply a fixed, user-supplied transposition after a polyalpha
      monograms. Preferred for crib-free attacks.
    - **`-stochasticcycle`**: the cycleword is perturbed randomly like the keyword.
 4. **Scoring** (`state_score`): n-gram log-prob is the backbone; with cribs it blends
-   in a partial-match `crib_score`. `weight_ioc`/`weight_entropy` default to 0.
+   in a partial-match `crib_score`. `weight_ioc`/`weight_entropy` default to 0. The
+   n-gram table itself has two modes (`load_ngrams`): the default reward-only normalized
+   `log(1+count)` (unseen n-grams contribute 0), or, under `-logprob`, AZDecrypt-style
+   log10-probabilities with an unseen-n-gram floor penalty (`g_ngram_logprob`).
 5. **Reporting**: re-decrypts the best state, applies any transposition, counts
    dictionary words, prints results.
 

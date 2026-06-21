@@ -45,9 +45,12 @@
 #define SWAGMAN        26   // Swagman (N x N Latin-square column transposition)
 #define GRILLE         27   // Turning grille
 #define INDEP_PERIODIC 28   // period-P substitution with P INDEPENDENT mixed alphabets
+#define HOMOPHONIC     29   // homophonic substitution (ciphertext alphabet > plaintext)
 
 #define ALPHABET_SIZE 26        // compile-time MAX alphabet size (sizes all arrays)
 #define MAX_CIPHER_LENGTH 10000
+#define MAX_SYMBOLS    512      // distinct ciphertext symbols a homophonic cipher may use
+#define MAX_TOKEN_LEN  16       // longest surface form of one ciphertext symbol token
 #define MAX_FILENAME_LEN 4096   // must hold absolute paths; main() strcpy's CLI args in unbounded
 #define MAX_KEYWORD_LEN 26
 #define MAX_CYCLEWORD_LEN 300
@@ -75,6 +78,21 @@
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #define max(a,b) (((a) > (b)) ? (a) : (b))
+
+// --- Tokenized ciphertext I/O ---
+//
+// A SymbolTable interns the distinct surface tokens of a ciphertext so that ciphers
+// whose ciphertext alphabet is larger than (or disjoint from) A..Z -- homophonic
+// substitution, in particular -- can be entered and displayed consistently. The
+// ciphertext is decoded into a sequence of integer symbol ids (0..n-1) indexing this
+// table. The single-character / 0..25 letter path (every other cipher type) does NOT
+// build a table: decode_cipher reproduces ord() byte-for-byte when tab is unused.
+typedef struct {
+    int  n;                                    // distinct symbols interned so far
+    char tokens[MAX_SYMBOLS][MAX_TOKEN_LEN];   // surface form of each symbol id
+    int  freq[MAX_SYMBOLS];                    // occurrence count of each symbol id
+    char delimiter;                            // 0 => per-character; else the field separator
+} SymbolTable;
 
 // --- Configuration Structs ---
 
@@ -117,6 +135,9 @@ typedef struct {
     float weight_ioc;
     float weight_entropy;
     float weight_structure; // general transposition: reward regular (columnar) key steps
+    float weight_monogram;  // homophonic: penalise decrypted letter-frequency deviation
+                            // from English (chi-squared) -- stops the map collapsing
+                            // many symbols onto a few common letters
 
     // Files
     char ciphertext_file[MAX_FILENAME_LEN];
@@ -161,6 +182,12 @@ typedef struct {
     int min_cols;        // smallest column count to search
     int max_cols;        // largest column count to search
     int read_direction;  // COL_READ_TB / COL_READ_BT / COL_READ_BOTH
+
+    // Tokenized I/O. delimiter == 0 keeps the historical per-character / 0..25 letter
+    // decode (bit-identical to ord()); a non-zero delimiter (default ',' for
+    // HOMOPHONIC) splits the ciphertext into multi-character symbol tokens.
+    char delimiter;
+    bool delimiter_present;
 
 } ColossusConfig;
 
@@ -513,6 +540,11 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
 
+void solve_homophonic(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs, SymbolTable *tab);
+
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
 // histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher
 // char c in column col for this cycleword_len). It depends only on the (fixed)
@@ -586,11 +618,23 @@ static inline uint32_t fast_rand(void);
 static inline void seed_fast_rand(uint32_t seed);
 static inline uint32_t fast_rand_bounded(uint32_t range);
 int gcd(int a, int b);
+int str_eq(const char *a, const char *b);
 int parse_cipher_type(const char *arg);
 int unique_len(char *str);
 void vec_print(int vec[], int len);
 void print_text(int indices[], int len);
 void ord(char *text, int indices[]);
+
+// Decode a raw ciphertext string into integer indices, returning the index count.
+// LETTER mode (cfg->cipher_type != HOMOPHONIC and no -delimiter): byte-for-byte ord()
+// -- one index per character, A..Z -> 0..g_alpha-1, everything else a negative
+// sentinel; tab is left untouched (may be NULL). SYMBOL mode (HOMOPHONIC, or any type
+// with -delimiter): split into tokens and intern them into tab, writing symbol ids.
+int decode_cipher(const char *text, const ColossusConfig *cfg, int indices[], SymbolTable *tab);
+
+// Echo a decoded ciphertext. tab == NULL reproduces print_text() exactly (letter
+// mode); otherwise the symbol tokens are printed joined by tab->delimiter.
+void print_cipher(const int indices[], int len, const SymbolTable *tab);
 
 // Non-alphabetic bytes (spaces, punctuation) in a ciphertext are carried through
 // the integer-index arrays as negative values that reversibly encode the original
@@ -604,6 +648,7 @@ void ord(char *text, int indices[]);
 // 25-letter A..Z-minus-P, mod 25) for ciphers built on a reduced alphabet.
 // Array sizes everywhere stay ALPHABET_SIZE (26, the max); only loop bounds,
 // modular arithmetic, and the n-gram packing base use g_alpha.
+extern bool g_ngram_logprob;      // n-gram scoring mode (see utils.c); false = legacy
 extern int  g_alpha;              // runtime alphabet size (<= ALPHABET_SIZE)
 extern int  g_char_to_idx[128];   // ASCII (upper) -> alphabet index, or -1 if absent
 extern char g_idx_to_char_arr[ALPHABET_SIZE + 1];  // alphabet index -> char
