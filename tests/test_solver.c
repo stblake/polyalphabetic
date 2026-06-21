@@ -125,6 +125,11 @@ static void make_crib(char *out, int stride) {
 }
 
 int main(void) {
+    // Build the runtime alphabet (g_monograms, g_char_to_idx, ...) exactly as the
+    // real binary's main does. derive_optimal_cycleword scores columns against
+    // g_monograms, so without this the optimal-cycleword ciphers (porta, ...) fail.
+    init_alphabet(NULL);
+
     shared.ngram_data = load_ngrams(NGRAM_FILE, NGRAM_SIZE, false);
     shared.dict = NULL; shared.n_dict_words = 0; shared.max_dict_word_len = 0;
     if (!shared.ngram_data) {

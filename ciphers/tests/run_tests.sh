@@ -98,7 +98,7 @@ fast | example_autokey_beaufort        | autobeau | example_autokey_beaufort.txt
 fast | example_autokey_beaufort_longer | autobeau | example_autokey_beaufort_longer.txt | -cyclewordlen 14 -nrestarts 4000 -nhillclimbs 800
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
-slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 1500 -nhillclimbs 6000
+slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000
 slow | transcol_single     | transcol      | transcol_single_tb.txt  | -nrestarts 40 -nhillclimbs 8000
 fast | railfence_aca       | railfence     | railfence_aca.txt       | -maxcols 12
 fast | route_ragged        | route         | route_ragged.txt        |

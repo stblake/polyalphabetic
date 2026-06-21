@@ -84,6 +84,10 @@ static void check_recovery(const char *name, int cipher_type, int variant,
 int main(void) {
     seed_rand(424242u);
 
+    // Build the runtime alphabet (g_monograms etc.); derive_optimal_cycleword scores
+    // each column against the English monogram frequencies, which init_alphabet fills.
+    init_alphabet(NULL);
+
     int straight[ALPHABET_SIZE];
     for (int i = 0; i < ALPHABET_SIZE; i++) straight[i] = i;
 

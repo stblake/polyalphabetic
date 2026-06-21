@@ -5,28 +5,26 @@
 // A stochastic, slippery shotgun-restarted hill climber with backtracking for solving
 // Vigenere, Beaufort, Porta, Quagmire I - IV, and Autokey ciphers with variants.
 
-// The same shotgun / slippery hill-climbing engine (n-gram scoring, slip, backtracking,
-// random restarts) also drives five pure-transposition solvers, dispatched by an early
-// branch in solve_cipher() that bypasses the keyword/cycleword/period machinery:
+// One cipher-agnostic search engine -- run_solver() / run_one_config() -- drives EVERY
+// cipher type. Each type supplies a CipherModel (colossus.h): a vtable of
+// seed / perturb / decrypt / enumerate / report hooks plus a SearchShape (SHOTGUN slip,
+// ANNEAL Metropolis, or DETERMINISTIC first-improvement). The engine owns the restart /
+// hill-climb / accept / backtrack / best-tracking loop and the single state_score call;
+// the model owns the cipher math. The polyalphabetic family (Vigenere/Quagmire/Beaufort/
+// Porta/Autokey) is one model whose seed/perturb keep the explicit per-type
+// switch(cipher_type) ladders. The transposition families are their own models:
+//   - transmatrix / transperoffset : climb the transform's small parameter vector.
+//   - transposition                : AZDecrypt-style full-permutation-key climb with a
+//                                    periodic-redundancy structure term (key_structure_score,
+//                                    weight -weightstructure) folded into the decrypt score.
+//   - transcol / transcol2         : climb the per-stage column-order permutation(s).
+//   - railfence / route            : exhaustive parameter sweeps (key_len 0 => no climb).
+//   - amsco / myszkowski / redefence / cadenus / nihilist / swagman / grille : anneal a
+//                                    short integer key, with a shared TransKeyOps seed/move.
+// (indep_periodic keeps its own coordinate-ascent iterated-local-search climber, a search
+// shape that does not fit the shotgun/anneal engine.)
 //
-//   - transmatrix / transperoffset (solve_transposition + shotgun_transposition_climber):
-//       optimize the transform's own small parameter vector. transmatrix climbs
-//       (w1, w2, direction) of a K3-style double grid rotation; transperoffset climbs
-//       (period d, offset n) of a periodic decimation + rotation.
-//   - transposition (solve_general_transposition + shotgun_permutation_climber):
-//       an AZDecrypt-style solver that hill-climbs the FULL permutation key directly
-//       (decrypted[i] = cipher[key[i]]). Restarts are seeded from columnar layouts; a
-//       periodic-redundancy structure term (key_structure_score, weight -weightstructure)
-//       guards against n-gram-gaming; acceptance is simulated-annealing; and a
-//       period-targeted column-swap move reorders whole columns at once.
-//   - transcol / transcol2 (solve_columnar + shotgun_columnar_climber):
-//       a DEDICATED columnar solver that optimizes only the small per-stage column-order
-//       permutation (length K = column count) via the decrypt_columnar() primitive.
-//       Single (transcol) sweeps K over -mincols..-maxcols; double (transcol2) randomises
-//       (K1,K2) per restart and anneals both. Read direction is opt-in via -readdir; every
-//       candidate is a genuine columnar layout, so no structure-score guard is needed.
-//
-// These -type values are distinct from the -transmatrix / -transperoffset post-decrypt
+// The -type values above are distinct from the -transmatrix / -transperoffset post-decrypt
 // STAGE flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
 
 // Written by Sam Blake, started 14 July 2023.
@@ -243,7 +241,12 @@ void init_config(ColossusConfig *cfg) {
     cfg->weight_structure = 4.0;
 
     cfg->optimal_cycleword = true;
-    cfg->same_key_cycle = false; 
+    cfg->same_key_cycle = false;
+
+    cfg->method = METHOD_DEFAULT;
+    cfg->init_temp = 0.10;     // matches the previously hardcoded annealing schedule
+    cfg->min_temp = 0.001;
+    cfg->cooling_rate = 0.0;   // 0 => derive the geometric schedule over n_hill_climbs
 
     cfg->transperoffset_present = false;
     cfg->trans_offset = 0;
@@ -393,6 +396,29 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-slipprob") == 0) {
             cfg.slip_probability = atof(argv[++i]);
             printf("-slipprob %.6f\n", cfg.slip_probability);
+        } else if (strcmp(argv[i], "-method") == 0) {
+            // Cipher-agnostic optimization strategy override.
+            char *m = argv[++i];
+            if (strcasecmp(m, "shotgun") == 0) {
+                cfg.method = METHOD_SHOTGUN;
+            } else if (strcasecmp(m, "sa") == 0 || strcasecmp(m, "anneal") == 0 ||
+                       strcasecmp(m, "simanneal") == 0 || strcasecmp(m, "simulatedannealing") == 0) {
+                cfg.method = METHOD_ANNEAL;
+            } else {
+                printf("Unknown -method '%s' (expected shotgun | sa | anneal | simanneal | simulatedannealing).\n", m);
+                return 1;
+            }
+            printf("-method %s\n", cfg.method == METHOD_SHOTGUN ? "shotgun" : "simulated-annealing");
+        } else if (strcmp(argv[i], "-inittemp") == 0 || strcmp(argv[i], "-initialtemp") == 0 ||
+                   strcmp(argv[i], "-inittemperature") == 0 || strcmp(argv[i], "-initialtemperature") == 0) {
+            cfg.init_temp = atof(argv[++i]);
+            printf("-inittemp %.6f\n", cfg.init_temp);
+        } else if (strcmp(argv[i], "-mintemp") == 0 || strcmp(argv[i], "-mintemperature") == 0) {
+            cfg.min_temp = atof(argv[++i]);
+            printf("-mintemp %.6f\n", cfg.min_temp);
+        } else if (strcmp(argv[i], "-coolingrate") == 0 || strcmp(argv[i], "-cooling") == 0) {
+            cfg.cooling_rate = atof(argv[++i]);
+            printf("-coolingrate %.6f\n", cfg.cooling_rate);
         } else if (strcmp(argv[i], "-iocthreshold") == 0) {
             cfg.ioc_threshold = atof(argv[++i]);
             printf("-iocthreshold %.4f\n", cfg.ioc_threshold);
@@ -678,6 +704,804 @@ int main(int argc, char **argv) {
 
 
 
+// =====================================================================
+//  Cipher-type-agnostic search engine
+// =====================================================================
+//
+// run_solver() drives every cipher type through one skeleton; the per-type
+// CipherModel (colossus.h) supplies the cipher specifics as hooks. See the header
+// for the interface contract. The big SolverState buffers are file-static (the
+// program is single-threaded -- rng_state is a global) so unifying them here does
+// not grow the stack.
+
+// Build the optimal-cycleword per-column ciphertext histogram for a given period
+// into ctx->hist_by_col (laid out as hist_by_col[col*ALPHABET_SIZE + c]). Depends
+// only on the fixed ciphertext and the period, so the engine builds it once per
+// config rather than on every derive_optimal_cycleword call.
+static void engine_build_hist(SolverCtx *ctx, int period) {
+    if (ctx->hist_by_col == NULL || period <= 0) return;
+    for (int i = 0; i < period * ALPHABET_SIZE; i++) ctx->hist_by_col[i] = 0;
+    int col = 0;
+    for (int i = 0; i < ctx->cipher_len; i++) {
+        int c = ctx->cipher[i];
+        if (c >= 0) ctx->hist_by_col[col * ALPHABET_SIZE + c]++;
+        if (++col == period) col = 0;
+    }
+}
+
+static double engine_score(const SolverCtx *ctx, int *decrypted, double adjust) {
+    ColossusConfig *cfg = ctx->cfg;
+    return state_score(decrypted, ctx->cipher_len,
+        ctx->crib_indices, ctx->crib_positions, ctx->n_cribs,
+        ctx->ngram_data, cfg->ngram_size,
+        cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy) + adjust;
+}
+
+// Hill-climb one outer config: shotgun restarts + per-iteration neighbour move,
+// with SHOTGUN slip / ANNEAL Metropolis acceptance and best-state tracking. Writes
+// the config's best state to *out_best and its decryption to out_decrypted, and
+// returns the best score.
+static double run_one_config(const CipherModel *m, SolverCtx *ctx,
+                             const SolverConfig *cfg_c,
+                             SolverState *out_best, int *out_decrypted) {
+
+    static SolverState cur, loc, best;
+    static int decrypted[MAX_CIPHER_LENGTH];
+    ColossusConfig *cfg = ctx->cfg;
+
+    double best_score = 0.0, cur_score, loc_score, adjust;
+    bool have_best = false;
+    bool force_primary = true;               // first iteration forces a primary (keyword) move
+
+    // -method overrides the model's built-in shape on EVERY cipher type (the engine
+    // is acceptance-strategy agnostic); METHOD_DEFAULT keeps the model's own shape.
+    SearchShape shape = m->shape;
+    if (cfg->method == METHOD_SHOTGUN) shape = SHAPE_SHOTGUN;
+    else if (cfg->method == METHOD_ANNEAL) shape = SHAPE_ANNEAL;
+    bool deterministic = (shape == SHAPE_DETERMINISTIC);
+    bool done = false;
+
+    EngineStats st;
+    memset(&st, 0, sizeof st);
+    st.start_time = clock();
+
+    // Geometric Metropolis annealing schedule (used only by SHAPE_ANNEAL). The
+    // start temperature and cooling come from cfg (-inittemp / -coolingrate); when
+    // no cooling rate is given it is derived to cool init_temp -> min_temp over the
+    // hill-climb. Defaults reproduce the previously hardcoded 0.10 -> 0.001 schedule.
+    double temp_start = cfg->init_temp;
+    double cooling;
+    if (cfg->cooling_rate > 0.0) {
+        cooling = cfg->cooling_rate;
+    } else {
+        cooling = 1.0;
+        if (cfg->n_hill_climbs > 1)
+            cooling = pow(cfg->min_temp / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
+    }
+
+    for (int rs = 0; rs < cfg->n_restarts && !done; rs++) {
+        st.n_restarts = rs;
+
+        if (have_best && frand() < cfg->backtracking_probability) {
+            m->copy_state(cfg_c, &best, &cur);
+            cur_score = best_score;
+            st.n_backtracks++;
+        } else {
+            m->seed(ctx, cfg_c, &cur);
+            adjust = 0.0;
+            m->decrypt(ctx, cfg_c, &cur, decrypted, &adjust);
+            cur_score = engine_score(ctx, decrypted, adjust);
+        }
+
+        // Best is recorded only inside the hill-climb loop below (matching every
+        // original climber), so have_best transitions to true on the first
+        // iteration -- the restart-0 backtrack check then draws no RNG, keeping
+        // the draw sequence identical to the per-cipher climbers this replaces.
+
+        // force_primary is the per-restart "must perturb the primary lane" flag
+        // (polyalpha's perturbate_keyword_p); the model reads and updates it.
+        force_primary = true;
+
+        double temp = temp_start;
+        for (int it = 0; it < cfg->n_hill_climbs && !done; it++) {
+            st.n_iterations++;
+
+            m->copy_state(cfg_c, &cur, &loc);
+
+            m->perturb(ctx, cfg_c, &loc, &force_primary);
+
+            adjust = 0.0;
+            m->decrypt(ctx, cfg_c, &loc, decrypted, &adjust);
+            loc_score = engine_score(ctx, decrypted, adjust);
+
+            bool accept;
+            if (loc_score > cur_score) {
+                accept = true;
+            } else if (shape == SHAPE_ANNEAL) {
+                accept = frand() < exp((loc_score - cur_score) / temp);
+            } else {
+                accept = frand() < cfg->slip_probability;
+            }
+            if (accept) {
+                if (loc_score <= cur_score) st.n_slips++;
+                m->copy_state(cfg_c, &loc, &cur);
+                cur_score = loc_score;
+            }
+            temp *= cooling;
+
+            if (!have_best || cur_score > best_score) {
+                best_score = cur_score; have_best = true;
+                m->copy_state(cfg_c, &cur, &best);
+                if (cfg->verbose && m->report_verbose)
+                    m->report_verbose(ctx, cfg_c, &best, best_score, decrypted, &st);
+                if (deterministic) done = true;
+            }
+        }
+    }
+
+    m->copy_state(cfg_c, &best, out_best);
+    adjust = 0.0;
+    m->decrypt(ctx, cfg_c, &best, out_decrypted, &adjust);
+    return best_score;
+}
+
+double run_solver(const CipherModel *m, SolverCtx *ctx) {
+
+    static SolverConfig configs[MAX_SOLVER_CONFIGS];
+    static SolverState best_state, cand_state;
+    static int best_decrypted[MAX_CIPHER_LENGTH], cand_decrypted[MAX_CIPHER_LENGTH];
+    // Optimal-cycleword histogram scratch, owned by the engine (single-threaded).
+    static int hist_by_col[MAX_CYCLEWORD_LEN * ALPHABET_SIZE];
+    ctx->hist_by_col = hist_by_col;
+
+    int nconf = m->enumerate_configs(ctx, configs, MAX_SOLVER_CONFIGS);
+    if (nconf <= 0) return 0.0;
+
+    double best_score = 0.0;
+    bool have_best = false;
+    SolverConfig best_cfg;
+
+    for (int c = 0; c < nconf; c++) {
+        SolverConfig *cc = &configs[c];
+
+        if (m->needs_hist) engine_build_hist(ctx, cc->period);
+
+        double sc;
+        if (m->key_len && m->key_len(ctx, cc) == 0) {
+            // SWEEP cell: the config itself is the candidate (one decrypt+score).
+            double adjust = 0.0;
+            m->seed(ctx, cc, &cand_state);
+            m->decrypt(ctx, cc, &cand_state, cand_decrypted, &adjust);
+            sc = engine_score(ctx, cand_decrypted, adjust);
+        } else {
+            sc = run_one_config(m, ctx, cc, &cand_state, cand_decrypted);
+        }
+
+        if (!have_best || sc > best_score) {
+            best_score = sc; have_best = true;
+            best_cfg = *cc;
+            m->copy_state(cc, &cand_state, &best_state);
+            vec_copy(cand_decrypted, best_decrypted, ctx->cipher_len);
+        }
+    }
+
+    if (!have_best) return 0.0;
+
+    m->report(ctx, &best_cfg, &best_state, best_score, best_decrypted);
+    return best_score;
+}
+
+// Assemble the invariant SolverCtx the engine and every model hook read from.
+// hist_by_col is left NULL here; run_solver() points it at its own scratch buffer.
+static SolverCtx make_solver_ctx(ColossusConfig *cfg, SharedData *shared, char *cribtext,
+    int cipher[], int cipher_len, int crib_indices[], int crib_positions[], int n_cribs) {
+
+    SolverCtx ctx;
+    ctx.cfg = cfg;
+    ctx.shared = shared;
+    ctx.cipher = cipher;
+    ctx.cipher_len = cipher_len;
+    ctx.crib_indices = crib_indices;
+    ctx.crib_positions = crib_positions;
+    ctx.n_cribs = n_cribs;
+    ctx.cribtext = cribtext;
+    ctx.ngram_data = shared->ngram_data;
+    ctx.hist_by_col = NULL;
+    ctx.model_scratch = NULL;
+    ctx.result = NULL;
+    return ctx;
+}
+
+
+// ====================================================================
+//  Polyalphabetic model (Vigenere / Quagmire I-IV / Beaufort / Porta /
+//  Autokey*; cipher-agnostic engine)
+// ====================================================================
+//
+// All 14 polyalphabetic types share one model and one uniform state (a pt and ct
+// keyed alphabet plus the periodic cycleword). The per-type differences -- which
+// alphabet is straight vs keyed, which is perturbed, the optimal-cycleword refine,
+// the crib constraint, and -samekey coupling -- stay as the explicit
+// switch(cipher_type) ladders moved verbatim from the old shotgun_hill_climber
+// into the seed and perturb hooks (per CLAUDE.md: don't genericise the dispatch).
+
+static inline bool poly_is_autokey(int t) {
+    return (t >= AUTOKEY_0 && t <= AUTOKEY_4) || t == AUTOKEY_BEAU || t == AUTOKEY_PORTA;
+}
+
+// The polyalphabetic model carries a single verbose-only contradiction counter
+// through ctx->model_scratch (a long*); solve_cipher owns the storage on its stack.
+
+// Outer configs: cycleword length(s) x (pt_keyword_len j, ct_keyword_len k), with
+// the per-type validity pruning and crib gate. Reproduces solve_cipher's old
+// period-estimation + keyword-bound + (j,k) loop, printing the same diagnostics.
+static int polyalpha_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    ColossusConfig *cfg = ctx->cfg;
+    int *cipher_indices = ctx->cipher;
+    int cipher_len = ctx->cipher_len;
+    int n_cribs = ctx->n_cribs;
+    int *crib_indices = ctx->crib_indices, *crib_positions = ctx->crib_positions;
+
+    int n_cycleword_lengths, cycleword_lengths[MAX_CIPHER_LENGTH];
+
+    // --- cycleword / primer length setup ---
+    if (cfg->cycleword_len_present) {
+        n_cycleword_lengths = 1;
+        cycleword_lengths[0] = cfg->cycleword_len;
+    } else if ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) ||
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA ||
+        cfg->transperoffset_present) {
+        // Autokey (aperiodic) or polyalphabetic+transposition: IoC fails, brute-force.
+        n_cycleword_lengths = 0;
+        for (int len = 1; len <= cfg->max_cycleword_len; len++) {
+            cycleword_lengths[n_cycleword_lengths++] = len;
+        }
+    } else {
+        estimate_cycleword_lengths(cipher_indices, cipher_len, cfg->max_cycleword_len,
+            cfg->n_sigma_threshold, cfg->ioc_threshold,
+            &n_cycleword_lengths, cycleword_lengths, cfg->verbose);
+        if (n_cycleword_lengths == 0) {
+            if (cfg->verbose) printf("No periodicities found above threshold. Not running the hillclimber and exiting.\n");
+            return 0;
+        }
+    }
+
+    // --- keyword length bounds (cipher-type specific; mutates cfg as before) ---
+    int min_kw = cfg->min_keyword_len;
+    int pt_max = cfg->plaintext_max_keyword_len;
+    int ct_max = cfg->ciphertext_max_keyword_len;
+
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT ||
+        cfg->cipher_type == PORTA ||
+        (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_2) ||
+        cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2 ||
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
+        min_kw = 1;
+    }
+
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0 ||
+        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
+        pt_max = 2; ct_max = 2;
+        cfg->plaintext_keyword_len = 0;
+        cfg->ciphertext_keyword_len = 0;
+    } else if (cfg->cipher_type == BEAUFORT) {
+        pt_max = 2;
+        cfg->plaintext_keyword_len = 1;
+    } else if (cfg->cipher_type == PORTA) {
+        pt_max = 2; ct_max = 2;
+        cfg->plaintext_keyword_len = 1;
+        cfg->ciphertext_keyword_len = 1;
+    } else if (cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == AUTOKEY_1) {
+        ct_max = 2;
+        cfg->ciphertext_keyword_len = 1;
+    } else if (cfg->cipher_type == QUAGMIRE_2 || cfg->cipher_type == AUTOKEY_2) {
+        pt_max = 2;
+        cfg->plaintext_keyword_len = 1;
+    }
+
+    // --- enumerate (cycleword_len, j, k) with per-type pruning + crib gate ---
+    int n = 0;
+    for (int i = 0; i < n_cycleword_lengths; i++) {
+        if (cfg->verbose) printf("\ncycleword length = %d\n", cycleword_lengths[i]);
+        for (int j = min(min_kw, cfg->plaintext_keyword_len); j < pt_max; j++) {
+            for (int k = min(min_kw, cfg->ciphertext_keyword_len); k < ct_max; k++) {
+                if (cfg->verbose) printf("\npt/ct keyword len = %d, %d\n", j, k);
+                if (cfg->plaintext_keyword_len_present && j != cfg->plaintext_keyword_len) continue;
+                if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
+
+                if (cfg->cipher_type == QUAGMIRE_3 && j != k) continue;
+                if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == VIGENERE && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == AUTOKEY_0 && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == AUTOKEY_1 && k != 1) continue;
+                if (cfg->cipher_type == AUTOKEY_2 && j != 1) continue;
+                if (cfg->cipher_type == AUTOKEY_3 && j != k) continue;
+                if (cfg->cipher_type == AUTOKEY_BEAU && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == AUTOKEY_PORTA && ! (j == 1 && k == 1)) continue;
+
+                if (cfg->cipher_type != AUTOKEY_0 && cfg->cipher_type != AUTOKEY_1 &&
+                    cfg->cipher_type != AUTOKEY_2 && cfg->cipher_type != AUTOKEY_3 &&
+                    cfg->cipher_type != AUTOKEY_4 && cfg->cipher_type != AUTOKEY_BEAU &&
+                    cfg->cipher_type != AUTOKEY_PORTA) {
+                    if (!cribs_satisfied_p(cfg, cipher_indices, cipher_len, crib_indices,
+                        crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
+                        #if CRIB_CHECK
+                        continue;
+                        #endif
+                    }
+                }
+
+                if (n < cap) {
+                    out[n].period = cycleword_lengths[i];
+                    out[n].j = j; out[n].k = k;
+                    out[n].aux[0] = 0; out[n].aux[1] = 0;
+                    n++;
+                }
+            }
+        }
+    }
+
+    if (n == 0) {
+        printf("\n\nERROR: No valid configuration found. Check your length constraints.\n");
+        printf("Debug: Type=%d, PT_Len=%d, CT_Len=%d\n",
+               cfg->cipher_type, cfg->plaintext_keyword_len, cfg->ciphertext_keyword_len);
+    }
+    return n;
+}
+
+static void polyalpha_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    ColossusConfig *cfg = ctx->cfg;
+    int *current_plaintext_keyword_state = st->pt_keyword;
+    int *current_ciphertext_keyword_state = st->ct_keyword;
+    int *current_cycleword_state = st->cycleword;
+    int cycleword_len = cc->period;
+    int plaintext_keyword_len = cc->j, ciphertext_keyword_len = cc->k;
+    bool is_autokey = poly_is_autokey(cfg->cipher_type);
+    int i;
+
+    switch (cfg->cipher_type) {
+        case VIGENERE:
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case QUAGMIRE_1:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case QUAGMIRE_2:
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+            } else {
+                random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+            }
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case QUAGMIRE_3:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case QUAGMIRE_4:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+            } else {
+                random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+            }
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case BEAUFORT:
+            plaintext_keyword_len = g_alpha;
+            ciphertext_keyword_len = g_alpha;
+            for (i = 0; i < g_alpha; i++) current_plaintext_keyword_state[i] = i;
+            vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case PORTA:
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case AUTOKEY_0:
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+        case AUTOKEY_1:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+        case AUTOKEY_2:
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+            } else {
+                random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+            }
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+        case AUTOKEY_3:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+        case AUTOKEY_4:
+            if (cfg->user_plaintext_keyword_present) {
+                make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
+            } else {
+                random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+            }
+            if (cfg->user_ciphertext_keyword_present) {
+                make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
+            } else {
+                random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+            }
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+        case AUTOKEY_BEAU:
+        case AUTOKEY_PORTA:
+            plaintext_keyword_len = g_alpha;
+            ciphertext_keyword_len = g_alpha;
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break;
+    }
+
+    if (cfg->same_key_cycle) {
+        vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
+        vec_copy(current_ciphertext_keyword_state, current_cycleword_state, g_alpha);
+    }
+
+    if (cfg->optimal_cycleword && ! is_autokey) {
+        derive_optimal_cycleword(cfg, ctx->cipher, ctx->cipher_len,
+            current_plaintext_keyword_state, current_ciphertext_keyword_state,
+            current_cycleword_state, cycleword_len, ctx->hist_by_col);
+    }
+}
+
+static void polyalpha_perturb(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                              bool *force_primary) {
+    ColossusConfig *cfg = ctx->cfg;
+    int *cipher_indices = ctx->cipher;
+    int cipher_len = ctx->cipher_len;
+    int *crib_indices = ctx->crib_indices, *crib_positions = ctx->crib_positions;
+    int n_cribs = ctx->n_cribs;
+    // st is the engine's `local` (already a copy of `current`); operate on it directly.
+    int *local_plaintext_keyword_state = st->pt_keyword;
+    int *local_ciphertext_keyword_state = st->ct_keyword;
+    int *local_cycleword_state = st->cycleword;
+    int cycleword_len = cc->period;
+    int plaintext_keyword_len = cc->j, ciphertext_keyword_len = cc->k;
+    bool is_autokey = poly_is_autokey(cfg->cipher_type);
+    bool perturbate_keyword_p = *force_primary;
+    bool did_perturb_keyword = false;
+    bool contradiction;
+
+    if (perturbate_keyword_p ||
+            cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability) {
+        switch (cfg->cipher_type) {
+            case VIGENERE:
+            case PORTA:
+            case BEAUFORT:
+            case AUTOKEY_0:
+            case AUTOKEY_BEAU:
+            case AUTOKEY_PORTA:
+                did_perturb_keyword = false;
+                break ;
+            case QUAGMIRE_1:
+                if (!cfg->user_plaintext_keyword_present) {
+                    perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                    did_perturb_keyword = true;
+                }
+                break ;
+            case QUAGMIRE_2:
+                if (!cfg->user_ciphertext_keyword_present) {
+                    perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                    did_perturb_keyword = true;
+                }
+                break ;
+            case QUAGMIRE_3:
+                if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
+                    perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                    vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
+                    did_perturb_keyword = true;
+                }
+                break ;
+            case QUAGMIRE_4:
+                if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
+                    did_perturb_keyword = false;
+                } else if (cfg->user_plaintext_keyword_present) {
+                    perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                    did_perturb_keyword = true;
+                } else if (cfg->user_ciphertext_keyword_present) {
+                    perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                    did_perturb_keyword = true;
+                } else {
+                    if (frand() < 0.5) {
+                        perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                    } else {
+                        perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                    }
+                    did_perturb_keyword = true;
+                }
+                break ;
+            case AUTOKEY_1:
+                 if (!cfg->user_plaintext_keyword_present) {
+                     perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                     did_perturb_keyword = true;
+                 }
+                 break;
+            case AUTOKEY_2:
+                 if (!cfg->user_ciphertext_keyword_present) {
+                     perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                     did_perturb_keyword = true;
+                 }
+                 break;
+            case AUTOKEY_3:
+                 if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
+                     perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                     vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
+                     did_perturb_keyword = true;
+                 }
+                 break;
+            case AUTOKEY_4:
+                 if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
+                     did_perturb_keyword = false;
+                 } else if (cfg->user_plaintext_keyword_present) {
+                     perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                     did_perturb_keyword = true;
+                 } else if (cfg->user_ciphertext_keyword_present) {
+                     perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                     did_perturb_keyword = true;
+                 } else {
+                     if (frand() < 0.5) perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                     else perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                     did_perturb_keyword = true;
+                 }
+                 break;
+        }
+    } else {
+        did_perturb_keyword = false;
+    }
+
+    if (cfg->optimal_cycleword && ! is_autokey) {
+        if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) {
+            if (cfg->cipher_type == QUAGMIRE_3 && !(cfg->user_plaintext_keyword_present || cfg->user_ciphertext_keyword_present)) {
+                 perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                 vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
+                 did_perturb_keyword = true;
+            }
+            else if (cfg->cipher_type == QUAGMIRE_1 && !cfg->user_plaintext_keyword_present) {
+                perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                did_perturb_keyword = true;
+            }
+            else if (cfg->cipher_type == QUAGMIRE_2 && !cfg->user_ciphertext_keyword_present) {
+                perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                did_perturb_keyword = true;
+            }
+            else if (cfg->cipher_type == QUAGMIRE_4) {
+                if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
+                    if (frand() < 0.5) {
+                        perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                    } else {
+                        perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                    }
+                    did_perturb_keyword = true;
+                } else if (!cfg->user_plaintext_keyword_present) {
+                     perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
+                     did_perturb_keyword = true;
+                } else if (!cfg->user_ciphertext_keyword_present) {
+                     perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
+                     did_perturb_keyword = true;
+                }
+            }
+        }
+
+        derive_optimal_cycleword(cfg, cipher_indices, cipher_len,
+            local_plaintext_keyword_state, local_ciphertext_keyword_state,
+            local_cycleword_state, cycleword_len, ctx->hist_by_col);
+
+    } else {
+        if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) {
+             perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
+        }
+        else if (!did_perturb_keyword) {
+            perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
+        }
+
+        if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) {
+            perturbate_keyword_p = false;
+
+            if (did_perturb_keyword) {
+                contradiction = constrain_cycleword(cfg, cipher_indices, cipher_len, crib_indices,
+                    crib_positions, n_cribs,
+                    local_plaintext_keyword_state, local_ciphertext_keyword_state,
+                    local_cycleword_state, cycleword_len, cfg->variant, cfg->verbose);
+
+                if (contradiction) {
+                    if (ctx->model_scratch) (*(long *) ctx->model_scratch) += 1;
+                    perturbate_keyword_p = true;
+                }
+            }
+        }
+    }
+
+    if (cfg->same_key_cycle) {
+        vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
+        vec_copy(local_ciphertext_keyword_state, local_cycleword_state, g_alpha);
+    }
+
+    *force_primary = perturbate_keyword_p;
+}
+
+static void polyalpha_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    for (int i = 0; i < g_alpha; i++) {
+        dst->pt_keyword[i] = src->pt_keyword[i];
+        dst->ct_keyword[i] = src->ct_keyword[i];
+    }
+    for (int i = 0; i < cc->period; i++) dst->cycleword[i] = src->cycleword[i];
+}
+
+static void polyalpha_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                              int *out, double *score_adjust) {
+    (void) score_adjust;
+    decrypt_state(ctx->cfg, ctx->cipher, ctx->cipher_len,
+        st->pt_keyword, st->ct_keyword, st->cycleword, cc->period, out);
+}
+
+static void polyalpha_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) decrypted;
+    ColossusConfig *cfg = ctx->cfg;
+    int cipher_len = ctx->cipher_len;
+    int *cipher_indices = ctx->cipher;
+    int cycleword_len = cc->period;
+    bool is_autokey = poly_is_autokey(cfg->cipher_type);
+    int buf[MAX_CIPHER_LENGTH];
+    int j, k, indx, offset = 0;
+
+    const int *best_plaintext_keyword_state = st->pt_keyword;
+    const int *best_ciphertext_keyword_state = st->ct_keyword;
+    const int *best_cycleword_state = st->cycleword;
+
+    if (cfg->cipher_type == PORTA) {
+        porta_decrypt(buf, cipher_indices, cipher_len, (int *) best_cycleword_state, cycleword_len);
+    } else if (cfg->cipher_type == BEAUFORT) {
+        beaufort_decrypt(buf, cipher_indices, cipher_len, (int *) best_cycleword_state, cycleword_len);
+    } else if (is_autokey) {
+        autokey_decrypt(cfg, buf, cipher_indices, cipher_len,
+            (int *) best_plaintext_keyword_state, (int *) best_ciphertext_keyword_state,
+            (int *) best_cycleword_state, cycleword_len);
+    } else {
+        quagmire_decrypt(buf, cipher_indices, cipher_len,
+            (int *) best_plaintext_keyword_state, (int *) best_ciphertext_keyword_state,
+            (int *) best_cycleword_state, cycleword_len, cfg->variant);
+    }
+
+    if (cfg->transperoffset_present)
+        transperoffset(buf, cipher_len, cfg->trans_period, cfg->trans_offset);
+    if (cfg->transmatrix_present)
+        transmatrix(buf, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
+
+    double ioc = index_of_coincidence(buf, cipher_len);
+    double chi = chi_squared(buf, cipher_len);
+    double entropy_score = entropy(buf, cipher_len);
+    double elapsed = ((double) clock() - stats->start_time)/CLOCKS_PER_SEC;
+    double n_iter_per_sec = ((double) stats->n_iterations)/elapsed;
+
+    printf("\n%.2f\t[sec]\n", elapsed);
+    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+    printf("%d\t[backtracks]\n", stats->n_backtracks);
+    printf("%d\t[restarts]\n", stats->n_restarts);
+    printf("%d\t[slips]\n", stats->n_slips);
+    long n_contradictions = ctx->model_scratch ? *(long *) ctx->model_scratch : 0;
+    printf("%.2f\t[contradiction pct]\n", ((double) n_contradictions)/stats->n_iterations);
+    printf("%.4f\t[IOC]\n", ioc);
+    printf("%.4f\t[entropy]\n", entropy_score);
+    printf("%.2f\t[chi-squared]\n", chi);
+    printf("%.2f\t[score]\n", score);
+
+    if (cfg->cipher_type != PORTA) {
+        print_text((int *) best_plaintext_keyword_state, g_alpha); printf("\n");
+        print_text((int *) best_ciphertext_keyword_state, g_alpha); printf("\n");
+    }
+    print_text((int *) best_cycleword_state, cycleword_len); printf("\n");
+
+    printf("\n");
+    if (cfg->cipher_type != PORTA) {
+        for (k = 0; k < cycleword_len; k++) {
+            for (j = 0; j < g_alpha; j++) {
+                if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) offset = j;
+            }
+            for (j = 0; j < g_alpha; j++) {
+                indx = (j + offset) % g_alpha;
+                printf("%c", index_to_char(best_ciphertext_keyword_state[indx]));
+            }
+            printf("\n");
+        }
+    }
+    printf("\n");
+    print_text(buf, cipher_len); printf("\n");
+    fflush(stdout);
+}
+
+static void polyalpha_report(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted) {
+    ColossusConfig *cfg = ctx->cfg;
+    SharedData *shared = ctx->shared;
+    int cipher_len = ctx->cipher_len;
+    int n_words_found = 0;
+
+    char plaintext_string[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(decrypted[i]);
+    plaintext_string[cipher_len] = '\0';
+
+    if (cfg->dictionary_present && shared->dict != NULL) {
+        n_words_found = find_dictionary_words(plaintext_string, shared->dict,
+            shared->n_dict_words, shared->max_dict_word_len);
+    }
+
+    SolveResult local_res;
+    SolveResult *res = ctx->result ? ctx->result : &local_res;
+    res->solved = true;
+    res->cipher_type = cfg->cipher_type;
+    res->score = score;
+    res->n_words = n_words_found;
+    res->cycleword_len = cc->period;
+    vec_copy((int *) st->pt_keyword, res->plaintext_keyword, g_alpha);
+    vec_copy((int *) st->ct_keyword, res->ciphertext_keyword, g_alpha);
+    vec_copy((int *) st->cycleword, res->cycleword, cc->period);
+    vec_copy(decrypted, res->decrypted, cipher_len);
+    res->decrypted_len = cipher_len;
+
+    report_solution(cfg, ctx->cribtext, ctx->cipher, res);
+}
+
+static const CipherModel POLYALPHA_MODEL = {
+    .name = "polyalphabetic",
+    .shape = SHAPE_SHOTGUN,          // overridden per-solve (DETERMINISTIC for optimal Vig/Beau/Porta)
+    .needs_hist = false,             // set per-solve (optimal && !autokey)
+    .enumerate_configs = polyalpha_enumerate,
+    .key_len = NULL,
+    .seed = polyalpha_seed,
+    .perturb = polyalpha_perturb,
+    .copy_state = polyalpha_copy,
+    .decrypt = polyalpha_decrypt,
+    .report = polyalpha_report,
+    .report_verbose = polyalpha_report_verbose,
+};
+
+
 // Core Solver
 
 void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
@@ -705,23 +1529,7 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     int n_cribs = 0;
     int crib_positions[MAX_CIPHER_LENGTH];
     int crib_indices[MAX_CIPHER_LENGTH];
-    
-    int n_cycleword_lengths, cycleword_lengths[MAX_CIPHER_LENGTH];
-    int best_cycleword_length = 0;
 
-    // Result buffers
-    int decrypted[MAX_CIPHER_LENGTH];
-    int best_decrypted[MAX_CIPHER_LENGTH];
-    int plaintext_keyword[ALPHABET_SIZE]; 
-    int ciphertext_keyword[ALPHABET_SIZE]; 
-    int cycleword[MAX_CYCLEWORD_LEN];
-    int best_plaintext_keyword[ALPHABET_SIZE]; 
-    int best_ciphertext_keyword[ALPHABET_SIZE]; 
-    int best_cycleword[MAX_CYCLEWORD_LEN];
-
-    double score, best_score = 0.0;
-    int n_words_found = 0;
-    
     // Prepare Indices
     ord(ciphertext_str, cipher_indices);
 
@@ -812,232 +1620,30 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     }
 
 
-    // --- CYCLEWORD / PRIMER LENGTH SETUP ---
+    // --- POLYALPHABETIC CIPHERS ---
+    // Vigenere / Quagmire I-IV / Beaufort / Porta / Autokey* all share one model;
+    // the cipher-agnostic engine enumerates (cycleword_len, j, k) and shotgun /
+    // hill-climbs each via the model's seed/perturb/decrypt hooks.
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.result = result;
 
-    if (cfg->cycleword_len_present) {
-        // Case 1: User explicitly set length (e.g. -cyclewordlen 6)
-        n_cycleword_lengths = 1;
-        cycleword_lengths[0] = cfg->cycleword_len;
-    } 
-    else if ((cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) || 
-        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA || 
-        cfg->transperoffset_present) {
-        // Case 2: Autokey (Aperiodic) or polyalphabetic + transposition - IoC estimation will FAIL.
-        // We must brute-force a range of likely primer lengths.
-        n_cycleword_lengths = 0;
-        for (int len = 1; len <= cfg->max_cycleword_len; len++) {
-            cycleword_lengths[n_cycleword_lengths++] = len;
-        }
-    } 
-    else {
-        // Case 3: Periodic Cipher (Vigenere, Quagmire, Beaufort, Porta)
-        // Use IoC to estimate the period.
-        estimate_cycleword_lengths(
-            cipher_indices, 
-            cipher_len, 
-            cfg->max_cycleword_len, 
-            cfg->n_sigma_threshold,
-            cfg->ioc_threshold, 
-            &n_cycleword_lengths, 
-            cycleword_lengths, 
-            cfg->verbose);
-            
-        // Fallback: If IoC failed to find ANYTHING, default to a safe range 
-        // to prevent the "immediate exit" bug.
-        if (n_cycleword_lengths == 0) {
-            if (cfg->verbose) printf("No periodicities found above threshold. Not running the hillclimber and exiting.\n");
-            return ;
-        }
+    bool is_autokey = poly_is_autokey(cfg->cipher_type);
+    long poly_contradictions = 0;            // verbose-only telemetry for the perturb hook
+    ctx.model_scratch = &poly_contradictions;
+
+    CipherModel model = POLYALPHA_MODEL;
+    model.needs_hist = cfg->optimal_cycleword && !is_autokey;
+    // Vigenere/Beaufort/Porta in optimal mode use fixed straight alphabets and a
+    // deterministically-derived cycleword, so the climb is deterministic: stop at
+    // the first recorded best. (-samekey breaks the determinism, so exclude it.)
+    if (cfg->optimal_cycleword && !is_autokey && !cfg->same_key_cycle &&
+        (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT ||
+         cfg->cipher_type == PORTA)) {
+        model.shape = SHAPE_DETERMINISTIC;
     }
 
-    // Keyword constraints.
-    int min_kw = cfg->min_keyword_len;
-    int pt_max = cfg->plaintext_max_keyword_len;
-    int ct_max = cfg->ciphertext_max_keyword_len;
-
-    // 1. Force min_kw to 1 ONLY for ciphers that use a Straight Alphabet (Length 1)
-    //    Fixed: Changed range to <= AUTOKEY_2. A3 and A4 should typically start at len 5.
-    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT || 
-        cfg->cipher_type == PORTA ||
-        (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_2) ||
-        cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2 || 
-        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
-        min_kw = 1;
-    }
-
-    // 2. Set Max Limits AND Correct Target Lengths for fixed straight alphabets
-    //    Fix: Explicitly set the cfg->...keyword_len to 1. This prevents command-line 
-    //    flags (like -keywordlen 8) from killing the loop when k=1.
-    
-    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0 || 
-        cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
-        pt_max = 2; 
-        ct_max = 2;
-        cfg->plaintext_keyword_len = 0;
-        cfg->ciphertext_keyword_len = 0; 
-    } else if (cfg->cipher_type == BEAUFORT) {
-        pt_max = 2; 
-        cfg->plaintext_keyword_len = 1; // Treat as length 1 for loop checks.
-    } else if (cfg->cipher_type == PORTA) {
-        pt_max = 2; 
-        ct_max = 2; 
-        cfg->plaintext_keyword_len = 1;
-        cfg->ciphertext_keyword_len = 1;
-    } else if (cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == AUTOKEY_1) {
-        // Q1/A1: Plaintext varies, Ciphertext is Straight (Fixed to 0)
-        ct_max = 2;
-        cfg->ciphertext_keyword_len = 1; // FORCE this to 1
-    } else if (cfg->cipher_type == QUAGMIRE_2 || cfg->cipher_type == AUTOKEY_2) {
-        // Q2/A2: Plaintext is Straight (Fixed to 0), Ciphertext varies
-        pt_max = 2;
-        cfg->plaintext_keyword_len = 1; // FORCE this to 1
-    }
-
-    // Shotgun Loop.
-    best_score = 0.;
-
-    for (int i = 0; i < n_cycleword_lengths; i++) {
-        if (cfg->verbose) {
-            printf("\ncycleword length = %d\n", cycleword_lengths[i]);
-        }
-        for (int j = min(min_kw, cfg->plaintext_keyword_len); j < pt_max; j++) {
-            for (int k = min(min_kw, cfg->ciphertext_keyword_len); k < ct_max; k++) {
-                if (cfg->verbose) {
-                    printf("\npt/ct keyword len = %d, %d\n", j,k);
-                }
-                // Skip invalid combos based on flags
-                if (cfg->plaintext_keyword_len_present && j != cfg->plaintext_keyword_len) continue;
-                if (cfg->ciphertext_keyword_len_present && k != cfg->ciphertext_keyword_len) continue;
-                
-                if (cfg->cipher_type == QUAGMIRE_3 && j != k) continue;
-                if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
-                if (cfg->cipher_type == VIGENERE && ! (j == 1 && k == 1)) continue;
-                if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue; // Porta uses fixed PT/CT alphabets
-
-                // Autokey 0: Both Fixed (Vigenere)
-                if (cfg->cipher_type == AUTOKEY_0 && ! (j == 1 && k == 1)) continue;
-
-                // Autokey 1: CT is Straight (Fixed), PT varies (Quagmire I)
-                if (cfg->cipher_type == AUTOKEY_1 && k != 1) continue;
-
-                // Autokey 2: PT is Straight (Fixed), CT varies. (Quagmire II)
-                if (cfg->cipher_type == AUTOKEY_2 && j != 1) continue;
-
-                // Autokey 3: PT and CT lengths must match (Same key.) (Quagmire III) 
-                if (cfg->cipher_type == AUTOKEY_3 && j != k) continue;
-
-                // Autokey Beaufort
-                if (cfg->cipher_type == AUTOKEY_BEAU && ! (j == 1 && k == 1)) continue;
-
-                // Autokey Porta
-                if (cfg->cipher_type == AUTOKEY_PORTA && ! (j == 1 && k == 1)) continue;
-
-                // Check Crib compatibility.
-                if (cfg->cipher_type != AUTOKEY_0 && 
-                    cfg->cipher_type != AUTOKEY_1 && 
-                    cfg->cipher_type != AUTOKEY_2 && 
-                    cfg->cipher_type != AUTOKEY_3 && 
-                    cfg->cipher_type != AUTOKEY_4 && 
-                    cfg->cipher_type != AUTOKEY_BEAU && 
-                    cfg->cipher_type != AUTOKEY_PORTA) {
-                    if (!cribs_satisfied_p(cfg, cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, cycleword_lengths[i], cfg->verbose)) {
-                        #if CRIB_CHECK
-                        continue;
-                        #endif
-                    }
-                }
-
-                // Run Hill Climber
-                score = shotgun_hill_climber(
-                    cfg,
-                    cipher_indices, cipher_len,
-                    crib_indices, crib_positions, n_cribs,
-                    cycleword_lengths[i], j, k,
-                    shared->ngram_data,
-                    decrypted, plaintext_keyword, ciphertext_keyword, cycleword
-                );
-
-                if (score > best_score) {
-                    best_score = score;
-                    best_cycleword_length = cycleword_lengths[i];
-                    vec_copy(decrypted, best_decrypted, cipher_len);
-                    vec_copy(plaintext_keyword, best_plaintext_keyword, g_alpha);
-                    vec_copy(ciphertext_keyword, best_ciphertext_keyword, g_alpha);
-                    vec_copy(cycleword, best_cycleword, cycleword_lengths[i]);
-                }
-            }
-        }
-    }
-
-    if (best_cycleword_length == 0) {
-        printf("\n\nERROR: No valid configuration found. Check your length constraints.\n");
-        printf("Debug: Type=%d, PT_Len=%d, CT_Len=%d\n", 
-               cfg->cipher_type, cfg->plaintext_keyword_len, cfg->ciphertext_keyword_len);
-        return;
-    }
-
-    // Reporting.
-
-    // Final decryption for the best state. 
-    if (cfg->cipher_type == PORTA) {
-        porta_decrypt(best_decrypted, cipher_indices, cipher_len, 
-                     best_cycleword, best_cycleword_length);
-    } else if (cfg->cipher_type == BEAUFORT) {
-        beaufort_decrypt(best_decrypted, cipher_indices, cipher_len, 
-                     best_cycleword, best_cycleword_length);
-    } else if (cfg->cipher_type == VIGENERE) { 
-        vigenere_decrypt(best_decrypted, cipher_indices, cipher_len, 
-                         best_cycleword, best_cycleword_length, cfg->variant);
-    } else if (cfg->cipher_type == AUTOKEY_0 || 
-               cfg->cipher_type == AUTOKEY_1 || 
-               cfg->cipher_type == AUTOKEY_2 || 
-               cfg->cipher_type == AUTOKEY_3 || 
-               cfg->cipher_type == AUTOKEY_4 || 
-               cfg->cipher_type == AUTOKEY_BEAU || 
-               cfg->cipher_type == AUTOKEY_PORTA) {
-        autokey_decrypt(cfg, best_decrypted, cipher_indices, cipher_len, 
-                        best_plaintext_keyword, best_ciphertext_keyword,
-                        best_cycleword, best_cycleword_length);
-    } else {
-        quagmire_decrypt(best_decrypted, cipher_indices, cipher_len, 
-                        best_plaintext_keyword, best_ciphertext_keyword, 
-                        best_cycleword, best_cycleword_length, cfg->variant);
-    }
-    
-
-    if (cfg->transperoffset_present) {
-        transperoffset(best_decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
-    }
-
-    if (cfg->transmatrix_present) {
-        transmatrix(best_decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
-    }
-
-    char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) {
-        plaintext_string[i] = index_to_char(best_decrypted[i]);
-    }
-    plaintext_string[cipher_len] = '\0';
-
-    if (cfg->dictionary_present && shared->dict != NULL) {
-        n_words_found = find_dictionary_words(plaintext_string, shared->dict, shared->n_dict_words, shared->max_dict_word_len);
-    }
-
-    // Populate the result (into the caller's buffer if supplied, else a local).
-    SolveResult local_res;
-    SolveResult *res = result ? result : &local_res;
-    res->solved = true;
-    res->cipher_type = cfg->cipher_type;
-    res->score = best_score;
-    res->n_words = n_words_found;
-    res->cycleword_len = best_cycleword_length;
-    vec_copy(best_plaintext_keyword, res->plaintext_keyword, g_alpha);
-    vec_copy(best_ciphertext_keyword, res->ciphertext_keyword, g_alpha);
-    vec_copy(best_cycleword, res->cycleword, best_cycleword_length);
-    vec_copy(best_decrypted, res->decrypted, cipher_len);
-    res->decrypted_len = cipher_len;
-
-    report_solution(cfg, cribtext_str, cipher_indices, res);
+    run_solver(&model, &ctx);
 }
 
 
@@ -1211,120 +1817,81 @@ static void perturbate_transposition_params(ColossusConfig *cfg, int cipher_len,
     }
 }
 
-double shotgun_transposition_climber(ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float *ngram_data, int best_decrypted[],
-    int *best_p1, int *best_p2, int *best_p3) {
+// ---- transmatrix / transperoffset model (cipher-agnostic engine) ----------
+// A pure parameter-vector search: the candidate state is the transform's own
+// (p1,p2,p3) triple carried in st->aux[0..2]. SHAPE_SHOTGUN reproduces the
+// slip-probability acceptance and RNG draw order of the original dedicated
+// climber, so the search is bit-identical at a fixed seed.
 
-    int decrypted[MAX_CIPHER_LENGTH];
-    int cur_p1, cur_p2, cur_p3, loc_p1, loc_p2, loc_p3;
-    double best_score = 0., current_score = 0., local_score;
-    bool have_best = false;
-
-    // Progress tracking for the verbose live display.
-    clock_t start_time = clock();
-    long n_iterations = 0;
-    long n_slips = 0, n_backtracks = 0;   // slip = -slipprob-accepted worse move
-    double elapsed, n_iter_per_sec, entropy_score;
-
-    for (int n = 0; n < cfg->n_restarts; n++) {
-
-        if (have_best && frand() < cfg->backtracking_probability) {
-            // Backtrack to the best known state.
-            cur_p1 = *best_p1; cur_p2 = *best_p2; cur_p3 = *best_p3;
-            current_score = best_score;
-            n_backtracks += 1;
-        } else {
-            random_transposition_params(cfg, cipher_len, &cur_p1, &cur_p2, &cur_p3);
-            apply_transposition(cfg, cipher_indices, cipher_len, cur_p1, cur_p2, cur_p3, decrypted);
-            current_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-        }
-
-        for (int i = 0; i < cfg->n_hill_climbs; i++) {
-            n_iterations += 1;
-            loc_p1 = cur_p1; loc_p2 = cur_p2; loc_p3 = cur_p3;
-            perturbate_transposition_params(cfg, cipher_len, &loc_p1, &loc_p2, &loc_p3);
-
-            apply_transposition(cfg, cipher_indices, cipher_len, loc_p1, loc_p2, loc_p3, decrypted);
-            local_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-
-            // Accept if better, or slip to a worse state to escape local maxima.
-            bool better = local_score > current_score;
-            bool slip = !better && frand() < cfg->slip_probability;
-            if (better || slip) {
-                if (slip) n_slips += 1;
-                cur_p1 = loc_p1; cur_p2 = loc_p2; cur_p3 = loc_p3;
-                current_score = local_score;
-            }
-
-            if (!have_best || current_score > best_score) {
-                best_score = current_score;
-                *best_p1 = cur_p1; *best_p2 = cur_p2; *best_p3 = cur_p3;
-                have_best = true;
-
-                if (cfg->verbose) {
-                    // Re-decrypt the best parameters for the live display.
-                    apply_transposition(cfg, cipher_indices, cipher_len,
-                        *best_p1, *best_p2, *best_p3, decrypted);
-
-                    entropy_score = entropy(decrypted, cipher_len);
-
-                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
-                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
-
-                    printf("\n%.2f\t[sec]\n", elapsed);
-                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
-                    printf("%d\t[restarts]\n", n);
-                    printf("%ld\t[backtracks]\n", n_backtracks);
-                    printf("%ld\t[slips]\n", n_slips);
-                    printf("%.4f\t[entropy]\n", entropy_score);
-                    printf("%.2f\t[score]\n", best_score);
-                    if (cfg->cipher_type == TRANSMATRIX) {
-                        printf("w1 = %d, w2 = %d, direction = %s\t[params]\n",
-                            *best_p1, *best_p2, *best_p3 ? "cw" : "ccw");
-                    } else { // TRANSPEROFFSET
-                        printf("period = %d, offset = %d\t[params]\n", *best_p1, *best_p2);
-                    }
-                    printf("\n");
-                    print_text(decrypted, cipher_len); printf("\n");
-                    fflush(stdout);
-                }
-            }
-        }
-    }
-
-    // Recompute the best decrypted text for the caller.
-    apply_transposition(cfg, cipher_indices, cipher_len, *best_p1, *best_p2, *best_p3, best_decrypted);
-    return best_score;
+static int transmat_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    (void) ctx; (void) cap;
+    out[0].period = 0; out[0].j = 0; out[0].k = 0;
+    out[0].aux[0] = 0; out[0].aux[1] = 0;
+    return 1;     // a single config; the whole search is the inner climb
 }
 
-void solve_transposition(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs) {
+static void transmat_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    (void) cc;
+    random_transposition_params(ctx->cfg, ctx->cipher_len, &st->aux[0], &st->aux[1], &st->aux[2]);
+}
 
-    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+static void transmat_perturb(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                             bool *force_primary) {
+    (void) cc; (void) force_primary;
+    perturbate_transposition_params(ctx->cfg, ctx->cipher_len, &st->aux[0], &st->aux[1], &st->aux[2]);
+}
 
-    int best_decrypted[MAX_CIPHER_LENGTH];
-    int best_p1 = 0, best_p2 = 0, best_p3 = 0;
-    double best_score;
-    int n_words_found = 0;
+static void transmat_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    (void) cc;
+    dst->aux[0] = src->aux[0]; dst->aux[1] = src->aux[1]; dst->aux[2] = src->aux[2];
+}
 
-    if (cipher_len < 3) {
-        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
-        return ;
+static void transmat_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                             int *out, double *score_adjust) {
+    (void) cc; (void) score_adjust;
+    apply_transposition(ctx->cfg, ctx->cipher, ctx->cipher_len,
+        st->aux[0], st->aux[1], st->aux[2], out);
+}
+
+static void transmat_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) cc; (void) decrypted;
+    ColossusConfig *cfg = ctx->cfg;
+    int buf[MAX_CIPHER_LENGTH];
+    apply_transposition(cfg, ctx->cipher, ctx->cipher_len, st->aux[0], st->aux[1], st->aux[2], buf);
+
+    double elapsed = ((double) clock() - stats->start_time)/CLOCKS_PER_SEC;
+    double n_iter_per_sec = (elapsed > 0.) ? ((double) stats->n_iterations)/elapsed : 0.;
+
+    printf("\n%.2f\t[sec]\n", elapsed);
+    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+    printf("%d\t[restarts]\n", stats->n_restarts);
+    printf("%d\t[backtracks]\n", stats->n_backtracks);
+    printf("%d\t[slips]\n", stats->n_slips);
+    printf("%.4f\t[entropy]\n", entropy(buf, ctx->cipher_len));
+    printf("%.2f\t[score]\n", score);
+    if (cfg->cipher_type == TRANSMATRIX) {
+        printf("w1 = %d, w2 = %d, direction = %s\t[params]\n",
+            st->aux[0], st->aux[1], st->aux[2] ? "cw" : "ccw");
+    } else { // TRANSPEROFFSET
+        printf("period = %d, offset = %d\t[params]\n", st->aux[0], st->aux[1]);
     }
+    printf("\n");
+    print_text(buf, ctx->cipher_len); printf("\n");
+    fflush(stdout);
+}
 
-    best_score = shotgun_transposition_climber(cfg, cipher_indices, cipher_len,
-        crib_indices, crib_positions, n_cribs,
-        shared->ngram_data, best_decrypted, &best_p1, &best_p2, &best_p3);
+static void transmat_report(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted) {
+    (void) cc;
+    ColossusConfig *cfg = ctx->cfg;
+    SharedData *shared = ctx->shared;
+    int cipher_len = ctx->cipher_len;
+    int *cipher_indices = ctx->cipher;
+    char *cribtext_str = ctx->cribtext;
+    int n_cribs = ctx->n_cribs;
+    int best_p1 = st->aux[0], best_p2 = st->aux[1], best_p3 = st->aux[2];
+    int n_words_found = 0;
 
     // Parameter report line.
     if (cfg->cipher_type == TRANSMATRIX) {
@@ -1335,7 +1902,7 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
     }
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1344,11 +1911,11 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
     }
 
     // Results output.
-    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+    printf("\nResult Score: %.2f | Words: %d\n", score, n_words_found);
 
     print_text(cipher_indices, cipher_len);
     printf("\n");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
     printf("%s\n", cribtext_str);
 
@@ -1358,7 +1925,7 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
+                int diff = abs(decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -1370,21 +1937,21 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
     // transposition has none).
     if (cfg->cipher_type == TRANSMATRIX) {
         if (cfg->dictionary_present) {
-            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", best_score, n_words_found,
+            printf(">>> %.2f, %d, %d, %d, %d, %d, %s, ", score, n_words_found,
                 cfg->cipher_type, best_p1, best_p2, best_p3,
                 cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score,
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", score,
                 cfg->cipher_type, best_p1, best_p2, best_p3,
                 cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
     } else {
         if (cfg->dictionary_present) {
-            printf(">>> %.2f, %d, %d, %d, %d, %s, ", best_score, n_words_found,
+            printf(">>> %.2f, %d, %d, %d, %d, %s, ", score, n_words_found,
                 cfg->cipher_type, best_p1, best_p2,
                 cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         } else {
-            printf(">>> %.2f, %d, %d, %d, %s, ", best_score,
+            printf(">>> %.2f, %d, %d, %d, %s, ", score,
                 cfg->cipher_type, best_p1, best_p2,
                 cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
         }
@@ -1392,8 +1959,39 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
 
     print_text(cipher_indices, cipher_len);
     printf(", ");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
+}
+
+static const CipherModel TRANSMATRIX_MODEL = {
+    .name = "transmatrix",
+    .shape = SHAPE_SHOTGUN,
+    .needs_hist = false,
+    .enumerate_configs = transmat_enumerate,
+    .key_len = NULL,
+    .seed = transmat_seed,
+    .perturb = transmat_perturb,
+    .copy_state = transmat_copy,
+    .decrypt = transmat_decrypt,
+    .report = transmat_report,
+    .report_verbose = transmat_report_verbose,
+};
+
+void solve_transposition(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    if (cipher_len < 3) {
+        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
+        return ;
+    }
+
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    run_solver(&TRANSMATRIX_MODEL, &ctx);
 }
 
 
@@ -1519,148 +2117,100 @@ static void build_columnar_seed(int key[], int len, int p, int ord[]) {
     }
 }
 
-double shotgun_permutation_climber(ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float *ngram_data, int best_decrypted[], int best_key[]) {
+// ---- general transposition model (TYPE transposition; cipher-agnostic) -----
+// SHAPE_ANNEAL over the full length-N permutation key (st->key, key_len = N). The
+// AZDecrypt periodic-redundancy guard (key_structure_score) is folded in two
+// ways: its value becomes the decrypt score_adjust, and the period it detects is
+// carried in st->aux[0] so the next perturb's column-swap move can target it.
+// The RNG draw order matches the original climber, so the search is bit-identical.
 
-    int decrypted[MAX_CIPHER_LENGTH];
-    int cur_key[MAX_CIPHER_LENGTH], loc_key[MAX_CIPHER_LENGTH];
-    double best_score = 0., current_score = 0., local_score;
-    int cur_period = 0, loc_period = 0;
-    int best_period = 0;
-    bool have_best = false;
-
-    // Progress tracking for the verbose live display.
-    clock_t start_time = clock();
-    long n_iterations = 0;
-    long n_slips = 0, n_backtracks = 0;   // slip = annealing-accepted worse move
-    double elapsed, n_iter_per_sec, entropy_score;
-
-    // Simulated-annealing schedule: each restart cools geometrically from a hot
-    // temperature (accept most worse moves, explore freely) to a cold one (pure
-    // hill climbing). This is what lets the permutation escape the many local
-    // optima a fixed accept-worse probability gets stuck in.
-    const double temp_start = 0.10;   // calibrated to single-move score deltas (~0.01-0.05)
-    const double temp_min   = 0.001;
-    double cooling = 1.0;
-    if (cfg->n_hill_climbs > 1)
-        cooling = pow(temp_min / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
-
-    for (int n = 0; n < cfg->n_restarts; n++) {
-
-        if (have_best && frand() < cfg->backtracking_probability) {
-            vec_copy(best_key, cur_key, cipher_len);
-            current_score = best_score;
-            n_backtracks += 1;
-        } else {
-            // Restart: mostly from a structured columnar seed (random period and
-            // column order), occasionally from a fully random permutation so
-            // non-columnar / route transpositions remain reachable.
-            if (frand() < 0.85) {
-                int max_p = min(cipher_len / 2, 40);
-                if (max_p < 2) max_p = 2;
-                int p = rand_int(2, max_p + 1);
-                int ord[64];
-                if (p > 64) p = 64;
-                for (int c = 0; c < p; c++) ord[c] = c;
-                shuffle(ord, p);
-                build_columnar_seed(cur_key, cipher_len, p, ord);
-            } else {
-                for (int i = 0; i < cipher_len; i++) cur_key[i] = i;
-                shuffle(cur_key, cipher_len);
-            }
-            apply_permutation(cipher_indices, cur_key, cipher_len, decrypted);
-            current_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
-                + cfg->weight_structure * key_structure_score(cur_key, cipher_len, &cur_period);
-        }
-
-        double temp = temp_start;
-        for (int i = 0; i < cfg->n_hill_climbs; i++) {
-            n_iterations += 1;
-            vec_copy(cur_key, loc_key, cipher_len);
-            perturbate_permutation(loc_key, cipher_len, cur_period);
-
-            apply_permutation(cipher_indices, loc_key, cipher_len, decrypted);
-            local_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy)
-                + cfg->weight_structure * key_structure_score(loc_key, cipher_len, &loc_period);
-
-            // Metropolis acceptance with the current temperature.
-            double delta = local_score - current_score;
-            if (delta > 0.0 || frand() < exp(delta / temp)) {
-                if (delta <= 0.0) n_slips += 1;   // accepted a worse (or equal) move
-                vec_copy(loc_key, cur_key, cipher_len);
-                current_score = local_score;
-                cur_period = loc_period;
-            }
-            temp *= cooling;
-
-            if (!have_best || current_score > best_score) {
-                best_score = current_score;
-                vec_copy(cur_key, best_key, cipher_len);
-                best_period = cur_period;
-                have_best = true;
-
-                if (cfg->verbose) {
-                    // Re-decrypt the best permutation for the live display.
-                    apply_permutation(cipher_indices, best_key, cipher_len, decrypted);
-
-                    entropy_score = entropy(decrypted, cipher_len);
-
-                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
-                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
-
-                    printf("\n%.2f\t[sec]\n", elapsed);
-                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
-                    printf("%d\t[restarts]\n", n);
-                    printf("%ld\t[backtracks]\n", n_backtracks);
-                    printf("%ld\t[slips]\n", n_slips);
-                    printf("%.4f\t[entropy]\n", entropy_score);
-                    printf("%.2f\t[score]\n", best_score);
-                    printf("%d\t[period]\n", best_period);
-                    printf("\n");
-                    print_text(decrypted, cipher_len); printf("\n");
-                    fflush(stdout);
-                }
-            }
-        }
-    }
-
-    apply_permutation(cipher_indices, best_key, cipher_len, best_decrypted);
-    return best_score;
+static int permutation_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    (void) ctx; (void) cap;
+    out[0].period = 0; out[0].j = 0; out[0].k = 0;
+    return 1;
 }
 
-void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs) {
-
-    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
-
-    int best_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_CIPHER_LENGTH];
-    double best_score;
-    int n_words_found = 0;
-
-    if (cipher_len < 3) {
-        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
-        return ;
+static void permutation_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    (void) cc;
+    int len = ctx->cipher_len;
+    st->key_len = len;
+    // Mostly a structured columnar seed (random period and column order),
+    // occasionally a fully random permutation so route transpositions stay reachable.
+    if (frand() < 0.85) {
+        int max_p = min(len / 2, 40);
+        if (max_p < 2) max_p = 2;
+        int p = rand_int(2, max_p + 1);
+        int ord[64];
+        if (p > 64) p = 64;
+        for (int c = 0; c < p; c++) ord[c] = c;
+        shuffle(ord, p);
+        build_columnar_seed(st->key, len, p, ord);
+    } else {
+        for (int i = 0; i < len; i++) st->key[i] = i;
+        shuffle(st->key, len);
     }
+    st->aux[0] = 0;     // detected period; decrypt() fills it from key_structure_score
+}
 
-    best_score = shotgun_permutation_climber(cfg, cipher_indices, cipher_len,
-        crib_indices, crib_positions, n_cribs,
-        shared->ngram_data, best_decrypted, best_key);
+static void permutation_perturb(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                                bool *force_primary) {
+    (void) cc; (void) force_primary;
+    perturbate_permutation(st->key, ctx->cipher_len, st->aux[0]);
+}
+
+static void permutation_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    (void) cc;
+    int len = src->key_len;
+    dst->key_len = len;
+    dst->aux[0] = src->aux[0];
+    for (int i = 0; i < len; i++) dst->key[i] = src->key[i];
+}
+
+static void permutation_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                                int *out, double *score_adjust) {
+    (void) cc;
+    apply_permutation(ctx->cipher, st->key, ctx->cipher_len, out);
+    int period = 0;
+    double s = key_structure_score(st->key, ctx->cipher_len, &period);
+    st->aux[0] = period;                                     // carry period for the next perturb
+    *score_adjust = ctx->cfg->weight_structure * s;
+}
+
+static void permutation_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) cc; (void) decrypted;
+    int buf[MAX_CIPHER_LENGTH];
+    apply_permutation(ctx->cipher, (int *) st->key, ctx->cipher_len, buf);
+    double elapsed = ((double) clock() - stats->start_time)/CLOCKS_PER_SEC;
+    double n_iter_per_sec = (elapsed > 0.) ? ((double) stats->n_iterations)/elapsed : 0.;
+    printf("\n%.2f\t[sec]\n", elapsed);
+    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+    printf("%d\t[restarts]\n", stats->n_restarts);
+    printf("%d\t[backtracks]\n", stats->n_backtracks);
+    printf("%d\t[slips]\n", stats->n_slips);
+    printf("%.4f\t[entropy]\n", entropy(buf, ctx->cipher_len));
+    printf("%.2f\t[score]\n", score);
+    printf("%d\t[period]\n", st->aux[0]);
+    printf("\n");
+    print_text(buf, ctx->cipher_len); printf("\n");
+    fflush(stdout);
+}
+
+static void permutation_report(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted) {
+    (void) cc;
+    ColossusConfig *cfg = ctx->cfg;
+    SharedData *shared = ctx->shared;
+    int cipher_len = ctx->cipher_len;
+    int *cipher_indices = ctx->cipher;
+    char *cribtext_str = ctx->cribtext;
+    int n_cribs = ctx->n_cribs;
+    int n_words_found = 0;
 
     printf("\ntransposition: permutation key of length %d\n", cipher_len);
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1668,11 +2218,11 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
             shared->n_dict_words, shared->max_dict_word_len);
     }
 
-    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+    printf("\nResult Score: %.2f | Words: %d\n", score, n_words_found);
 
     print_text(cipher_indices, cipher_len);
     printf("\n");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
     printf("%s\n", cribtext_str);
 
@@ -1681,7 +2231,7 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
+                int diff = abs(decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -1690,21 +2240,52 @@ void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
 
     // Recovered key (source position for each output position), for reproduction.
     printf("key: ");
-    for (int i = 0; i < cipher_len; i++) printf("%d%s", best_key[i], (i + 1 < cipher_len) ? " " : "");
+    for (int i = 0; i < cipher_len; i++) printf("%d%s", st->key[i], (i + 1 < cipher_len) ? " " : "");
     printf("\n\n");
 
     // One-liner summary.
     if (cfg->dictionary_present) {
-        printf(">>> %.2f, %d, %d, %s, ", best_score, n_words_found, cfg->cipher_type,
+        printf(">>> %.2f, %d, %d, %s, ", score, n_words_found, cfg->cipher_type,
             cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
     } else {
-        printf(">>> %.2f, %d, %s, ", best_score, cfg->cipher_type,
+        printf(">>> %.2f, %d, %s, ", score, cfg->cipher_type,
             cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
     }
     print_text(cipher_indices, cipher_len);
     printf(", ");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
+}
+
+static const CipherModel PERMUTATION_MODEL = {
+    .name = "transposition",
+    .shape = SHAPE_ANNEAL,
+    .needs_hist = false,
+    .enumerate_configs = permutation_enumerate,
+    .key_len = NULL,
+    .seed = permutation_seed,
+    .perturb = permutation_perturb,
+    .copy_state = permutation_copy,
+    .decrypt = permutation_decrypt,
+    .report = permutation_report,
+    .report_verbose = permutation_report_verbose,
+};
+
+void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    if (cipher_len < 3) {
+        printf("\n\nERROR: ciphertext too short for a transposition solve.\n\n");
+        return ;
+    }
+
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    run_solver(&PERMUTATION_MODEL, &ctx);
 }
 
 
@@ -1784,179 +2365,142 @@ static void columnar_seed(ColossusConfig *cfg, int nstages,
     }
 }
 
-// Copy a full columnar state (per-stage K, order, direction).
-static void columnar_copy_state(int nstages,
-    int srcK[2], int srcOrder[2][MAX_COLS], int srcDir[2],
-    int dstK[2], int dstOrder[2][MAX_COLS], int dstDir[2]) {
-    for (int s = 0; s < nstages; s++) {
-        dstK[s] = srcK[s];
-        dstDir[s] = srcDir[s];
-        for (int c = 0; c < srcK[s]; c++) dstOrder[s][c] = srcOrder[s][c];
-    }
-}
+// ---- columnar model (TRANSCOL / TRANSCOL2; cipher-agnostic engine) ---------
+// SHAPE_ANNEAL over the per-stage column order. The state lives in SolverState:
+//   aux[0] = nstages; aux[1..2] = K per stage; aux[3..4] = read direction per
+//   stage; key[] reinterpreted as order[2][MAX_COLS] (stride MAX_COLS).
+// Single columnar enumerates one config per column count K (the K-sweep); double
+// columnar is a single config that randomises (K1,K2) per restart in seed().
 
-// Shotgun / annealing climber over the column-order permutation(s). Single
-// columnar (TRANSCOL) sweeps the column count K = min_cols..max_cols, running
-// n_restarts restarts per K; double columnar (TRANSCOL2) randomises (K1,K2) per
-// restart. Scoring is the n-gram (+ optional crib) state_score only -- no
-// structure-score guard is needed because the candidates are all columnar.
-static double shotgun_columnar_climber(ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float *ngram_data, int best_decrypted[],
-    int best_K[2], int best_order[2][MAX_COLS], int best_dir[2], int *best_nstages) {
-
-    int nstages = (cfg->cipher_type == TRANSCOL2) ? 2 : 1;
-    *best_nstages = nstages;
-
-    // Clamp the column-count search range to [2, len/2] (and the array bound).
-    int lo = cfg->min_cols, hi = cfg->max_cols;
-    int cap = cipher_len / 2;
+// Column-count search range, clamped to [2, len/2] and the array bound.
+static void columnar_krange(const SolverCtx *ctx, int *lo, int *hi) {
+    int l = ctx->cfg->min_cols, h = ctx->cfg->max_cols;
+    int cap = ctx->cipher_len / 2;
     if (cap < 2) cap = 2;
     if (cap > MAX_COLS) cap = MAX_COLS;
-    if (lo < 2) lo = 2;
-    if (hi > cap) hi = cap;
-    if (lo > hi) lo = hi;
-
-    int cur_K[2], cur_order[2][MAX_COLS], cur_dir[2];
-    int loc_K[2], loc_order[2][MAX_COLS], loc_dir[2];
-    int decrypted[MAX_CIPHER_LENGTH];
-    double best_score = 0., current_score = 0., local_score;
-    bool have_best = false;
-
-    // Geometric Metropolis annealing schedule (as in shotgun_permutation_climber).
-    const double temp_start = 0.10, temp_min = 0.001;
-    double cooling = 1.0;
-    if (cfg->n_hill_climbs > 1)
-        cooling = pow(temp_min / temp_start, 1.0 / (double)(cfg->n_hill_climbs - 1));
-
-    clock_t start_time = clock();
-    long n_iterations = 0;
-    long n_slips = 0, n_backtracks = 0;   // slip = annealing-accepted worse move
-    double elapsed, n_iter_per_sec, entropy_score;
-
-    // Single: one restart slot per (K, restart). Double: just n_restarts.
-    int n_K = (nstages == 1) ? (hi - lo + 1) : 1;
-    long total_restarts = (long) n_K * cfg->n_restarts;
-
-    for (long rs = 0; rs < total_restarts; rs++) {
-
-        if (have_best && frand() < cfg->backtracking_probability) {
-            // Refine the best-known state.
-            columnar_copy_state(nstages, best_K, best_order, best_dir,
-                cur_K, cur_order, cur_dir);
-            current_score = best_score;
-            n_backtracks += 1;
-        } else {
-            // Fresh restart: choose the column count(s) for this restart.
-            if (nstages == 1) {
-                cur_K[0] = lo + (int)(rs / cfg->n_restarts);
-            } else {
-                cur_K[0] = rand_int(lo, hi + 1);
-                cur_K[1] = rand_int(lo, hi + 1);
-            }
-            columnar_seed(cfg, nstages, cur_K, cur_order, cur_dir);
-            decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
-                cur_K, cur_order, cur_dir, decrypted);
-            current_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-        }
-
-        double temp = temp_start;
-        for (int it = 0; it < cfg->n_hill_climbs; it++) {
-            n_iterations += 1;
-
-            columnar_copy_state(nstages, cur_K, cur_order, cur_dir,
-                loc_K, loc_order, loc_dir);
-
-            // Perturb one stage (random for double, the only one for single).
-            int s = (nstages == 1) ? 0 : rand_int(0, 2);
-            perturbate_column_order(loc_order[s], loc_K[s], &loc_dir[s], cfg->read_direction);
-
-            decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
-                loc_K, loc_order, loc_dir, decrypted);
-            local_score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-
-            double delta = local_score - current_score;
-            if (delta > 0.0 || frand() < exp(delta / temp)) {
-                if (delta <= 0.0) n_slips += 1;   // accepted a worse (or equal) move
-                columnar_copy_state(nstages, loc_K, loc_order, loc_dir,
-                    cur_K, cur_order, cur_dir);
-                current_score = local_score;
-            }
-            temp *= cooling;
-
-            if (!have_best || current_score > best_score) {
-                best_score = current_score;
-                columnar_copy_state(nstages, cur_K, cur_order, cur_dir,
-                    best_K, best_order, best_dir);
-                have_best = true;
-
-                if (cfg->verbose) {
-                    decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
-                        best_K, best_order, best_dir, decrypted);
-                    entropy_score = entropy(decrypted, cipher_len);
-                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
-                    n_iter_per_sec = (elapsed > 0.) ? ((double) n_iterations)/elapsed : 0.;
-
-                    printf("\n%.2f\t[sec]\n", elapsed);
-                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
-                    printf("%ld\t[restarts]\n", rs);
-                    printf("%ld\t[backtracks]\n", n_backtracks);
-                    printf("%ld\t[slips]\n", n_slips);
-                    printf("%.4f\t[entropy]\n", entropy_score);
-                    printf("%.2f\t[score]\n", best_score);
-                    for (int st = 0; st < nstages; st++) {
-                        printf("stage %d: K=%d dir=%s\t[params]\n", st + 1, best_K[st],
-                            best_dir[st] == COL_READ_BT ? "bt" : "tb");
-                    }
-                    printf("\n");
-                    print_text(decrypted, cipher_len); printf("\n");
-                    fflush(stdout);
-                }
-            }
-        }
-    }
-
-    decrypt_columnar_stages(cipher_indices, cipher_len, nstages,
-        best_K, best_order, best_dir, best_decrypted);
-    return best_score;
+    if (l < 2) l = 2;
+    if (h > cap) h = cap;
+    if (l > h) l = h;
+    *lo = l; *hi = h;
 }
 
-void solve_columnar(char *ciphertext_str, char *cribtext_str,
-    ColossusConfig *cfg, SharedData *shared,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs) {
+static int columnar_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    if (ctx->cfg->cipher_type == TRANSCOL2) {
+        out[0].period = 0; out[0].j = 0; out[0].k = 0;
+        return 1;                                   // (K1,K2) randomised per restart
+    }
+    int lo, hi;
+    columnar_krange(ctx, &lo, &hi);
+    int n = 0;
+    for (int K = lo; K <= hi && n < cap; K++) {      // one config per column count
+        out[n].period = K; out[n].j = 0; out[n].k = 0;
+        n++;
+    }
+    return n;
+}
 
-    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+static void columnar_model_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    int nstages = (ctx->cfg->cipher_type == TRANSCOL2) ? 2 : 1;
+    int *K   = &st->aux[1];
+    int *dir = &st->aux[3];
+    int (*order)[MAX_COLS] = (int (*)[MAX_COLS]) st->key;
+    st->aux[0] = nstages;
+    if (nstages == 1) {
+        K[0] = cc->period;
+    } else {
+        int lo, hi;
+        columnar_krange(ctx, &lo, &hi);
+        K[0] = rand_int(lo, hi + 1);
+        K[1] = rand_int(lo, hi + 1);
+    }
+    columnar_seed(ctx->cfg, nstages, K, order, dir);
+}
 
-    int best_decrypted[MAX_CIPHER_LENGTH];
-    int best_K[2], best_order[2][MAX_COLS], best_dir[2], best_nstages = 1;
-    double best_score;
+static void columnar_model_perturb(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                                   bool *force_primary) {
+    (void) cc; (void) force_primary;
+    int nstages = st->aux[0];
+    int (*order)[MAX_COLS] = (int (*)[MAX_COLS]) st->key;
+    int s = (nstages == 1) ? 0 : rand_int(0, 2);
+    int dir = st->aux[3 + s];
+    perturbate_column_order(order[s], st->aux[1 + s], &dir, ctx->cfg->read_direction);
+    st->aux[3 + s] = dir;
+}
+
+static void columnar_model_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    (void) cc;
+    int nstages = src->aux[0];
+    const int (*sord)[MAX_COLS] = (const int (*)[MAX_COLS]) src->key;
+    int (*dord)[MAX_COLS] = (int (*)[MAX_COLS]) dst->key;
+    dst->aux[0] = nstages;
+    for (int s = 0; s < nstages; s++) {
+        dst->aux[1 + s] = src->aux[1 + s];          // K
+        dst->aux[3 + s] = src->aux[3 + s];          // dir
+        int K = src->aux[1 + s];
+        for (int c = 0; c < K; c++) dord[s][c] = sord[s][c];
+    }
+}
+
+static void columnar_model_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                                   int *out, double *score_adjust) {
+    (void) cc; (void) score_adjust;
+    int nstages = st->aux[0];
+    int K[2]   = { st->aux[1], st->aux[2] };
+    int dir[2] = { st->aux[3], st->aux[4] };
+    int (*order)[MAX_COLS] = (int (*)[MAX_COLS]) st->key;
+    decrypt_columnar_stages(ctx->cipher, ctx->cipher_len, nstages, K, order, dir, out);
+}
+
+static void columnar_model_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
+    (void) cc; (void) decrypted;
+    int nstages = st->aux[0];
+    int K[2]   = { st->aux[1], st->aux[2] };
+    int dir[2] = { st->aux[3], st->aux[4] };
+    int (*order)[MAX_COLS] = (int (*)[MAX_COLS]) st->key;
+    int buf[MAX_CIPHER_LENGTH];
+    decrypt_columnar_stages(ctx->cipher, ctx->cipher_len, nstages, K, order, dir, buf);
+
+    double elapsed = ((double) clock() - stats->start_time)/CLOCKS_PER_SEC;
+    double n_iter_per_sec = (elapsed > 0.) ? ((double) stats->n_iterations)/elapsed : 0.;
+    printf("\n%.2f\t[sec]\n", elapsed);
+    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
+    printf("%d\t[restarts]\n", stats->n_restarts);
+    printf("%d\t[backtracks]\n", stats->n_backtracks);
+    printf("%d\t[slips]\n", stats->n_slips);
+    printf("%.4f\t[entropy]\n", entropy(buf, ctx->cipher_len));
+    printf("%.2f\t[score]\n", score);
+    for (int s = 0; s < nstages; s++)
+        printf("stage %d: K=%d dir=%s\t[params]\n", s + 1, K[s],
+            dir[s] == COL_READ_BT ? "bt" : "tb");
+    printf("\n");
+    print_text(buf, ctx->cipher_len); printf("\n");
+    fflush(stdout);
+}
+
+static void columnar_model_report(const SolverCtx *ctx, const SolverConfig *cc,
+        const SolverState *st, double score, int *decrypted) {
+    (void) cc;
+    ColossusConfig *cfg = ctx->cfg;
+    SharedData *shared = ctx->shared;
+    int cipher_len = ctx->cipher_len;
+    int *cipher_indices = ctx->cipher;
+    char *cribtext_str = ctx->cribtext;
+    int n_cribs = ctx->n_cribs;
+    int nstages = st->aux[0];
+    int best_K[2]   = { st->aux[1], st->aux[2] };
+    int best_dir[2] = { st->aux[3], st->aux[4] };
+    int (*best_order)[MAX_COLS] = (int (*)[MAX_COLS]) st->key;
     int n_words_found = 0;
 
-    if (cipher_len < 4) {
-        printf("\n\nERROR: ciphertext too short for a columnar solve.\n\n");
-        return ;
-    }
-
-    best_score = shotgun_columnar_climber(cfg, cipher_indices, cipher_len,
-        crib_indices, crib_positions, n_cribs,
-        shared->ngram_data, best_decrypted, best_K, best_order, best_dir, &best_nstages);
-
-    if (best_nstages == 1)
+    if (nstages == 1)
         printf("\ntranscol: single columnar, %d columns, read %s\n",
             best_K[0], best_dir[0] == COL_READ_BT ? "bottom-to-top" : "top-to-bottom");
     else
         printf("\ntranscol2: double columnar, %d x %d columns\n", best_K[0], best_K[1]);
 
     char plaintext_string[MAX_CIPHER_LENGTH];
-    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(best_decrypted[i]);
+    for (int i = 0; i < cipher_len; i++) plaintext_string[i] = index_to_char(decrypted[i]);
     plaintext_string[cipher_len] = '\0';
 
     if (cfg->dictionary_present && shared->dict != NULL) {
@@ -1964,11 +2508,11 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
             shared->n_dict_words, shared->max_dict_word_len);
     }
 
-    printf("\nResult Score: %.2f | Words: %d\n", best_score, n_words_found);
+    printf("\nResult Score: %.2f | Words: %d\n", score, n_words_found);
 
     print_text(cipher_indices, cipher_len);
     printf("\n");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
     printf("%s\n", cribtext_str);
 
@@ -1977,7 +2521,7 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
             if (cribtext_str[i] == '_') {
                 printf("_");
             } else {
-                int diff = abs(best_decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
+                int diff = abs(decrypted[i] - (g_char_to_idx[toupper((unsigned char)cribtext_str[i]) & 127]));
                 if (diff < 10) printf("%d", diff); else printf("*");
             }
         }
@@ -1985,7 +2529,7 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
     printf("\n");
 
     // Recovered column order(s), for reproduction.
-    for (int s = 0; s < best_nstages; s++) {
+    for (int s = 0; s < nstages; s++) {
         printf("stage %d (K=%d, dir=%s) order:", s + 1, best_K[s],
             best_dir[s] == COL_READ_BT ? "bt" : "tb");
         for (int c = 0; c < best_K[s]; c++) printf(" %d", best_order[s][c]);
@@ -1995,17 +2539,48 @@ void solve_columnar(char *ciphertext_str, char *cribtext_str,
 
     // One-liner summary.
     if (cfg->dictionary_present) {
-        printf(">>> %.2f, %d, %d, ", best_score, n_words_found, cfg->cipher_type);
+        printf(">>> %.2f, %d, %d, ", score, n_words_found, cfg->cipher_type);
     } else {
-        printf(">>> %.2f, %d, ", best_score, cfg->cipher_type);
+        printf(">>> %.2f, %d, ", score, cfg->cipher_type);
     }
-    if (best_nstages == 1) printf("%d, ", best_K[0]);
+    if (nstages == 1) printf("%d, ", best_K[0]);
     else printf("%d, %d, ", best_K[0], best_K[1]);
     printf("%s, ", cfg->batch_present ? "BATCH" : cfg->ciphertext_file);
     print_text(cipher_indices, cipher_len);
     printf(", ");
-    print_text(best_decrypted, cipher_len);
+    print_text(decrypted, cipher_len);
     printf("\n");
+}
+
+static const CipherModel COLUMNAR_MODEL = {
+    .name = "columnar",
+    .shape = SHAPE_ANNEAL,
+    .needs_hist = false,
+    .enumerate_configs = columnar_enumerate,
+    .key_len = NULL,
+    .seed = columnar_model_seed,
+    .perturb = columnar_model_perturb,
+    .copy_state = columnar_model_copy,
+    .decrypt = columnar_model_decrypt,
+    .report = columnar_model_report,
+    .report_verbose = columnar_model_report_verbose,
+};
+
+void solve_columnar(char *ciphertext_str, char *cribtext_str,
+    ColossusConfig *cfg, SharedData *shared,
+    int cipher_indices[], int cipher_len,
+    int crib_indices[], int crib_positions[], int n_cribs) {
+
+    (void) ciphertext_str; // ciphertext is carried as cipher_indices.
+
+    if (cipher_len < 4) {
+        printf("\n\nERROR: ciphertext too short for a columnar solve.\n\n");
+        return ;
+    }
+
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    run_solver(&COLUMNAR_MODEL, &ctx);
 }
 
 
@@ -2326,6 +2901,51 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
 // exhaustively rather than hill-climb: for each rail count in [min_cols, max_cols]
 // and every starting phase offset, invert the zigzag with decrypt_railfence and
 // keep the highest-scoring plaintext. -variant swaps the read/write directions.
+// SWEEP model: each (rails, offset) cell is one candidate (key_len 0 => no climb).
+// period = rails, aux[0] = starting phase offset.
+static int railfence_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int lo = max(2, ctx->cfg->min_cols);
+    int hi = min(ctx->cfg->max_cols, ctx->cipher_len - 1);
+    if (hi < lo) hi = lo;
+    int n = 0;
+    for (int rails = lo; rails <= hi; rails++) {
+        int P = 2 * (rails - 1);                 // number of distinct phases
+        for (int offset = 0; offset < P && n < cap; offset++) {
+            out[n].period = rails; out[n].aux[0] = offset; out[n].j = 0; out[n].k = 0;
+            n++;
+        }
+    }
+    return n;
+}
+static int sweep_keylen(const SolverCtx *ctx, const SolverConfig *cc) { (void)ctx; (void)cc; return 0; }
+static void sweep_noop_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) { (void)ctx; (void)cc; (void)st; }
+static void sweep_noop_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) { (void)cc; (void)src; (void)dst; }
+
+static void railfence_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                              int *out, double *adj) {
+    (void) st; (void) adj;
+    decrypt_railfence(ctx->cipher, ctx->cipher_len, cc->period, cc->aux[0],
+        ctx->cfg->variant ? 1 : 0, out);
+}
+static void railfence_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                             double score, int *decrypted) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    printf("\nrailfence: %d rails, starting phase %d%s\n",
+        cc->period, cc->aux[0], variant ? " (variant: read/write swapped)" : "");
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s",
+        cc->period, cc->aux[0], variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const CipherModel RAILFENCE_MODEL = {
+    .name = "railfence", .shape = SHAPE_SHOTGUN, .needs_hist = false,
+    .enumerate_configs = railfence_enumerate, .key_len = sweep_keylen,
+    .seed = sweep_noop_seed, .perturb = NULL, .copy_state = sweep_noop_copy,
+    .decrypt = railfence_decrypt, .report = railfence_report, .report_verbose = NULL,
+};
+
 void solve_railfence(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
@@ -2338,42 +2958,9 @@ void solve_railfence(char *ciphertext_str, char *cribtext_str,
         return ;
     }
 
-    int variant = cfg->variant ? 1 : 0;
-    int lo = max(2, cfg->min_cols);
-    int hi = min(cfg->max_cols, cipher_len - 1);
-    if (hi < lo) hi = lo;
-
-    int decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH];
-    double best_score = 0.0;
-    int best_rails = lo, best_offset = 0;
-    bool have_best = false;
-
-    for (int rails = lo; rails <= hi; rails++) {
-        int P = 2 * (rails - 1);                 // number of distinct phases
-        for (int offset = 0; offset < P; offset++) {
-            decrypt_railfence(cipher_indices, cipher_len, rails, offset, variant, decrypted);
-            double score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                shared->ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-            if (!have_best || score > best_score) {
-                best_score = score; best_rails = rails; best_offset = offset;
-                vec_copy(decrypted, best_decrypted, cipher_len);
-                have_best = true;
-            }
-        }
-    }
-
-    decrypt_railfence(cipher_indices, cipher_len, best_rails, best_offset, variant, best_decrypted);
-
-    printf("\nrailfence: %d rails, starting phase %d%s\n",
-        best_rails, best_offset, variant ? " (variant: read/write swapped)" : "");
-
-    char params[64];
-    snprintf(params, sizeof(params), "rails=%d off=%d%s",
-        best_rails, best_offset, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    run_solver(&RAILFENCE_MODEL, &ctx);
 }
 
 
@@ -2385,6 +2972,52 @@ void solve_railfence(char *ciphertext_str, char *cribtext_str,
 // with a short final row -- by sweeping the column count C and taking R = ceil(len/C)
 // rows (both >= 2), times every route in [0, N_ROUTES); invert each with decrypt_route
 // and keep the best-scoring plaintext. -variant swaps read/write.
+// SWEEP model: sweep column count C (R = ceil(len/C) rows) x route id. period = C,
+// aux[0] = route_id; R is recomputed from C. Subsumes ragged (short final row) grids.
+static int route_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int cipher_len = ctx->cipher_len;
+    int n = 0;
+    for (int C = 2; C <= cipher_len / 2; C++) {
+        int R = (cipher_len + C - 1) / C;
+        if (R < 2) continue;
+        for (int route_id = 0; route_id < N_ROUTES && n < cap; route_id++) {
+            out[n].period = C; out[n].aux[0] = route_id; out[n].j = 0; out[n].k = 0;
+            n++;
+        }
+    }
+    return n;
+}
+static void route_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                          int *out, double *adj) {
+    (void) st; (void) adj;
+    int C = cc->period;
+    int R = (ctx->cipher_len + C - 1) / C;
+    decrypt_route(ctx->cipher, ctx->cipher_len, R, C, cc->aux[0], ctx->cfg->variant ? 1 : 0, out);
+}
+static void route_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                         double score, int *decrypted) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int C = cc->period;
+    int R = (ctx->cipher_len + C - 1) / C;
+    static const char *route_names[N_ROUTES] = {
+        "rows-snake", "cols-snake", "spiral-cw", "spiral-ccw", "diag-snake", "diag" };
+    printf("\nroute: %d x %d grid, route %d (%s)%s\n",
+        R, C, cc->aux[0], route_names[cc->aux[0]],
+        variant ? " (variant: read/write swapped)" : "");
+    char params[64];
+    snprintf(params, sizeof(params), "%dx%d route=%d%s",
+        R, C, cc->aux[0], variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const CipherModel ROUTE_MODEL = {
+    .name = "route", .shape = SHAPE_SHOTGUN, .needs_hist = false,
+    .enumerate_configs = route_enumerate, .key_len = sweep_keylen,
+    .seed = sweep_noop_seed, .perturb = NULL, .copy_state = sweep_noop_copy,
+    .decrypt = route_decrypt, .report = route_report, .report_verbose = NULL,
+};
+
 void solve_route(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
@@ -2397,146 +3030,41 @@ void solve_route(char *ciphertext_str, char *cribtext_str,
         return ;
     }
 
-    int variant = cfg->variant ? 1 : 0;
-
-    int decrypted[MAX_CIPHER_LENGTH], best_decrypted[MAX_CIPHER_LENGTH];
-    double best_score = 0.0;
-    int best_R = 0, best_C = 0, best_route = 0;
-    bool have_best = false;
-
-    // Sweep the column count C; R = ceil(len/C) rows gives the (possibly ragged)
-    // grid with C columns. This subsumes the old "C divides len" complete grids and
-    // adds the ragged ones (short final row) the divisor sweep used to skip.
-    for (int C = 2; C <= cipher_len / 2; C++) {
-        int R = (cipher_len + C - 1) / C;
-        if (R < 2) continue;
-        for (int route_id = 0; route_id < N_ROUTES; route_id++) {
-            decrypt_route(cipher_indices, cipher_len, R, C, route_id, variant, decrypted);
-            double score = state_score(decrypted, cipher_len,
-                crib_indices, crib_positions, n_cribs,
-                shared->ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
-            if (!have_best || score > best_score) {
-                best_score = score; best_R = R; best_C = C; best_route = route_id;
-                vec_copy(decrypted, best_decrypted, cipher_len);
-                have_best = true;
-            }
-        }
-    }
-
-    if (!have_best) {
-        printf("\n\nERROR: ciphertext length %d has no R x C grid (>=2 each) for a route solve.\n\n",
-            cipher_len);
-        return ;
-    }
-
-    decrypt_route(cipher_indices, cipher_len, best_R, best_C, best_route, variant, best_decrypted);
-
-    static const char *route_names[N_ROUTES] = {
-        "rows-snake", "cols-snake", "spiral-cw", "spiral-ccw", "diag-snake", "diag" };
-    printf("\nroute: %d x %d grid, route %d (%s)%s\n",
-        best_R, best_C, best_route, route_names[best_route],
-        variant ? " (variant: read/write swapped)" : "");
-
-    char params[64];
-    snprintf(params, sizeof(params), "%dx%d route=%d%s",
-        best_R, best_C, best_route, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    // For cipher_len >= 4 the C=2 column count always yields an R x C grid with
+    // R, C >= 2, so the enumeration is non-empty (the old "no grid" guard is moot).
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    run_solver(&ROUTE_MODEL, &ctx);
 }
 
 
 // =====================================================================
-//  Shared key-climber for the permutation-style transposition solvers
+//  Shared key-anneal hooks for the permutation-style transposition models
 // =====================================================================
 //
-// Amsco, Myszkowski (and further small-key transposition types) all reduce to
-// hill-climbing a short integer key array with the same scaffold: shotgun
-// restarts, a per-iteration neighbour move, geometric-cooling Metropolis
-// acceptance, and best-state tracking, scored by the shared n-gram state_score.
-// Only the key->plaintext decrypt, the neighbour move, and the restart seeding
-// differ per type, so those are supplied as callbacks while this routine owns the
-// loop. No structure-score guard is needed -- every candidate is a genuine layout.
+// Amsco, Myszkowski, Redefence, Cadenus, Nihilist, Swagman and Grille all reduce
+// to annealing a short integer key (st->key) through the generic engine. Only the
+// key->plaintext decrypt, the neighbour move, the restart seed, the outer parameter
+// sweep and the report differ per type. The move and seed are supplied through a
+// TransKeyOps descriptor (placed in ctx->model_scratch by the solve_ entry point);
+// the decrypt, enumerate and report are per-type hooks. cc->period carries the key
+// length; cc->aux[0..1] carry the fixed per-config parameters (start / offset /
+// readmode / N), with -variant read straight from cfg.
 
 typedef struct {
-    int *cipher;
-    int cipher_len;
-    int *crib_indices;
-    int *crib_positions;
-    int n_cribs;
-    float *ngram_data;
-    ColossusConfig *cfg;
-    int param[4];               // type-specific fixed parameters (e.g. Amsco start/variant)
-} TransAnnealCtx;
+    void (*seed_cb)(int *key, int key_len);
+    void (*move_cb)(int *key, int key_len);
+} TransKeyOps;
 
-typedef void (*trans_decrypt_fn)(const int *key, int key_len, const TransAnnealCtx *ctx, int *out);
-typedef void (*trans_move_fn)(int *key, int key_len);
-typedef void (*trans_seed_fn)(int *key, int key_len);
-
-static double trans_score(const TransAnnealCtx *ctx, int *decrypted) {
-    ColossusConfig *cfg = ctx->cfg;
-    return state_score(decrypted, ctx->cipher_len,
-        ctx->crib_indices, ctx->crib_positions, ctx->n_cribs,
-        ctx->ngram_data, cfg->ngram_size,
-        cfg->weight_ngram, cfg->weight_crib, cfg->weight_ioc, cfg->weight_entropy);
+static void tkey_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
+    ((const TransKeyOps *) ctx->model_scratch)->seed_cb(st->key, cc->period);
 }
-
-// Climb a length-key_len integer key. Returns the best score; writes the best key
-// and its decryption. Caller invokes once per fixed outer parameter (e.g. per K).
-static double transposition_anneal(
-    const TransAnnealCtx *ctx, int key_len,
-    trans_decrypt_fn decrypt, trans_move_fn move, trans_seed_fn seed,
-    int n_restarts, int n_iters,
-    int *best_key, int *best_decrypted) {
-
-    int cur[MAX_TRANS_KEY], loc[MAX_TRANS_KEY];
-    int decrypted[MAX_CIPHER_LENGTH];
-    double best_score = 0.0, current_score, local_score;
-    bool have_best = false;
-
-    // Geometric Metropolis annealing schedule (matches the columnar climber).
-    const double temp_start = 0.10, temp_min = 0.001;
-    double cooling = 1.0;
-    if (n_iters > 1)
-        cooling = pow(temp_min / temp_start, 1.0 / (double)(n_iters - 1));
-
-    for (int rs = 0; rs < n_restarts; rs++) {
-
-        if (have_best && frand() < ctx->cfg->backtracking_probability) {
-            for (int i = 0; i < key_len; i++) cur[i] = best_key[i];   // refine the best
-        } else {
-            seed(cur, key_len);                                       // fresh restart
-        }
-        decrypt(cur, key_len, ctx, decrypted);
-        current_score = trans_score(ctx, decrypted);
-
-        if (!have_best || current_score > best_score) {
-            best_score = current_score; have_best = true;
-            for (int i = 0; i < key_len; i++) best_key[i] = cur[i];
-        }
-
-        double temp = temp_start;
-        for (int it = 0; it < n_iters; it++) {
-            for (int i = 0; i < key_len; i++) loc[i] = cur[i];
-            move(loc, key_len);
-            decrypt(loc, key_len, ctx, decrypted);
-            local_score = trans_score(ctx, decrypted);
-
-            double delta = local_score - current_score;
-            if (delta > 0.0 || frand() < exp(delta / temp)) {
-                for (int i = 0; i < key_len; i++) cur[i] = loc[i];
-                current_score = local_score;
-                if (current_score > best_score) {
-                    best_score = current_score;
-                    for (int i = 0; i < key_len; i++) best_key[i] = cur[i];
-                }
-            }
-            temp *= cooling;
-        }
-    }
-
-    decrypt(best_key, key_len, ctx, best_decrypted);   // materialise the winning plaintext
-    return best_score;
+static void tkey_perturb(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st, bool *fp) {
+    (void) fp;
+    ((const TransKeyOps *) ctx->model_scratch)->move_cb(st->key, cc->period);
+}
+static void tkey_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
+    for (int i = 0; i < cc->period; i++) dst->key[i] = src->key[i];
 }
 
 // Neighbour move shared by the permutation-key types (swap dominant, with short
@@ -2579,73 +3107,65 @@ static void perm_seed(int *key, int K) {
 //  Amsco solver (TYPE amsco)
 // =====================================================================
 
-static void amsco_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    decrypt_amsco(ctx->cipher, ctx->cipher_len, key_len, (int *)key,
-        ctx->param[0] /* start */, ctx->param[1] /* variant */, out);
+// period = K (column count = key length); aux[0] = start-chunk (1 or 2).
+static int amsco_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int lo = max(2, ctx->cfg->min_cols), hi = min(ctx->cfg->max_cols, ctx->cipher_len / 2);
+    if (hi < lo) hi = lo;
+    int n = 0;
+    for (int K = lo; K <= hi; K++)
+        for (int start = 1; start <= 2 && n < cap; start++) {
+            out[n].period = K; out[n].aux[0] = start; out[n].j = 0; out[n].k = 0;
+            n++;
+        }
+    return n;
 }
+static void amsco_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                          int *out, double *adj) {
+    (void) adj;
+    decrypt_amsco(ctx->cipher, ctx->cipher_len, cc->period, st->key,
+        cc->aux[0] /* start */, ctx->cfg->variant ? 1 : 0, out);
+}
+static void amsco_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                         double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int K = cc->period, start = cc->aux[0];
+    printf("\namsco: %d columns, start-chunk %d%s\norder:", K, start,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < K; c++) printf(" %d", st->key[c]);
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d start=%d%s", K, start, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps AMSCO_OPS = { perm_seed, perm_move };
+static const CipherModel AMSCO_MODEL = {
+    .name = "amsco", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = amsco_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = amsco_decrypt, .report = amsco_report, .report_verbose = NULL,
+};
 
-// Sweep the column count K and the start-chunk (1 or 2); for each, climb the
-// column order with the shared annealer and keep the best plaintext.
 void solve_amsco(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
     (void) ciphertext_str;
-
     if (cipher_len < 4) {
         printf("\n\nERROR: ciphertext too short for an Amsco solve.\n\n");
         return ;
     }
-
-    int variant = cfg->variant ? 1 : 0;
-    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len / 2);
-    if (hi < lo) hi = lo;
-
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_COLS], cur_key[MAX_COLS];
-    double best_score = 0.0;
-    int best_K = lo, best_start = 1;
-    bool have_best = false;
-
-    for (int K = lo; K <= hi; K++) {
-        for (int start = 1; start <= 2; start++) {
-            ctx.param[0] = start; ctx.param[1] = variant;
-            double sc = transposition_anneal(&ctx, K, amsco_decrypt_cb, perm_move, perm_seed,
-                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
-            if (!have_best || sc > best_score) {
-                best_score = sc; best_K = K; best_start = start; have_best = true;
-                for (int i = 0; i < K; i++) best_key[i] = cur_key[i];
-                vec_copy(cur_decrypted, best_decrypted, cipher_len);
-            }
-        }
-    }
-
-    printf("\namsco: %d columns, start-chunk %d%s\norder:", best_K, best_start,
-        variant ? " (variant: read/write swapped)" : "");
-    for (int c = 0; c < best_K; c++) printf(" %d", best_key[c]);
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "K=%d start=%d%s", best_K, best_start, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &AMSCO_OPS;
+    run_solver(&AMSCO_MODEL, &ctx);
 }
 
 
 // =====================================================================
 //  Myszkowski solver (TYPE myszkowski)
 // =====================================================================
-
-static void mysz_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    decrypt_myszkowski(ctx->cipher, ctx->cipher_len, key_len, (int *)key,
-        ctx->param[0] /* variant */, out);
-}
 
 // Rank-vector neighbour move: swap two ranks (reorder), copy one rank onto another
 // (merge -> create a tie), or relabel one column (split). This explores both the
@@ -2665,57 +3185,59 @@ static void mysz_move(int *key, int K) {
     }
 }
 
-// Sweep the column count K; for each, climb the per-column rank vector with the
-// shared annealer and keep the best plaintext.
+// period = K (column count = rank-vector length). Seeds a random permutation
+// (distinct ranks -> columnar); mysz_move then introduces ties.
+static int mysz_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int lo = max(2, ctx->cfg->min_cols), hi = min(ctx->cfg->max_cols, ctx->cipher_len / 2);
+    if (hi < lo) hi = lo;
+    int n = 0;
+    for (int K = lo; K <= hi && n < cap; K++) {
+        out[n].period = K; out[n].j = 0; out[n].k = 0;
+        n++;
+    }
+    return n;
+}
+static void mysz_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                         int *out, double *adj) {
+    (void) adj;
+    decrypt_myszkowski(ctx->cipher, ctx->cipher_len, cc->period, st->key,
+        ctx->cfg->variant ? 1 : 0, out);
+}
+static void mysz_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                        double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int K = cc->period;
+    printf("\nmyszkowski: %d columns%s\nranks:", K,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < K; c++) printf(" %d", st->key[c]);
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", K, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps MYSZ_OPS = { perm_seed, mysz_move };
+static const CipherModel MYSZKOWSKI_MODEL = {
+    .name = "myszkowski", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = mysz_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = mysz_decrypt, .report = mysz_report, .report_verbose = NULL,
+};
+
 void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
     (void) ciphertext_str;
-
     if (cipher_len < 4) {
         printf("\n\nERROR: ciphertext too short for a Myszkowski solve.\n\n");
         return ;
     }
-
-    int variant = cfg->variant ? 1 : 0;
-    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len / 2);
-    if (hi < lo) hi = lo;
-
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
-    ctx.param[0] = variant;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_COLS], cur_key[MAX_COLS];
-    double best_score = 0.0;
-    int best_K = lo;
-    bool have_best = false;
-
-    for (int K = lo; K <= hi; K++) {
-        // Myszkowski seeds as a random permutation (distinct ranks -> columnar);
-        // the rank move set then introduces ties. perm_seed supplies that.
-        double sc = transposition_anneal(&ctx, K, mysz_decrypt_cb, mysz_move, perm_seed,
-            cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
-        if (!have_best || sc > best_score) {
-            best_score = sc; best_K = K; have_best = true;
-            for (int i = 0; i < K; i++) best_key[i] = cur_key[i];
-            vec_copy(cur_decrypted, best_decrypted, cipher_len);
-        }
-    }
-
-    printf("\nmyszkowski: %d columns%s\nranks:", best_K,
-        variant ? " (variant: read/write swapped)" : "");
-    for (int c = 0; c < best_K; c++) printf(" %d", best_key[c]);
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "K=%d%s", best_K, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &MYSZ_OPS;
+    run_solver(&MYSZKOWSKI_MODEL, &ctx);
 }
 
 
@@ -2733,13 +3255,47 @@ static int exact_isqrt(int x) {
 //  Redefence solver (TYPE redefence)
 // =====================================================================
 
-static void redefence_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    decrypt_redefence(ctx->cipher, ctx->cipher_len, key_len /* rails */,
-        ctx->param[0] /* offset */, (int *)key, ctx->param[1] /* variant */, out);
+// period = rails (rail read-order permutation length); aux[0] = starting phase.
+static int redefence_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int lo = max(2, ctx->cfg->min_cols), hi = min(ctx->cfg->max_cols, ctx->cipher_len - 1);
+    if (hi < lo) hi = lo;
+    int n = 0;
+    for (int rails = lo; rails <= hi; rails++) {
+        int P = 2 * (rails - 1);
+        for (int offset = 0; offset < P && n < cap; offset++) {
+            out[n].period = rails; out[n].aux[0] = offset; out[n].j = 0; out[n].k = 0;
+            n++;
+        }
+    }
+    return n;
 }
+static void redefence_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                              int *out, double *adj) {
+    (void) adj;
+    decrypt_redefence(ctx->cipher, ctx->cipher_len, cc->period /* rails */,
+        cc->aux[0] /* offset */, st->key, ctx->cfg->variant ? 1 : 0, out);
+}
+static void redefence_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                             double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int rails = cc->period, offset = cc->aux[0];
+    printf("\nredefence: %d rails, phase %d%s\norder:", rails, offset,
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < rails; c++) printf(" %d", st->key[c]);
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "rails=%d off=%d%s", rails, offset, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps REDEFENCE_OPS = { perm_seed, perm_move };
+static const CipherModel REDEFENCE_MODEL = {
+    .name = "redefence", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = redefence_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = redefence_decrypt, .report = redefence_report, .report_verbose = NULL,
+};
 
-// Sweep rail count and starting phase; for each, climb the rail read-order
-// permutation with the shared annealer.
 void solve_redefence(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
@@ -2747,44 +3303,10 @@ void solve_redefence(char *ciphertext_str, char *cribtext_str,
 
     (void) ciphertext_str;
     if (cipher_len < 4) { printf("\n\nERROR: ciphertext too short for a redefence solve.\n\n"); return; }
-
-    int variant = cfg->variant ? 1 : 0;
-    int lo = max(2, cfg->min_cols), hi = min(cfg->max_cols, cipher_len - 1);
-    if (hi < lo) hi = lo;
-
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
-    double best_score = 0.0; int best_rails = lo, best_offset = 0;
-    bool have_best = false;
-
-    for (int rails = lo; rails <= hi; rails++) {
-        int P = 2 * (rails - 1);
-        for (int offset = 0; offset < P; offset++) {
-            ctx.param[0] = offset; ctx.param[1] = variant;
-            double sc = transposition_anneal(&ctx, rails, redefence_decrypt_cb, perm_move, perm_seed,
-                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
-            if (!have_best || sc > best_score) {
-                best_score = sc; best_rails = rails; best_offset = offset; have_best = true;
-                for (int i = 0; i < rails; i++) best_key[i] = cur_key[i];
-                vec_copy(cur_decrypted, best_decrypted, cipher_len);
-            }
-        }
-    }
-
-    printf("\nredefence: %d rails, phase %d%s\norder:", best_rails, best_offset,
-        variant ? " (variant: read/write swapped)" : "");
-    for (int c = 0; c < best_rails; c++) printf(" %d", best_key[c]);
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "rails=%d off=%d%s", best_rails, best_offset, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &REDEFENCE_OPS;
+    run_solver(&REDEFENCE_MODEL, &ctx);
 }
 
 
@@ -2796,11 +3318,6 @@ void solve_redefence(char *ciphertext_str, char *cribtext_str,
 // permutation, key[K..2K-1] is the per-column upward rotation in [0,25). Decoupling
 // them lets the search subsume any keyword/alphabet convention.
 
-static void cadenus_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    int K = key_len / 2;
-    decrypt_cadenus(ctx->cipher, ctx->cipher_len, K, (int *)key, (int *)key + K,
-        ctx->param[0] /* variant */, out);
-}
 static void cadenus_seed(int *key, int key_len) {
     int K = key_len / 2;
     for (int i = 0; i < K; i++) key[i] = i;
@@ -2813,42 +3330,61 @@ static void cadenus_move(int *key, int key_len) {
     else key[K + rand_int(0, K)] = rand_int(0, 25);              // re-rotate one column
 }
 
+// Single config: K = len/25 columns, period = 2K packs column order + rotations.
+static int cadenus_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    (void) cap;
+    int len = ctx->cipher_len;
+    if (len % 25 != 0) {
+        printf("\n\nERROR: Cadenus needs a length that is a multiple of 25 (got %d).\n\n", len);
+        return 0;
+    }
+    int K = len / 25;
+    if (K < 2 || 2 * K > MAX_TRANS_KEY) {
+        printf("\n\nERROR: Cadenus column count %d out of range.\n\n", K);
+        return 0;
+    }
+    out[0].period = 2 * K; out[0].j = 0; out[0].k = 0;
+    return 1;
+}
+static void cadenus_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                            int *out, double *adj) {
+    (void) adj;
+    int K = cc->period / 2;
+    decrypt_cadenus(ctx->cipher, ctx->cipher_len, K, st->key, st->key + K,
+        ctx->cfg->variant ? 1 : 0, out);
+}
+static void cadenus_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                           double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int K = cc->period / 2;
+    printf("\ncadenus: %d columns x 25 rows%s\norder:", K, variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < K; c++) printf(" %d", st->key[c]);
+    printf("\nrot:");
+    for (int c = 0; c < K; c++) printf(" %d", st->key[K + c]);
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "K=%d%s", K, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps CADENUS_OPS = { cadenus_seed, cadenus_move };
+static const CipherModel CADENUS_MODEL = {
+    .name = "cadenus", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = cadenus_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = cadenus_decrypt, .report = cadenus_report, .report_verbose = NULL,
+};
+
 void solve_cadenus(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
     (void) ciphertext_str;
-    if (cipher_len % 25 != 0) {
-        printf("\n\nERROR: Cadenus needs a length that is a multiple of 25 (got %d).\n\n", cipher_len);
-        return;
-    }
-    int K = cipher_len / 25;
-    if (K < 2 || 2 * K > MAX_TRANS_KEY) {
-        printf("\n\nERROR: Cadenus column count %d out of range.\n\n", K);
-        return;
-    }
-
-    int variant = cfg->variant ? 1 : 0;
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg; ctx.param[0] = variant;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], best_key[MAX_TRANS_KEY];
-    double best_score = transposition_anneal(&ctx, 2 * K, cadenus_decrypt_cb, cadenus_move, cadenus_seed,
-        cfg->n_restarts, cfg->n_hill_climbs, best_key, best_decrypted);
-
-    printf("\ncadenus: %d columns x 25 rows%s\norder:", K, variant ? " (variant: read/write swapped)" : "");
-    for (int c = 0; c < K; c++) printf(" %d", best_key[c]);
-    printf("\nrot:");
-    for (int c = 0; c < K; c++) printf(" %d", best_key[K + c]);
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "K=%d%s", K, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &CADENUS_OPS;
+    run_solver(&CADENUS_MODEL, &ctx);
 }
 
 
@@ -2858,11 +3394,6 @@ void solve_cadenus(char *ciphertext_str, char *cribtext_str,
 
 // The climbed key packs the row permutation (first N) and column permutation
 // (second N) of the N x N grid; readmode (row/column-major read-off) is swept.
-static void nihilist_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    int N = key_len / 2;
-    decrypt_nihilist(ctx->cipher, ctx->cipher_len, N, (int *)key, (int *)key + N,
-        ctx->param[1] /* readmode */, ctx->param[0] /* variant */, out);
-}
 static void nihilist_seed(int *key, int key_len) {   // two independent permutations
     int N = key_len / 2;
     for (int i = 0; i < N; i++) key[i] = i;
@@ -2876,52 +3407,61 @@ static void nihilist_move(int *key, int key_len) {   // perturb one of the two h
     else perm_move(key + N, N);
 }
 
+// N = sqrt(len); period = 2N packs row + column permutations. aux[0] = readmode.
+static int nihilist_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    (void) cap;
+    int N = exact_isqrt(ctx->cipher_len);
+    if (N < 2) {
+        printf("\n\nERROR: Nihilist transposition needs a perfect-square length (got %d).\n\n", ctx->cipher_len);
+        return 0;
+    }
+    for (int readmode = 0; readmode <= 1; readmode++) {
+        out[readmode].period = 2 * N; out[readmode].aux[0] = readmode;
+        out[readmode].j = 0; out[readmode].k = 0;
+    }
+    return 2;
+}
+static void nihilist_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                             int *out, double *adj) {
+    (void) adj;
+    int N = cc->period / 2;
+    decrypt_nihilist(ctx->cipher, ctx->cipher_len, N, st->key, st->key + N,
+        cc->aux[0] /* readmode */, ctx->cfg->variant ? 1 : 0, out);
+}
+static void nihilist_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                            double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int N = cc->period / 2, readmode = cc->aux[0];
+    printf("\nnihilist: %d x %d grid, read %s%s\nrows:", N, N,
+        readmode ? "column-major" : "row-major",
+        variant ? " (variant: read/write swapped)" : "");
+    for (int c = 0; c < N; c++) printf(" %d", st->key[c]);
+    printf("\ncols:");
+    for (int c = 0; c < N; c++) printf(" %d", st->key[N + c]);
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s", N, readmode, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps NIHILIST_OPS = { nihilist_seed, nihilist_move };
+static const CipherModel NIHILIST_MODEL = {
+    .name = "nihilist", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = nihilist_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = nihilist_decrypt, .report = nihilist_report, .report_verbose = NULL,
+};
+
 void solve_nihilist(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
     (void) ciphertext_str;
-    int N = exact_isqrt(cipher_len);
-    if (N < 2) {
-        printf("\n\nERROR: Nihilist transposition needs a perfect-square length (got %d).\n\n", cipher_len);
-        return;
-    }
-
-    int variant = cfg->variant ? 1 : 0;
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg; ctx.param[0] = variant;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
-    double best_score = 0.0; int best_readmode = 0;
-    bool have_best = false;
-
-    for (int readmode = 0; readmode <= 1; readmode++) {
-        ctx.param[1] = readmode;
-        double sc = transposition_anneal(&ctx, 2 * N, nihilist_decrypt_cb, nihilist_move, nihilist_seed,
-            cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
-        if (!have_best || sc > best_score) {
-            best_score = sc; best_readmode = readmode; have_best = true;
-            for (int i = 0; i < 2 * N; i++) best_key[i] = cur_key[i];
-            vec_copy(cur_decrypted, best_decrypted, cipher_len);
-        }
-    }
-
-    printf("\nnihilist: %d x %d grid, read %s%s\nrows:", N, N,
-        best_readmode ? "column-major" : "row-major",
-        variant ? " (variant: read/write swapped)" : "");
-    for (int c = 0; c < N; c++) printf(" %d", best_key[c]);
-    printf("\ncols:");
-    for (int c = 0; c < N; c++) printf(" %d", best_key[N + c]);
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "N=%d read=%d%s", N, best_readmode, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &NIHILIST_OPS;
+    run_solver(&NIHILIST_MODEL, &ctx);
 }
 
 
@@ -2929,11 +3469,6 @@ void solve_nihilist(char *ciphertext_str, char *cribtext_str,
 //  Swagman solver (TYPE swagman) -- sweep N in [3,7] x read-off mode
 // =====================================================================
 
-static void swagman_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    int N = exact_isqrt(key_len);
-    decrypt_swagman(ctx->cipher, ctx->cipher_len, N, (int *)key,
-        ctx->param[0] /* readmode */, ctx->param[1] /* variant */, out);
-}
 static void swagman_seed(int *key, int key_len) {
     int N = exact_isqrt(key_len);
     int col[8];
@@ -2949,6 +3484,49 @@ static void swagman_move(int *key, int key_len) {
     int t = key[r1 * N + j]; key[r1 * N + j] = key[r2 * N + j]; key[r2 * N + j] = t;
 }
 
+// Sweep N in [3,7] (len % N == 0) x readmode; period = N*N is the key-square length.
+static int swagman_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    int n = 0;
+    for (int N = 3; N <= 7; N++) {
+        if (ctx->cipher_len % N != 0) continue;       // need N equal-length rows
+        for (int readmode = 0; readmode <= 1 && n < cap; readmode++) {
+            out[n].period = N * N; out[n].aux[0] = readmode; out[n].j = 0; out[n].k = 0;
+            n++;
+        }
+    }
+    if (n == 0)
+        printf("\n\nERROR: no Swagman period in [3,7] divides length %d.\n\n", ctx->cipher_len);
+    return n;
+}
+static void swagman_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                            int *out, double *adj) {
+    (void) adj;
+    int N = exact_isqrt(cc->period);
+    decrypt_swagman(ctx->cipher, ctx->cipher_len, N, st->key,
+        cc->aux[0] /* readmode */, ctx->cfg->variant ? 1 : 0, out);
+}
+static void swagman_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                           double score, int *decrypted) {
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int N = exact_isqrt(cc->period), readmode = cc->aux[0];
+    printf("\nswagman: %dx%d key square, read %s%s\nsquare:",
+        N, N, readmode ? "column-major" : "row-major",
+        variant ? " (variant: read/write swapped)" : "");
+    for (int r = 0; r < N; r++) { printf("\n  "); for (int j = 0; j < N; j++) printf("%d ", st->key[r * N + j]); }
+    printf("\n");
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d read=%d%s", N, readmode, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps SWAGMAN_OPS = { swagman_seed, swagman_move };
+static const CipherModel SWAGMAN_MODEL = {
+    .name = "swagman", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = swagman_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = swagman_decrypt, .report = swagman_report, .report_verbose = NULL,
+};
+
 void solve_swagman(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
@@ -2956,44 +3534,10 @@ void solve_swagman(char *ciphertext_str, char *cribtext_str,
 
     (void) ciphertext_str;
     if (cipher_len < 9) { printf("\n\nERROR: ciphertext too short for a Swagman solve.\n\n"); return; }
-
-    int variant = cfg->variant ? 1 : 0;
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], cur_decrypted[MAX_CIPHER_LENGTH];
-    int best_key[MAX_TRANS_KEY], cur_key[MAX_TRANS_KEY];
-    double best_score = 0.0; int best_N = 0, best_readmode = 0;
-    bool have_best = false;
-
-    for (int N = 3; N <= 7; N++) {
-        if (cipher_len % N != 0) continue;            // need N equal-length rows
-        for (int readmode = 0; readmode <= 1; readmode++) {
-            ctx.param[0] = readmode; ctx.param[1] = variant;
-            double sc = transposition_anneal(&ctx, N * N, swagman_decrypt_cb, swagman_move, swagman_seed,
-                cfg->n_restarts, cfg->n_hill_climbs, cur_key, cur_decrypted);
-            if (!have_best || sc > best_score) {
-                best_score = sc; best_N = N; best_readmode = readmode; have_best = true;
-                for (int i = 0; i < N * N; i++) best_key[i] = cur_key[i];
-                vec_copy(cur_decrypted, best_decrypted, cipher_len);
-            }
-        }
-    }
-
-    if (!have_best) { printf("\n\nERROR: no Swagman period in [3,7] divides length %d.\n\n", cipher_len); return; }
-
-    printf("\nswagman: %dx%d key square, read %s%s\nsquare:",
-        best_N, best_N, best_readmode ? "column-major" : "row-major",
-        variant ? " (variant: read/write swapped)" : "");
-    for (int r = 0; r < best_N; r++) { printf("\n  "); for (int j = 0; j < best_N; j++) printf("%d ", best_key[r * best_N + j]); }
-    printf("\n");
-
-    char params[64];
-    snprintf(params, sizeof(params), "N=%d read=%d%s", best_N, best_readmode, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &SWAGMAN_OPS;
+    run_solver(&SWAGMAN_MODEL, &ctx);
 }
 
 
@@ -3001,11 +3545,6 @@ void solve_swagman(char *ciphertext_str, char *cribtext_str,
 //  Turning-grille solver (TYPE grille) -- N = sqrt(len)
 // =====================================================================
 
-static void grille_decrypt_cb(const int *key, int key_len, const TransAnnealCtx *ctx, int *out) {
-    (void) key_len;
-    decrypt_grille(ctx->cipher, ctx->cipher_len, ctx->param[1] /* N */, (int *)key,
-        ctx->param[0] /* variant */, out, NULL);
-}
 static void grille_seed(int *key, int key_len) {
     for (int i = 0; i < key_len; i++) key[i] = rand_int(0, 4);   // each orbit: which of 4 turns
 }
@@ -3013,618 +3552,63 @@ static void grille_move(int *key, int key_len) {
     key[rand_int(0, key_len)] = rand_int(0, 4);
 }
 
+// Single config: N = sqrt(len); period = n_orbits (probed) is the key length;
+// aux[0] = N (decrypt_grille needs the grid size).
+static int grille_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) {
+    (void) cap;
+    int N = exact_isqrt(ctx->cipher_len);
+    if (N < 2) {
+        printf("\n\nERROR: turning grille needs a perfect-square length (got %d).\n\n", ctx->cipher_len);
+        return 0;
+    }
+    // Discover the orbit count (the climbed key length) for this N via a probe.
+    int n_orbits = 0, tmp_key[MAX_TRANS_KEY] = {0}, tmp_out[MAX_CIPHER_LENGTH];
+    decrypt_grille(ctx->cipher, ctx->cipher_len, N, tmp_key, 0, tmp_out, &n_orbits);
+    if (n_orbits < 1 || n_orbits > MAX_TRANS_KEY) {
+        printf("\n\nERROR: grille orbit count %d out of range for N=%d.\n\n", n_orbits, N);
+        return 0;
+    }
+    out[0].period = n_orbits; out[0].aux[0] = N; out[0].j = 0; out[0].k = 0;
+    return 1;
+}
+static void grille_decrypt(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st,
+                           int *out, double *adj) {
+    (void) adj;
+    decrypt_grille(ctx->cipher, ctx->cipher_len, cc->aux[0] /* N */, st->key,
+        ctx->cfg->variant ? 1 : 0, out, NULL);
+}
+static void grille_report(const SolverCtx *ctx, const SolverConfig *cc, const SolverState *st,
+                          double score, int *decrypted) {
+    (void) st;
+    int variant = ctx->cfg->variant ? 1 : 0;
+    int N = cc->aux[0];
+    printf("\ngrille: %d x %d, %d orbits%s\n", N, N, cc->period,
+        variant ? " (variant: read/write swapped)" : "");
+    char params[64];
+    snprintf(params, sizeof(params), "N=%d%s", N, variant ? " var" : "");
+    report_transposition(ctx->cfg, ctx->shared, ctx->cipher, ctx->cipher_len, decrypted,
+        score, ctx->cribtext, ctx->n_cribs, params);
+}
+static const TransKeyOps GRILLE_OPS = { grille_seed, grille_move };
+static const CipherModel GRILLE_MODEL = {
+    .name = "grille", .shape = SHAPE_ANNEAL, .needs_hist = false,
+    .enumerate_configs = grille_enumerate, .key_len = NULL,
+    .seed = tkey_seed, .perturb = tkey_perturb, .copy_state = tkey_copy,
+    .decrypt = grille_decrypt, .report = grille_report, .report_verbose = NULL,
+};
+
 void solve_grille(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs) {
 
     (void) ciphertext_str;
-    int N = exact_isqrt(cipher_len);
-    if (N < 2) {
-        printf("\n\nERROR: turning grille needs a perfect-square length (got %d).\n\n", cipher_len);
-        return;
-    }
-
-    // Discover the orbit count (the climbed key length) for this N.
-    int n_orbits = 0, tmp_key[MAX_TRANS_KEY] = {0}, tmp_out[MAX_CIPHER_LENGTH];
-    decrypt_grille(cipher_indices, cipher_len, N, tmp_key, 0, tmp_out, &n_orbits);
-    if (n_orbits < 1 || n_orbits > MAX_TRANS_KEY) {
-        printf("\n\nERROR: grille orbit count %d out of range for N=%d.\n\n", n_orbits, N);
-        return;
-    }
-
-    int variant = cfg->variant ? 1 : 0;
-    TransAnnealCtx ctx;
-    ctx.cipher = cipher_indices; ctx.cipher_len = cipher_len;
-    ctx.crib_indices = crib_indices; ctx.crib_positions = crib_positions; ctx.n_cribs = n_cribs;
-    ctx.ngram_data = shared->ngram_data; ctx.cfg = cfg;
-    ctx.param[0] = variant; ctx.param[1] = N;
-
-    int best_decrypted[MAX_CIPHER_LENGTH], best_key[MAX_TRANS_KEY];
-    double best_score = transposition_anneal(&ctx, n_orbits, grille_decrypt_cb, grille_move, grille_seed,
-        cfg->n_restarts, cfg->n_hill_climbs, best_key, best_decrypted);
-
-    printf("\ngrille: %d x %d, %d orbits%s\n", N, N, n_orbits,
-        variant ? " (variant: read/write swapped)" : "");
-
-    char params[64];
-    snprintf(params, sizeof(params), "N=%d%s", N, variant ? " var" : "");
-    report_transposition(cfg, shared, cipher_indices, cipher_len, best_decrypted,
-        best_score, cribtext_str, n_cribs, params);
+    SolverCtx ctx = make_solver_ctx(cfg, shared, cribtext_str,
+        cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+    ctx.model_scratch = (void *) &GRILLE_OPS;
+    run_solver(&GRILLE_MODEL, &ctx);
 }
 
-
-// Hill Climber
-
-double shotgun_hill_climber(
-    ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len, 
-    int crib_indices[], int crib_positions[], int n_cribs,
-    int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
-    float *ngram_data,
-    int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
-    int ciphertext_keyword[ALPHABET_SIZE], int cycleword[MAX_CYCLEWORD_LEN]) {
-
-    int i, j, k, n, indx, offset, n_iterations, n_backtracks, n_explore, n_contradictions;
-    int local_plaintext_keyword_state[ALPHABET_SIZE], current_plaintext_keyword_state[ALPHABET_SIZE]; 
-    int local_ciphertext_keyword_state[ALPHABET_SIZE], current_ciphertext_keyword_state[ALPHABET_SIZE]; 
-    int best_plaintext_keyword_state[ALPHABET_SIZE], best_ciphertext_keyword_state[ALPHABET_SIZE];
-    int local_cycleword_state[MAX_CYCLEWORD_LEN], current_cycleword_state[MAX_CYCLEWORD_LEN]; 
-    int best_cycleword_state[MAX_CYCLEWORD_LEN];
-
-    double start_time, elapsed, n_iter_per_sec, best_score, local_score, current_score;
-    double ioc, chi, entropy_score;
-    bool perturbate_keyword_p, contradiction;
-
-    bool is_autokey = (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_4) ||
-                      (cfg->cipher_type == AUTOKEY_BEAU) || (cfg->cipher_type == AUTOKEY_PORTA);
-
-    n_iterations = 0;
-    n_backtracks = 0;
-    n_explore = 0;
-    n_contradictions = 0;
-    start_time = clock();
-
-    best_score = 0.;
-
-    // Per-column ciphertext histogram for the optimal-cycleword solver. It
-    // depends only on the (fixed) ciphertext and this cycleword_len, so build it
-    // once here rather than on every derive_optimal_cycleword call. Layout:
-    // hist_by_col[col*ALPHABET_SIZE + c] = count of cipher char c in column col.
-    static int hist_by_col[MAX_CYCLEWORD_LEN * ALPHABET_SIZE];
-    int *hist_arg = NULL;
-    if (cfg->optimal_cycleword && !is_autokey) {
-        for (i = 0; i < cycleword_len * ALPHABET_SIZE; i++) hist_by_col[i] = 0;
-        int cw_idx = 0;
-        for (i = 0; i < cipher_len; i++) {
-            hist_by_col[cw_idx * ALPHABET_SIZE + cipher_indices[i]]++;
-            if (++cw_idx == cycleword_len) cw_idx = 0;
-        }
-        hist_arg = hist_by_col;
-    }
-
-    // Vigenere/Beaufort/Porta in optimal-cycleword mode use FIXED straight
-    // alphabets and a deterministically-derived cycleword, so every restart and
-    // every hill-climb iteration recomputes the identical state and score. The
-    // full loop therefore just repeats restart 0 / iteration 0's result. Detect
-    // this and stop as soon as that best is recorded -- the reported best state
-    // (and verbose output, which only fires on the first improvement) is
-    // bit-for-bit what the full loop would have produced. (same_key_cycle ties
-    // the cycleword to the keyword and breaks the determinism, so exclude it.)
-    bool deterministic_optimal = cfg->optimal_cycleword && !is_autokey &&
-        !cfg->same_key_cycle &&
-        (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT ||
-         cfg->cipher_type == PORTA);
-    bool det_done = false;
-
-    for (n = 0; n < cfg->n_restarts; n++) {
-
-        if (best_score > 0. && frand() < cfg->backtracking_probability) {
-            // Backtrack to best state. 
-            n_backtracks += 1;
-            current_score = best_score;
-            vec_copy(best_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
-            vec_copy(best_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-            vec_copy(best_cycleword_state, current_cycleword_state, cycleword_len);
-        } else {
-            // Initialise random state.
-            switch (cfg->cipher_type) {
-                case VIGENERE:
-                    // Vigenere uses straight alphabets for PT/CT keywords, and the key is the cycleword.
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);                    
-                    break ;
-                case QUAGMIRE_1:
-                    // PT keyword is scrambled, CT is straight.
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ;
-                case QUAGMIRE_2:
-                    // PT straight, CT scrambled
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    if (cfg->user_ciphertext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
-                    } else {
-                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                    }
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ;
-                case QUAGMIRE_3:
-                    // PT and CT are the same scrambled alphabet
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else if (cfg->user_ciphertext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ;
-                case QUAGMIRE_4:
-                    // PT and CT are different scrambled alphabets
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    
-                    if (cfg->user_ciphertext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
-                    } else {
-                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                    }
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ;
-                case BEAUFORT:
-                    plaintext_keyword_len = g_alpha;
-                    ciphertext_keyword_len = g_alpha;
-                    for (i = 0; i < g_alpha; i++) current_plaintext_keyword_state[i] = i;
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ; 
-                case PORTA: 
-                    // Porta uses straight alphabets (fixed) for PT/CT keywords.
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break ;
-                case AUTOKEY_0:
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                case AUTOKEY_1:
-                    // Keyed PT, Straight CT
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                case AUTOKEY_2:
-                    // Straight PT, Keyed CT
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    if (cfg->user_ciphertext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
-                    } else {
-                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                    }
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                case AUTOKEY_3:
-                    // Same keyed PT & CT
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else if (cfg->user_ciphertext_keyword_present) {
-                         // FIX: Allow ciphertext keyword to set the shared key state
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                case AUTOKEY_4:
-                    // Diff keyed PT & CT
-                    if (cfg->user_plaintext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_plaintext_keyword, current_plaintext_keyword_state);
-                    } else {
-                        random_keyword(current_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                    }
-                    if (cfg->user_ciphertext_keyword_present) {
-                        make_keyed_alphabet(cfg->user_ciphertext_keyword, current_ciphertext_keyword_state);
-                    } else {
-                        random_keyword(current_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                    }
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                case AUTOKEY_BEAU:
-                case AUTOKEY_PORTA:
-                    plaintext_keyword_len = g_alpha;
-                    ciphertext_keyword_len = g_alpha;
-                    // Both use standard straight alphabets for the underlying tableau.
-                    straight_alphabet(current_plaintext_keyword_state, g_alpha);
-                    straight_alphabet(current_ciphertext_keyword_state, g_alpha);
-                    // The "cycleword" here is actually the primer.
-                    random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
-                    break;
-                }
-
-            if (cfg->same_key_cycle) {
-                vec_copy(current_plaintext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                vec_copy(current_ciphertext_keyword_state, current_cycleword_state, g_alpha);
-            }
-
-            // If in optimal mode, fix the cycleword immediately for the initial random state
-            if (cfg->optimal_cycleword && ! is_autokey) {
-                derive_optimal_cycleword(cfg, cipher_indices, cipher_len,
-                    current_plaintext_keyword_state, current_ciphertext_keyword_state,
-                    current_cycleword_state, cycleword_len, hist_arg);
-            }
-
-            decrypt_state(cfg, cipher_indices, cipher_len, 
-                current_plaintext_keyword_state, current_ciphertext_keyword_state, 
-                current_cycleword_state, cycleword_len, decrypted);
-
-            current_score = state_score(decrypted, cipher_len, 
-                crib_indices, crib_positions, n_cribs, 
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib,
-                cfg->weight_ioc, cfg->weight_entropy);
-        }
-
-        perturbate_keyword_p = true;
-
-        for (i = 0; i < cfg->n_hill_climbs; i++) {
-                
-            n_iterations += 1;
-
-            // perturbate.
-            vec_copy(current_plaintext_keyword_state, local_plaintext_keyword_state, g_alpha);
-            vec_copy(current_ciphertext_keyword_state, local_ciphertext_keyword_state, g_alpha);
-            // In optimal-cycleword mode derive_optimal_cycleword (below) rewrites
-            // every entry of local_cycleword_state unconditionally before it is
-            // read, so seeding it from current_cycleword_state here is dead work.
-            // The stochastic path does perturb it in place, so it still needs the copy.
-            if (!(cfg->optimal_cycleword && !is_autokey))
-                vec_copy(current_cycleword_state, local_cycleword_state, cycleword_len);
-
-            bool did_perturb_keyword = false; 
-            
-            // Decides whether to attempt keyword perturbation.
-            if (perturbate_keyword_p || 
-                    cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability) {
-                
-                // Logic: Only perturb keywords if they were NOT provided by the user and are not fixed by the cipher type.
-                switch (cfg->cipher_type) {
-                    case VIGENERE:
-                    case PORTA:
-                    case BEAUFORT:
-                    case AUTOKEY_0:
-                    case AUTOKEY_BEAU:
-                    case AUTOKEY_PORTA:
-                        // Vigenere and Porta use straight alphabets (fixed), so only the cycleword is perturbed later.
-                        did_perturb_keyword = false;
-                        break ; 
-                    case QUAGMIRE_1:
-                        if (!cfg->user_plaintext_keyword_present) {
-                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                            did_perturb_keyword = true;
-                        }
-                        break ;
-                    case QUAGMIRE_2:
-                        if (!cfg->user_ciphertext_keyword_present) {
-                            perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                            did_perturb_keyword = true;
-                        }
-                        break ;
-                    case QUAGMIRE_3:
-                        if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
-                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                            vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
-                            did_perturb_keyword = true;
-                        }
-                        break ;
-                    case QUAGMIRE_4:
-                        // If both are present, we can't perturb keywords at all, fall through to cycleword.
-                        // If one is present, only perturb the other.
-                        
-                        if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
-                            did_perturb_keyword = false; // Force cycleword perturbation
-                        } else if (cfg->user_plaintext_keyword_present) {
-                            // Only perturb ciphertext
-                            perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                            did_perturb_keyword = true;
-                        } else if (cfg->user_ciphertext_keyword_present) {
-                            // Only perturb plaintext
-                            perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                            did_perturb_keyword = true;
-                        } else {
-                            // Standard Q4 stochastic choice
-                            if (frand() < 0.5) {
-                                perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                            } else {
-                                perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                            }
-                            did_perturb_keyword = true;
-                        }
-                        break ;          
-                    case AUTOKEY_1:
-                         // Only perturb PT
-                         if (!cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                             did_perturb_keyword = true;
-                         }
-                         break;
-                    case AUTOKEY_2:
-                         // Only perturb CT
-                         if (!cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                             did_perturb_keyword = true;
-                         }
-                         break;
-                    case AUTOKEY_3:
-                         // Perturb PT and copy to CT. Check BOTH flags. If either is present, the key is fixed.
-                         if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                             vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
-                             did_perturb_keyword = true;
-                         }
-                         break;
-                    case AUTOKEY_4:
-                         // Perturb either (logic same as Q4)
-                         if (cfg->user_plaintext_keyword_present && cfg->user_ciphertext_keyword_present) {
-                             did_perturb_keyword = false;
-                         } else if (cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                             did_perturb_keyword = true;
-                         } else if (cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                             did_perturb_keyword = true;
-                         } else {
-                             if (frand() < 0.5) perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                             else perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                             did_perturb_keyword = true;
-                         }
-                         break;
-                }
-            } else {
-                did_perturb_keyword = false;
-            }
-            
-            // Determine optimal cycleword from the keyword. 
-            if (cfg->optimal_cycleword && ! is_autokey) {
-                // We NEVER perturb the cycleword randomly.
-                
-                // Force keyword perturbation if we didn't perturb it this turn (to prevent stagnation).
-                // This does NOT apply to fixed-keyword ciphers (Vigenere, Porta, Beaufort)
-                if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) { 
-                    
-                    // Force perturbation on valid alphabets
-                    if (cfg->cipher_type == QUAGMIRE_3 && !(cfg->user_plaintext_keyword_present || cfg->user_ciphertext_keyword_present)) {
-                         perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                         vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
-                         did_perturb_keyword = true;
-                    } 
-                    else if (cfg->cipher_type == QUAGMIRE_1 && !cfg->user_plaintext_keyword_present) {
-                        perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                        did_perturb_keyword = true;
-                    }
-                    else if (cfg->cipher_type == QUAGMIRE_2 && !cfg->user_ciphertext_keyword_present) {
-                        perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                        did_perturb_keyword = true;
-                    }
-                    else if (cfg->cipher_type == QUAGMIRE_4) {
-                        // Random force
-                        if (!cfg->user_plaintext_keyword_present && !cfg->user_ciphertext_keyword_present) {
-                            if (frand() < 0.5) {
-                                perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                            } else {
-                                perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                            }
-                            did_perturb_keyword = true;
-                        } else if (!cfg->user_plaintext_keyword_present) {
-                             perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
-                             did_perturb_keyword = true;
-                        } else if (!cfg->user_ciphertext_keyword_present) {
-                             perturbate_keyword(local_ciphertext_keyword_state, g_alpha, ciphertext_keyword_len);
-                             did_perturb_keyword = true;
-                        }
-                    }
-                }
-
-                // Derive the optimal cycleword for the (possibly new) keyword state
-                derive_optimal_cycleword(cfg, cipher_indices, cipher_len,
-                    local_plaintext_keyword_state, local_ciphertext_keyword_state,
-                    local_cycleword_state, cycleword_len, hist_arg);
-
-            } else {
-                // Stochastic Mode: Perturb Keyword OR Cycleword.
-                
-                // If it's Vigenere or Porta, we MUST perturb the cycleword if not optimal.
-                if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) { 
-                     perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
-                }
-                // If we decided NOT to perturb the keyword (Quagmire), we perturb the cycleword.
-                else if (!did_perturb_keyword) {
-                    perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
-                }
-
-                // Crib Contradiction Check (Only for Quagmire types that can change keywords.)
-                if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) { 
-                    perturbate_keyword_p = false; 
-                    
-                    if (did_perturb_keyword) { 
-                        contradiction = constrain_cycleword(cfg, cipher_indices, cipher_len, crib_indices, 
-                            crib_positions, n_cribs, 
-                            local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                            local_cycleword_state, cycleword_len, cfg->variant, cfg->verbose);
-
-                        if (contradiction) {
-                            n_contradictions += 1; 
-                            perturbate_keyword_p = true; 
-                        }
-                    }
-                }
-            }
-
-            if (cfg->same_key_cycle) {
-                vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
-                vec_copy(local_ciphertext_keyword_state, local_cycleword_state, g_alpha);
-            }
-
-            decrypt_state(cfg, cipher_indices, cipher_len, 
-                local_plaintext_keyword_state, local_ciphertext_keyword_state, 
-                local_cycleword_state, cycleword_len, decrypted);
-
-            local_score = state_score(decrypted, cipher_len, 
-                crib_indices, crib_positions, n_cribs, 
-                ngram_data, cfg->ngram_size,
-                cfg->weight_ngram, cfg->weight_crib,
-                cfg->weight_ioc, cfg->weight_entropy);
-
-            if (local_score > current_score) {
-                current_score = local_score;
-                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
-                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
-            } else if (frand() < cfg->slip_probability) {
-                n_explore += 1;
-                current_score = local_score;
-                vec_copy(local_plaintext_keyword_state, current_plaintext_keyword_state, g_alpha);
-                vec_copy(local_ciphertext_keyword_state, current_ciphertext_keyword_state, g_alpha);
-                vec_copy(local_cycleword_state, current_cycleword_state, cycleword_len);
-            }
-
-            if (current_score > best_score) {
-                best_score = current_score;
-                vec_copy(current_plaintext_keyword_state, best_plaintext_keyword_state, g_alpha);
-                vec_copy(current_ciphertext_keyword_state, best_ciphertext_keyword_state, g_alpha);
-                vec_copy(current_cycleword_state, best_cycleword_state, cycleword_len);
-                if (cfg->verbose) {
-
-                    // Decryption for verbose output
-                    if (cfg->cipher_type == PORTA) { 
-                        porta_decrypt(decrypted, cipher_indices, cipher_len, 
-                            best_cycleword_state, cycleword_len);
-                    } else if (cfg->cipher_type == BEAUFORT) {
-                        beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
-                            best_cycleword_state, cycleword_len);
-                    } else if (is_autokey) {
-                        autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
-                            best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                            best_cycleword_state, cycleword_len);
-                    } else {
-                        quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-                            best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                            best_cycleword_state, cycleword_len, cfg->variant);
-                    }
-                    
-                    // Apply transposition. 
-                    if (cfg->transperoffset_present) {
-                        transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
-                    }
-
-                    if (cfg->transmatrix_present) {
-                        transmatrix(decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
-                    }
-
-                    ioc = index_of_coincidence(decrypted, cipher_len);
-                    chi = chi_squared(decrypted, cipher_len);
-                    entropy_score = entropy(decrypted, cipher_len);
-
-                    elapsed = ((double) clock() - start_time)/CLOCKS_PER_SEC;
-                    n_iter_per_sec = ((double) n_iterations)/elapsed;
-
-                    printf("\n%.2f\t[sec]\n", elapsed);
-                    printf("%.0fK\t[it/sec]\n", 1.e-3*n_iter_per_sec);
-                    printf("%d\t[backtracks]\n", n_backtracks);
-                    printf("%d\t[restarts]\n", n);
-                    printf("%d\t[slips]\n", n_explore);
-                    printf("%.2f\t[contradiction pct]\n", ((double) n_contradictions)/n_iterations);
-                    printf("%.4f\t[IOC]\n", ioc);
-                    printf("%.4f\t[entropy]\n", entropy_score);
-                    printf("%.2f\t[chi-squared]\n", chi);
-                    printf("%.2f\t[score]\n", best_score);
-                    
-                    if (cfg->cipher_type != PORTA) {
-                        print_text(best_plaintext_keyword_state, g_alpha); printf("\n");
-                        print_text(best_ciphertext_keyword_state, g_alpha); printf("\n");
-                    }
-                    print_text(best_cycleword_state, cycleword_len); printf("\n");
-                    
-                    // Detailed tableau display.
-                    printf("\n");
-                    if (cfg->cipher_type != PORTA) { 
-                        for (k = 0; k < cycleword_len; k++) {
-                            for (j = 0; j < g_alpha; j++) {
-                                if (best_ciphertext_keyword_state[j] == best_cycleword_state[k]) {
-                                    offset = j;
-                                }
-                            }
-                            for (j = 0; j < g_alpha; j++) {
-                                indx = (j + offset) % g_alpha;
-                                printf("%c", index_to_char(best_ciphertext_keyword_state[indx]));
-                            }
-                            printf("\n");
-                        }
-                    }
-                    printf("\n");
-
-                    print_text(decrypted, cipher_len); printf("\n");
-
-                    fflush(stdout);
-                }
-                if (deterministic_optimal) det_done = true;
-            }
-            if (det_done) break;   // nothing further can change; see comment above
-        }
-        if (det_done) break;
-    }
-
-    vec_copy(best_plaintext_keyword_state, plaintext_keyword, g_alpha);
-    vec_copy(best_ciphertext_keyword_state, ciphertext_keyword, g_alpha);
-    vec_copy(best_cycleword_state, cycleword, cycleword_len);
-
-    // Final decryption for return value.
-    if (cfg->cipher_type == PORTA) {
-        porta_decrypt(decrypted, cipher_indices, cipher_len, 
-                     best_cycleword_state, cycleword_len);
-    } else if (cfg->cipher_type == BEAUFORT) { 
-        beaufort_decrypt(decrypted, cipher_indices, cipher_len, 
-                    best_cycleword_state, cycleword_len);
-    } else if (is_autokey) {
-        autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
-                    best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                    best_cycleword_state, cycleword_len);
-    } else if (cfg->cipher_type == VIGENERE) { 
-        vigenere_decrypt(decrypted, cipher_indices, cipher_len, 
-                    best_cycleword_state, cycleword_len, cfg->variant);
-    } else {
-        quagmire_decrypt(decrypted, cipher_indices, cipher_len, 
-                        best_plaintext_keyword_state, best_ciphertext_keyword_state, 
-                        best_cycleword_state, cycleword_len, cfg->variant);
-    }
-
-    if (cfg->transperoffset_present) {
-        transperoffset(decrypted, cipher_len, cfg->trans_period, cfg->trans_offset);
-    }
-
-    if (cfg->transmatrix_present) {
-        transmatrix(decrypted, cipher_len, cfg->trans_w1, cfg->trans_w2, cfg->trans_clockwise);
-    }
-
-    return best_score;
-}
 
 
 

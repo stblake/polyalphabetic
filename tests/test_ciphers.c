@@ -287,6 +287,12 @@ static void test_autokey_roundtrip(void) {
 int main(void) {
     seed_rand(20240617u);
 
+    // make_keyed_alphabet() maps keyword letters through g_char_to_idx, so the
+    // runtime alphabet must be built first (exactly as the real binary's main does).
+    // Without this the keyed-alphabet KATs (auto1/auto3) silently encrypt against a
+    // straight alphabet -- round-trips still pass, but the fixed vectors mismatch.
+    init_alphabet(NULL);
+
     test_vigenere_known_answer();
     test_vigenere_roundtrip();
     test_beaufort();

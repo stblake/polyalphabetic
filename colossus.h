@@ -62,6 +62,13 @@
 #define COL_READ_BT   1        // read each column bottom-to-top
 #define COL_READ_BOTH 2        // search both directions
 
+// Optimization method (cfg->method): which acceptance strategy the engine uses.
+// METHOD_DEFAULT keeps each cipher model's built-in SearchShape; the others force
+// one strategy on EVERY cipher type (cipher-agnostic), set via -method.
+#define METHOD_DEFAULT 0       // per-model default (shotgun, or anneal for transposition)
+#define METHOD_SHOTGUN 1       // accept-worse with slip_probability
+#define METHOD_ANNEAL  2       // geometric-cooling Metropolis (simulated annealing)
+
 #define FREQUENCY_WEIGHTED_SELECTION 1
 #define DICTIONARY 1
 #define INACTIVE -9999
@@ -131,6 +138,15 @@ typedef struct {
     bool optimal_cycleword;
     bool same_key_cycle;
 
+    int method;          // METHOD_DEFAULT / METHOD_SHOTGUN / METHOD_ANNEAL (-method)
+
+    // Simulated-annealing schedule (SHAPE_ANNEAL only). Backtracking is shared with
+    // the shotgun path via backtracking_probability above. cooling_rate <= 0 means
+    // "derive a geometric init_temp -> min_temp schedule over n_hill_climbs steps".
+    double init_temp;    // starting temperature (-inittemp), default 0.10
+    double min_temp;     // floor temperature for the derived schedule (-mintemp), default 0.001
+    double cooling_rate; // per-iteration multiplier (-coolingrate); <= 0 => derive, default 0
+
     // Transpositions.
     bool transperoffset_present;
     int trans_offset;
@@ -172,6 +188,123 @@ typedef struct {
     int decrypted[MAX_CIPHER_LENGTH];
     int decrypted_len;
 } SolveResult;
+
+// =====================================================================
+//  Cipher-type-agnostic search engine (run_solver) -- see CLAUDE.md.
+// =====================================================================
+//
+// Every cipher is solved by the same skeleton: enumerate the outer search
+// configurations, then for each either evaluate a single candidate (a pure
+// parameter sweep) or shotgun-restart + hill-climb a candidate state, scoring
+// each decrypt with the shared n-gram (+ crib) state_score and keeping the best.
+// The skeleton lives in run_solver()/run_one_config(); each cipher type supplies
+// a CipherModel (a vtable of hooks) describing how to seed/perturb/decrypt/report
+// its own state. The engine owns the loops, acceptance, backtracking, best
+// tracking, and the single state_score call site; the model owns the cipher math.
+
+#define MAX_SOLVER_CONFIGS 65536   // cap on enumerated outer configs per solve
+
+// Invariant problem instance + engine-owned scratch, passed to every hook.
+typedef struct {
+    ColossusConfig *cfg;
+    SharedData     *shared;
+    int            *cipher;          // cipher_indices[0..cipher_len-1]
+    int             cipher_len;
+    int            *crib_indices;
+    int            *crib_positions;
+    int             n_cribs;
+    char           *cribtext;        // raw crib string ('_' = no crib) for the report hooks
+    float          *ngram_data;      // == shared->ngram_data, hoisted for the hot path
+    int            *hist_by_col;     // engine scratch: optimal-cycleword per-column histogram
+                                     // (hist_by_col[col*ALPHABET_SIZE + c]); built when model->needs_hist
+    void           *model_scratch;   // model-private per-config cache (e.g. indep_periodic seed)
+    SolveResult    *result;          // polyalpha: report hook fills it (may be NULL)
+} SolverCtx;
+
+// One outer enumeration point. Field meanings are per-model: `period` is the
+// cycleword length / column count K / rail count / permutation length; `j`,`k`
+// are the polyalphabetic pt/ct keyword lengths; `aux` holds any remaining fixed
+// parameters (amsco start, columnar read direction, route id, rail offset, ...).
+typedef struct {
+    int period;
+    int j, k;
+    int aux[2];
+} SolverConfig;
+
+// Superset candidate state; a model uses only the lane(s) it needs and its
+// copy_state hook copies only those, so the per-iteration copy stays cheap.
+typedef struct {
+    int pt_keyword[ALPHABET_SIZE];   // polyalpha lane
+    int ct_keyword[ALPHABET_SIZE];
+    int cycleword[MAX_CYCLEWORD_LEN];
+    int key[MAX_CIPHER_LENGTH];       // transposition lane (perm / order / rank / rot / square / turns)
+    int key_len;
+    int aux[8];                       // small per-state scratch (stage K's, dirs, carried period, ...)
+} SolverState;
+
+typedef enum {
+    SHAPE_SHOTGUN,        // accept-worse with slip_probability (polyalpha, transmatrix)
+    SHAPE_ANNEAL,         // geometric-cooling Metropolis acceptance (columnar, permutation)
+    SHAPE_DETERMINISTIC   // shotgun + first-improvement break (Vig/Beau/Porta under -optimalcycle)
+} SearchShape;
+
+// Live engine counters, filled by the engine for the verbose-report hook.
+typedef struct {
+    int    n_iterations;
+    int    n_restarts;
+    int    n_backtracks;
+    int    n_slips;
+    int    n_contradictions;
+    clock_t start_time;
+} EngineStats;
+
+// The per-cipher-type model. Optional hooks may be NULL.
+typedef struct CipherModel {
+    const char *name;
+    SearchShape shape;
+    bool        needs_hist;          // engine builds ctx->hist_by_col before each config
+
+    // Fill out[] with up to cap outer configs; return the count (<= cap).
+    int  (*enumerate_configs)(const SolverCtx *ctx, SolverConfig *out, int cap);
+
+    // Return the climbed key length for this config; 0 => this config is a single
+    // SWEEP candidate (seed+decrypt+score once, no restarts). NULL => always climb.
+    int  (*key_len)(const SolverCtx *ctx, const SolverConfig *cfg_c);
+
+    // Produce a fresh restart state (random, or deterministic for a SWEEP cell).
+    void (*seed)(const SolverCtx *ctx, const SolverConfig *cfg_c, SolverState *st);
+
+    // One neighbour move on `st` (already a copy of current). *force_primary is the
+    // cross-iteration "must perturb the primary lane" flag (polyalpha's
+    // perturbate_keyword_p): the engine sets it true at the start of each restart;
+    // the model reads it and writes back the value for the next iteration. Models
+    // with no primary/secondary distinction ignore it. Any deterministic refine
+    // (optimal cycleword), crib constrain, and -samekey coupling that the original
+    // per-cipher climber did around the move live inside this hook.
+    void (*perturb)(const SolverCtx *ctx, const SolverConfig *cfg_c, SolverState *st,
+                    bool *force_primary);
+
+    // Copy only the live lane(s) of `src` into `dst`.
+    void (*copy_state)(const SolverConfig *cfg_c, const SolverState *src, SolverState *dst);
+
+    // Decrypt `st` into out[0..cipher_len-1]. *score_adjust (init 0 by the engine)
+    // receives any additive score term the model wants folded into state_score
+    // (e.g. the general-transposition structure score); st may be mutated to carry
+    // state forward (e.g. the detected period). Most models leave *score_adjust 0.
+    void (*decrypt)(const SolverCtx *ctx, const SolverConfig *cfg_c, SolverState *st,
+                    int *out, double *score_adjust);
+
+    // Final report (human block + ">>>" CSV) for the global-best state.
+    void (*report)(const SolverCtx *ctx, const SolverConfig *cfg_c, const SolverState *st,
+                   double score, int *decrypted);
+    // Optional: live display on each best-improvement when -verbose.
+    void (*report_verbose)(const SolverCtx *ctx, const SolverConfig *cfg_c, const SolverState *st,
+                           double score, int *decrypted, const EngineStats *stats);
+} CipherModel;
+
+// Run `model` over `ctx`: enumerate configs, sweep/climb each, report the best.
+// Returns the best score (0 if no configuration produced a candidate).
+double run_solver(const CipherModel *model, SolverCtx *ctx);
 
 // --- Statistics Data ---
 
@@ -300,22 +433,11 @@ void solve_transposition(char *ciphertext_str, char *cribtext_str,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
 
-double shotgun_transposition_climber(ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float *ngram_data, int best_decrypted[],
-    int *best_p1, int *best_p2, int *best_p3);
-
 // General transposition solver (AZDecrypt-style permutation-key hill climber)
 void solve_general_transposition(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
-
-double shotgun_permutation_climber(ColossusConfig *cfg,
-    int cipher_indices[], int cipher_len,
-    int crib_indices[], int crib_positions[], int n_cribs,
-    float *ngram_data, int best_decrypted[], int best_key[]);
 
 // Dedicated columnar solver (single TRANSCOL and double TRANSCOL2). Optimizes the
 // small per-stage column-order permutation directly, rather than the full
@@ -341,8 +463,8 @@ void solve_route(char *ciphertext_str, char *cribtext_str,
     int crib_indices[], int crib_positions[], int n_cribs);
 
 // Hill-climbing solvers for the small-permutation transposition types. Both sweep
-// the column count K = [min_cols, max_cols] and, per K, run the shared
-// shotgun/annealing key climber (transposition_anneal):
+// the column count K = [min_cols, max_cols] and, per K, anneal a short key via the
+// cipher-agnostic engine (run_solver, SHAPE_ANNEAL):
 //   solve_amsco      : climbs the column order x start-chunk in {1,2}
 //   solve_myszkowski : climbs the per-column rank vector (ties allowed)
 void solve_amsco(char *ciphertext_str, char *cribtext_str,
@@ -355,7 +477,7 @@ void solve_myszkowski(char *ciphertext_str, char *cribtext_str,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
 
-// Remaining transposition solvers (all share transposition_anneal):
+// Remaining transposition solvers (all anneal a short key via run_solver):
 //   solve_redefence : sweeps rails x phase, climbs the rail read-order permutation
 //   solve_cadenus   : K = len/25, climbs the packed column order + per-column rotation
 //   solve_nihilist  : N = sqrt(len), climbs the single row+column permutation
@@ -390,16 +512,6 @@ void solve_indep_periodic(char *ciphertext_str, char *cribtext_str,
     ColossusConfig *cfg, SharedData *shared,
     int cipher_indices[], int cipher_len,
     int crib_indices[], int crib_positions[], int n_cribs);
-
-// Hill Climber
-double shotgun_hill_climber(
-    ColossusConfig *cfg,
-	int cipher_indices[], int cipher_len, 
-	int crib_indices[], int crib_positions[], int n_cribs,
-	int cycleword_len, int plaintext_keyword_len, int ciphertext_keyword_len, 
-	float *ngram_data,
-	int decrypted[MAX_CIPHER_LENGTH], int plaintext_keyword[ALPHABET_SIZE], 
-	int ciphertext_keyword[ALPHABET_SIZE], int cycleword[MAX_CYCLEWORD_LEN]);
 
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
 // histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher
