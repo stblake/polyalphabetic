@@ -308,21 +308,21 @@ int main(int argc, char **argv) {
             printf("-type %s\n", type_arg);      
         } else if (strcmp(argv[i], "-cipher") == 0) {
             cfg.cipher_present = true;
-            strcpy(cfg.ciphertext_file, argv[++i]);
+            snprintf(cfg.ciphertext_file, sizeof(cfg.ciphertext_file), "%s", argv[++i]);
             printf("-cipher %s\n", cfg.ciphertext_file);
         } else if (strcmp(argv[i], "-batch") == 0) {
             cfg.batch_present = true;
-            strcpy(cfg.batch_file, argv[++i]);
+            snprintf(cfg.batch_file, sizeof(cfg.batch_file), "%s", argv[++i]);
             printf("-batch %s\n", cfg.batch_file);
         } else if (strcmp(argv[i], "-crib") == 0 || strcmp(argv[i], "-cribs") == 0) {
             cfg.crib_present = true;
-            strcpy(cfg.crib_file, argv[++i]);
+            snprintf(cfg.crib_file, sizeof(cfg.crib_file), "%s", argv[++i]);
             printf("-crib %s\n", cfg.crib_file);
         } else if (strcmp(argv[i], "-ngramsize") == 0) {
             cfg.ngram_size = atoi(argv[++i]);
             printf("-ngramsize %d\n", cfg.ngram_size);
         } else if (strcmp(argv[i], "-ngramfile") == 0) {
-            strcpy(cfg.ngram_file, argv[++i]);
+            snprintf(cfg.ngram_file, sizeof(cfg.ngram_file), "%s", argv[++i]);
             printf("-ngramfile %s\n", cfg.ngram_file);
         } else if (strcmp(argv[i], "-excludeletter") == 0) {
             // Drop one (or more) letters from the alphabet, shrinking it to an
@@ -360,7 +360,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-plaintextkeyword") == 0) {
             // Explicit Plaintext Keyword
             cfg.user_plaintext_keyword_present = true;
-            strcpy(cfg.user_plaintext_keyword, argv[++i]);
+            snprintf(cfg.user_plaintext_keyword, sizeof(cfg.user_plaintext_keyword), "%s", argv[++i]);
             int len = unique_len(cfg.user_plaintext_keyword);
             cfg.plaintext_keyword_len = len;
             cfg.plaintext_max_keyword_len = len + 1;
@@ -369,7 +369,7 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-ciphertextkeyword") == 0) {
             // Explicit Ciphertext Keyword
             cfg.user_ciphertext_keyword_present = true;
-            strcpy(cfg.user_ciphertext_keyword, argv[++i]);
+            snprintf(cfg.user_ciphertext_keyword, sizeof(cfg.user_ciphertext_keyword), "%s", argv[++i]);
             int len = unique_len(cfg.user_ciphertext_keyword);
             cfg.ciphertext_keyword_len = len;
             cfg.ciphertext_max_keyword_len = len + 1;
@@ -429,7 +429,7 @@ int main(int argc, char **argv) {
             printf("-iocthreshold %.4f\n", cfg.ioc_threshold);
         } else if (strcmp(argv[i], "-dictionary") == 0 || strcmp(argv[i], "-dict") == 0) {
             cfg.dictionary_present = true;
-            strcpy(cfg.dictionary_file, argv[++i]);
+            snprintf(cfg.dictionary_file, sizeof(cfg.dictionary_file), "%s", argv[++i]);
             printf("-dictionary %s\n", cfg.dictionary_file);
         } else if (strcmp(argv[i], "-weightngram") == 0) { 
             cfg.weight_ngram = atof(argv[++i]);
@@ -633,7 +633,7 @@ int main(int argc, char **argv) {
     char oxford_english_words[] = "OxfordEnglishWords.txt";
     if (!cfg.dictionary_present && file_exists(oxford_english_words)) {
         cfg.dictionary_present = true;
-        strcpy(cfg.dictionary_file, oxford_english_words);
+        snprintf(cfg.dictionary_file, sizeof(cfg.dictionary_file), "%s", oxford_english_words);
         if (cfg.verbose) printf("\nDefault dictionary = %s\n", cfg.dictionary_file);
     }
 
@@ -3422,12 +3422,12 @@ void solve_homophonic(char *ciphertext_str, char *cribtext_str,
 
     // Position index: bucket each cipher position by its symbol so a one-symbol move
     // maps straight to the positions (and thus n-gram windows) it changes. Built once.
-    scratch.pos     = malloc(sizeof(int) * (cipher_len > 0 ? cipher_len : 1));
-    scratch.pos_off = malloc(sizeof(int) * (n_sym + 1));
+    scratch.pos     = calloc((size_t)(cipher_len > 0 ? cipher_len : 1), sizeof(int));
+    scratch.pos_off = calloc((size_t)(n_sym + 1), sizeof(int));
     scratch.win_mark = calloc(cipher_len > 0 ? cipher_len : 1, sizeof(char));
-    scratch.win_list = malloc(sizeof(int) * (cipher_len > 0 ? cipher_len : 1));
-    scratch.pend_sym  = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
-    scratch.pend_newc = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
+    scratch.win_list = calloc((size_t)(cipher_len > 0 ? cipher_len : 1), sizeof(int));
+    scratch.pend_sym  = calloc((size_t)(n_sym > 0 ? n_sym : 1), sizeof(int));
+    scratch.pend_newc = calloc((size_t)(n_sym > 0 ? n_sym : 1), sizeof(int));
     if (!scratch.pos || !scratch.pos_off || !scratch.win_mark ||
         !scratch.win_list || !scratch.pend_sym || !scratch.pend_newc) {
         printf("\n\nERROR: out of memory in homophonic solve.\n\n");
@@ -3440,7 +3440,7 @@ void solve_homophonic(char *ciphertext_str, char *cribtext_str,
     for (int i = 0; i < cipher_len; i++) scratch.pos_off[cipher_indices[i] + 1]++;
     for (int s = 0; s < n_sym; s++) scratch.pos_off[s + 1] += scratch.pos_off[s];
     {
-        int *cursor = malloc(sizeof(int) * (n_sym > 0 ? n_sym : 1));
+        int *cursor = calloc((size_t)(n_sym > 0 ? n_sym : 1), sizeof(int));
         for (int s = 0; s < n_sym; s++) cursor[s] = scratch.pos_off[s];
         for (int i = 0; i < cipher_len; i++) {
             int s = cipher_indices[i];
@@ -4736,7 +4736,7 @@ float* load_ngrams(char *ngram_file, int ngram_size, bool verbose) {
 
     if (verbose) printf("\nLoading ngrams...");
     n_ngrams = int_pow(g_alpha, ngram_size);
-    ngram_data = malloc(n_ngrams*sizeof(float));
+    ngram_data = calloc((size_t)n_ngrams, sizeof(float));
     for (i = 0; i < n_ngrams; i++) ngram_data[i] = 0.;
 
     fp = fopen(ngram_file, "r");
