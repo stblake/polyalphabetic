@@ -485,3 +485,15 @@ where `homophonic_test.txt` is e.g. `57,22,16,44,58,27,...`. The solver is a `Ci
 Because a homophonic map has far more degrees of freedom than a 26→26 substitution, **higher-order n-grams matter**: with quadgrams the solver typically recovers ~98% of a few-hundred-symbol cipher, and with quintgrams (`-ngramsize 5 -ngramfile english_quintgrams.txt`) it reaches ~100%. The `-logprob` flag selects an AZDecrypt-style n-gram fitness — log-probabilities with a floor that *penalises* implausible (unseen) n-grams rather than merely not rewarding them — which is cipher-agnostic and can be used on any cipher type, but is most useful here and with high-order n-grams.
 
 Test ciphers can be minted with the standalone generator (`make homophonic_gen`, then `./tools/homophonic_gen plaintext.txt 60 1 > cipher.txt 2> solution.txt`).
+
+## Bifid
+
+The **bifid** cipher (Félix Delastelle) combines a Polybius-square substitution with a transposition by *fractionation*. Each plaintext letter is replaced by its (row, column) coordinates in a 5×5 keyed square (J merged into I, the ACA convention); the message is processed in blocks of a fixed **period**. Within a block the row coordinates are written out first and the column coordinates second, forming one coordinate stream, which is then re-paired consecutively and read back through the square to give the ciphertext. The fractionation smears each plaintext letter across two ciphertext letters, so a bifid resists the digraph attack that breaks Playfair.
+
+```bash
+$ ./colossus -type bifid -cipher cipher.txt -ngramsize 4 -ngramfile english_quadgrams.txt -logprob -verbose
+```
+
+Breaking it is two coupled problems. The **period** is recovered first, by an index-of-coincidence test: for the true period every within-block ciphertext position is built from one coordinate class (row-row or column-column letters) and so shares a single, mildly non-uniform distribution, which raises the columnar IoC at that period above the background. (The IoC also rises at *multiples* of the true period, so Colossus does not trust the single top peak — it anneals the top `-nperiods` candidates, default 5, as independent searches and lets the n-gram score discard the wrong periods, which decrypt to gibberish.) The **square** is then recovered exactly as in the Playfair attack: a simulated-annealing hill climb over the 25-cell key square with an n-gram fitness, the move set a dominant single-cell swap plus row/column swaps and grid reflections. Pin a known period with `-period N`, or bound the estimator's scan with `-maxperiod` (default `min(20, len/2)`).
+
+Like Playfair, bifid is near the limit of a quadgram attack, so `-logprob` is effectively required; recovery is reliable from roughly 350 characters upward and falls off below that. The primitives are written generically over the square side, so a 6×6 (36-cell) square is supported once a 36-letter alphabet is active. Test ciphers can be minted with the standalone generator (`make bifid_gen`, then `./tools/bifid_gen plaintext.txt KEYWORD 7 > cipher.txt 2> solution.txt`).

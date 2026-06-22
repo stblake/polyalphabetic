@@ -35,11 +35,12 @@ polyalpha_solver.c/.h    # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/
 transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h   # transposition solvers
 railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
 redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
-indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h   # each: a CipherModel + solve_<type>()
+indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h   # each: a CipherModel + solve_<type>()
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
 playfair.c           # Playfair primitives: grid build / prepare / encrypt / decrypt (5x5 keyed grid)
+bifid.c              # Bifid primitives: square build / encrypt / decrypt (side-generic keyed Polybius square)
 transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
 dict.c               # dictionary load + word-finding (scores plaintext readability)
 utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
@@ -49,6 +50,7 @@ example.sh           # canonical usage example
 cipher.txt  crib.txt # sample ciphertext + crib
 tools/homophonic_gen.c       # standalone homophonic-cipher test-data generator (make homophonic_gen)
 tools/playfair_gen.c         # standalone Playfair test-data generator (make playfair_gen)
+tools/bifid_gen.c            # standalone Bifid test-data generator (make bifid_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -80,19 +82,24 @@ Two caveats:
 read directions, double-columnar composition), `tests/test_ciphers.c`,
 `tests/test_optimal_cycleword.c`, and `tests/test_playfair.c` (the Playfair primitives:
 the Wikipedia known-answer vector, the prepare/X-insertion rules, encrypt/decrypt
-round-trips over random grids, and the cyclic row/column key-square equivalence).
+round-trips over random grids, and the cyclic row/column key-square equivalence), and
+`tests/test_bifid.c` (the Bifid primitives: the Wikipedia known-answer vector, the keyed-
+square build, encrypt/decrypt round-trips over random 5x5 and 6x6 squares × random
+lengths/periods incl. incomplete blocks, and the period-1 identity).
 `make testopt` additionally runs the in-process solver regressions
-`tests/test_solver.c` (polyalphabetic) and `tests/test_playfair_solver.c` (Playfair:
+`tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
-prints recovery vs ciphertext length to characterize the short-text cliff).
+prints recovery vs ciphertext length to characterize the short-text cliff), and
+`tests/test_bifid_solver.c` (Bifid: registry validation, the period-estimator top-K hit
+rate, a capability floor with the period *estimated* end-to-end, and the length cliff).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-32 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
-`q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, and a Playfair
-cipher) that each
+33 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+`q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
+cipher, and a Bifid cipher) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -103,7 +110,7 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 20-case fast tier in ~45s (use while iterating),
-`--slow` the 12 heavier ciphers (incl. the ~24s Playfair solve), no flag runs both.
+`--slow` the 13 heavier ciphers (incl. the ~24s Playfair and ~6s Bifid solves), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -124,7 +131,7 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `-type` accepts aliases or integer codes: `vig`/`0`, `q1`..`q4`/`1`..`4`, `beau`/`5`,
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
-`transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30` (full list in
+`transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31` (full list in
 `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -213,6 +220,27 @@ reliable from ~600+ characters and falls off a cliff below a few hundred (see
 `-method shotgun|anneal`; annealing is the default and far stronger here. Generate test
 ciphers with `tools/playfair_gen.c` (`make playfair_gen`).
 
+The **Bifid** type (`solve_bifid()`, `BIFID_MODEL`, `SHAPE_ANNEAL`) is Delastelle
+fractionation over a **keyed Polybius square**: each letter splits into (row, col)
+coordinates, the block's rows-then-cols coordinate stream is re-paired into ciphertext
+letters, and the block size is the **period**. It defaults to the same 5x5, 25-letter,
+J->I square as Playfair (`init_alphabet("J")` before `load_ngrams`), with the square a
+permutation of `0..24` in the `key` lane; the primitives (`bifid.c`) are **side-generic**
+(`side`/`n = side*side` parameters) so a 6x6 (36-cell) square works once a 36-letter
+alphabet is active. The square attack is identical to Playfair's (cell-swap-dominated
+anneal + row/column swaps and reflections, no anti-collapse penalty — a square is a
+bijection). The extra dimension is the period: `bifid_estimate_periods()` ranks trial
+periods by the **columnar Index of Coincidence** (the existing `mean_ioc()`), which peaks
+at the true period because each within-block position becomes a coordinate-pure column.
+The IoC also peaks at *multiples* of the true period, so the true period is not always
+rank 1 — but it is reliably in the top-K, and the solver anneals the top `-nperiods` (default
+5) candidates as separate engine configs and lets the n-gram score pick the winner (a wrong
+period decrypts to gibberish). `-period N` pins a single period; `-maxperiod` bounds the
+estimator's scan (default `min(20, len/2)`). Like Playfair it effectively needs `-logprob`
+and recovers reliably from ~350+ characters (see `tests/test_bifid_solver.c`, which prints
+the period-estimator hit rate and the length cliff). Generate test ciphers with
+`tools/bifid_gen.c` (`make bifid_gen`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -221,8 +249,9 @@ needs its own schedule. A small compiled-in registry (`g_search_defaults[]` in
 (anneal + shotgun). `main()` pre-scans `-type`/`-method` and overlays the matching profile
 *before* the main arg loop, so precedence is **globals < registry < explicit CLI flags**.
 Types with no entry keep the global defaults bit-for-bit (so the regression suite is
-unaffected) — currently only Playfair has a tuned entry (`SHAPE_ANNEAL`, `6x400000`,
-`inittemp 0.08`, `backtrack 0.30`). This is the mechanism for moving the magic
+unaffected) — currently Playfair (`SHAPE_ANNEAL`, `6x400000`, `inittemp 0.08`,
+`backtrack 0.30`) and Bifid (`SHAPE_ANNEAL`, `4x200000` per period, `inittemp 0.08`,
+`backtrack 0.30`) have tuned entries. This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
 

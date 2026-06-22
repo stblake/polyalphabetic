@@ -100,6 +100,8 @@ fast | example_autokey_beaufort_longer | autobeau | example_autokey_beaufort_lon
 fast | homophonic_test | homophonic | homophonic_test.txt | -nrestarts 12 -nhillclimbs 30000
 # --- Playfair (digraphic substitution, 5x5 grid; 25-letter alphabet forced, J->I) ---
 slow | playfair_pride | playfair | playfair_pride.txt | -logprob -nrestarts 6 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3
+# --- Bifid (fractionation over a 5x5 keyed square; 25-letter alphabet forced, J->I) ---
+slow | bifid_pride | bifid | bifid_pride.txt | -logprob -period 7 -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

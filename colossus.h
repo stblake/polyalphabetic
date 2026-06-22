@@ -47,9 +47,13 @@
 #define INDEP_PERIODIC 28   // period-P substitution with P INDEPENDENT mixed alphabets
 #define HOMOPHONIC     29   // homophonic substitution (ciphertext alphabet > plaintext)
 #define PLAYFAIR       30   // Playfair (digraphic substitution over a 5x5 keyed grid)
+#define BIFID          31   // Bifid (Delastelle): fractionation over a keyed Polybius square
 
 #define PLAYFAIR_SIDE 5         // Playfair grid side (the classic 5x5)
 #define PLAYFAIR_GRID 25        // Playfair grid size (PLAYFAIR_SIDE * PLAYFAIR_SIDE)
+
+#define BIFID_MAX_SIDE 6        // largest Bifid square side supported (6x6, 36 cells)
+#define BIFID_MAX_GRID 36       // BIFID_MAX_SIDE * BIFID_MAX_SIDE
 
 #define ALPHABET_SIZE 26        // compile-time MAX alphabet size (sizes all arrays)
 #define MAX_CIPHER_LENGTH 10000
@@ -114,7 +118,15 @@ typedef struct {
     int ciphertext_max_keyword_len;
     int max_cycleword_len;
     int cycleword_len;
-    
+
+    // Bifid period (fractionation block size). period_present pins a single period;
+    // otherwise the solver estimates and anneals the top n_periods candidates in
+    // [2 .. max_period] (see bifid_solver.c).
+    int period;
+    bool period_present;
+    int max_period;
+    int n_periods;
+
     // Input Flags for lengths
     bool plaintext_keyword_len_present;
     bool ciphertext_keyword_len_present;
@@ -517,6 +529,20 @@ void playfair_encrypt(const int plain[], int len, const int grid[], int out[]);
 void playfair_decrypt(const int cipher[], int len, const int grid[], int out[]);
 int  playfair_prepare(const int raw[], int len, int filler, int alt, int out[], int out_cap);
 void playfair_grid_from_keyword(const int keyword[], int kwlen, int grid[]);
+
+
+// Bifid cipher (bifid.c). Side-generic over a side x side keyed Polybius square (a
+// permutation of the active n = side*side letter alphabet carried in 0..n-1 indices):
+// grid[p] is the letter at cell p (row p/side, col p%side); pos[] is its inverse. The
+// fractionation works in blocks of `period`: encryption writes the block's row
+// coordinates then its column coordinates as one 2*L stream, then re-pairs that stream
+// consecutively into ciphertext cells; decryption is the inverse. An incomplete final
+// block (L < period) is handled in place. The solver needs only bifid_decrypt();
+// encrypt/grid_from_keyword serve the test-data generator and the unit tests.
+void bifid_build_inverse(const int grid[], int pos[], int n);
+void bifid_encrypt(const int plain[], int len, const int grid[], int side, int period, int out[]);
+void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int period, int out[]);
+void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
 
 
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext

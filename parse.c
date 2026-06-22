@@ -111,6 +111,9 @@ int parse_cipher_type(const char *arg) {
     // Playfair (digraphic substitution over a 5x5 keyed grid)
     if (str_eq(arg, "playfair") || str_eq(arg, "pf")) return PLAYFAIR;
 
+    // Bifid (Delastelle fractionation over a keyed Polybius square)
+    if (str_eq(arg, "bifid") || str_eq(arg, "bf")) return BIFID;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

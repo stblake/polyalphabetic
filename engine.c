@@ -324,12 +324,22 @@ SolverCtx make_solver_ctx(ColossusConfig *cfg, SharedData *shared, char *cribtex
 //   swap-dominated anneal at inittemp 0.08, several backtracking restarts) reliably
 //   recovers ~600+ character ciphers; below that Playfair is genuinely near the limit
 //   of a quadgram attack (see tests/test_playfair_solver.c).
+//   Bifid: the same square-anneal landscape as Playfair, but several candidate periods
+//   are each annealed (run_solver keeps the global best by n-gram score), so the per-
+//   period budget is smaller than Playfair's single-config budget to keep the whole
+//   solve in the same ballpark. Same small-scale temperature (mean log-probability).
 static const SearchDefaults g_search_defaults[] = {
     { .cipher_type = PLAYFAIR, .default_shape = SHAPE_ANNEAL,
       .a_n_restarts = 6, .a_n_hill_climbs = 400000,
       .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 30, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = BIFID, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 4, .a_n_hill_climbs = 200000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 200000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 

@@ -215,6 +215,7 @@
 #include "indep_solver.h"
 #include "homophonic_solver.h"
 #include "playfair_solver.h"
+#include "bifid_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -230,6 +231,11 @@ void init_config(ColossusConfig *cfg) {
     cfg->plaintext_max_keyword_len = 12;
     cfg->max_cycleword_len = 20;
     cfg->cycleword_len = 0; // 0 implies not set by user
+
+    cfg->period = 0;            // bifid: 0 => estimate (not pinned by user)
+    cfg->period_present = false;
+    cfg->max_period = 0;        // 0 => derive from ciphertext length (min(20, len/2))
+    cfg->n_periods = 5;         // anneal the estimator's top-K candidate periods
 
     cfg->plaintext_keyword_len_present = false;
     cfg->ciphertext_keyword_len_present = false;
@@ -566,6 +572,19 @@ int main(int argc, char **argv) {
                 return 0;
             }
             printf("-readdir %s\n", dir_arg);
+        } else if (strcmp(argv[i], "-period") == 0) {
+            // Bifid: pin the fractionation period (block size) instead of estimating it.
+            cfg.period_present = true;
+            cfg.period = atoi(argv[++i]);
+            printf("-period %d\n", cfg.period);
+        } else if (strcmp(argv[i], "-maxperiod") == 0) {
+            // Bifid: largest period the IoC estimator scans (default min(20, len/2)).
+            cfg.max_period = atoi(argv[++i]);
+            printf("-maxperiod %d\n", cfg.max_period);
+        } else if (strcmp(argv[i], "-nperiods") == 0) {
+            // Bifid: how many top-IoC candidate periods to anneal (default 5).
+            cfg.n_periods = atoi(argv[++i]);
+            printf("-nperiods %d\n", cfg.n_periods);
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -636,6 +655,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a homophonic substitution (ciphertext alphabet larger than the plaintext alphabet).\n\n");
     } else if (cfg.cipher_type == PLAYFAIR) {
         printf("\nAttacking a Playfair cipher (digraphic substitution over a 5x5 keyed grid).\n\n");
+    } else if (cfg.cipher_type == BIFID) {
+        printf("\nAttacking a Bifid cipher (fractionation over a keyed Polybius square).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -681,6 +702,15 @@ int main(int argc, char **argv) {
     if (cfg.cipher_type == PLAYFAIR && g_alpha == ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type playfair: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // Bifid defaults to the same 5x5 (25-letter, J->I) square as Playfair. Force it
+    // here -- before load_ngrams -- unless the user already shrank the alphabet (e.g.
+    // -excludeletter for a different excluded letter, or a 36-letter 6x6 alphabet).
+    if (cfg.cipher_type == BIFID && g_alpha == ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type bifid: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -907,6 +937,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     }
     if (cfg->cipher_type == PLAYFAIR) {
         solve_playfair(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == BIFID) {
+        solve_bifid(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }
