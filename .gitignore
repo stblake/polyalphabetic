@@ -8,7 +8,10 @@ tests/test_playfair
 tests/test_playfair_solver
 tests/test_bifid
 tests/test_bifid_solver
+tests/test_trifid
+tests/test_trifid_solver
 tools/homophonic_gen
 tools/playfair_gen
 tools/bifid_gen
+tools/trifid_gen
 *.o

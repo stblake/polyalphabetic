@@ -48,6 +48,7 @@
 #define HOMOPHONIC     29   // homophonic substitution (ciphertext alphabet > plaintext)
 #define PLAYFAIR       30   // Playfair (digraphic substitution over a 5x5 keyed grid)
 #define BIFID          31   // Bifid (Delastelle): fractionation over a keyed Polybius square
+#define TRIFID         32   // Trifid (Delastelle): fractionation over a 3x3x3 keyed cube
 
 #define PLAYFAIR_SIDE 5         // Playfair grid side (the classic 5x5)
 #define PLAYFAIR_GRID 25        // Playfair grid size (PLAYFAIR_SIDE * PLAYFAIR_SIDE)
@@ -55,7 +56,24 @@
 #define BIFID_MAX_SIDE 6        // largest Bifid square side supported (6x6, 36 cells)
 #define BIFID_MAX_GRID 36       // BIFID_MAX_SIDE * BIFID_MAX_SIDE
 
-#define ALPHABET_SIZE 26        // compile-time MAX alphabet size (sizes all arrays)
+#define TRIFID_SIDE 3           // Trifid cube side (the classic 3x3x3)
+#define TRIFID_CELLS 27         // Trifid cube size (TRIFID_SIDE^3) == the 27-symbol alphabet
+#define TRIFID_MAX_SIDE 4       // largest cube side the side-generic primitive supports
+#define TRIFID_MAX_CELLS 64     // TRIFID_MAX_SIDE^3 (headroom for primitive stress tests)
+#define TRIFID_EXTRA_CHAR '+'   // the 27th symbol completing A..Z into a 27-cell cube
+
+#define ALPHABET_SIZE 26        // the classical 26-letter alphabet. This is BOTH the size
+                                // of the polyalphabetic keyword lanes AND the hardcoded
+                                // mod base of the Vigenere/Beaufort/Porta/Quagmire/Autokey
+                                // primitives ((x + ALPHABET_SIZE) % ALPHABET_SIZE), so it
+                                // must stay 26 -- do not repurpose it as a max-alphabet.
+#define DEFAULT_ALPHABET_SIZE 26 // the standard full A..Z alphabet size (init_alphabet(NULL))
+#define MAX_ALPHABET_SIZE 27    // largest RUNTIME alphabet g_alpha can take: the Trifid
+                                // 27-symbol cube (A..Z + '+'). Sizes only the runtime
+                                // alphabet maps (g_idx_to_char_arr, g_monograms) and the
+                                // ciphertext-facing IoC scratch -- everything that may be
+                                // indexed by a live symbol id in [0, g_alpha). All other
+                                // (polyalphabetic) arrays stay ALPHABET_SIZE.
 #define MAX_CIPHER_LENGTH 10000
 #define MAX_SYMBOLS    512      // distinct ciphertext symbols a homophonic cipher may use
 #define MAX_TOKEN_LEN  16       // longest surface form of one ciphertext symbol token
@@ -545,6 +563,23 @@ void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int 
 void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
 
 
+// Trifid cipher (trifid.c). The 3D generalization of Bifid: side-generic over a
+// side x side x side keyed cube (a permutation of the active n = side^3 letter
+// alphabet carried in 0..n-1 indices). cube[p] is the letter at cell p, whose three
+// coordinates are (c0, c1, c2) = (p/(side*side), (p/side)%side, p%side) -- "layer",
+// "row", "column" -- each in 0..side-1; pos[] is the inverse. The fractionation works
+// in blocks of `period`: encryption lays out the block's layer coordinates, then its
+// row coordinates, then its column coordinates as one 3*L stream, then re-groups that
+// stream into consecutive triples that index new cube cells; decryption is the inverse.
+// An incomplete final block (L < period) is handled in place. The default cube is the
+// 3x3x3, 27-symbol (A..Z + '+') cube. The solver needs only trifid_decrypt(); the rest
+// serve the test-data generator and the unit tests.
+void trifid_build_inverse(const int cube[], int pos[], int n);
+void trifid_encrypt(const int plain[], int len, const int cube[], int side, int period, int out[]);
+void trifid_decrypt(const int cipher[], int len, const int cube[], int side, int period, int out[]);
+void trifid_cube_from_keyword(const int keyword[], int kwlen, int cube[], int n);
+
+
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
 // histogram laid out as hist_by_col[col*ALPHABET_SIZE + c] (counts of cipher
 // char c in column col for this cycleword_len). It depends only on the (fixed)
@@ -617,9 +652,14 @@ void print_cipher(const int indices[], int len, const SymbolTable *tab);
 extern bool g_ngram_logprob;      // n-gram scoring mode (see utils.c); false = legacy
 extern int  g_alpha;              // runtime alphabet size (<= ALPHABET_SIZE)
 extern int  g_char_to_idx[128];   // ASCII (upper) -> alphabet index, or -1 if absent
-extern char g_idx_to_char_arr[ALPHABET_SIZE + 1];  // alphabet index -> char
-extern double g_monograms[ALPHABET_SIZE];          // English monogram freqs, reindexed to runtime alphabet
+extern char g_idx_to_char_arr[MAX_ALPHABET_SIZE + 1];  // alphabet index -> char (room for 27)
+extern double g_monograms[MAX_ALPHABET_SIZE];          // English monogram freqs, reindexed to runtime alphabet
 void init_alphabet(const char *excluded);          // (re)build the maps; NULL => full A..Z
+// Build the 27-symbol Trifid alphabet: A..Z (0..25) plus TRIFID_EXTRA_CHAR ('+') at
+// index 26, so a 3x3x3 cube has exactly 27 cells. Unlike init_alphabet this registers a
+// non-letter in g_char_to_idx (so '+' decodes from the ciphertext) and gives it a
+// negligible English monogram weight (the cube attack uses no monogram penalty).
+void init_alphabet_trifid(void);
 
 static inline int index_to_char(int idx) {
     return (idx >= 0) ? (unsigned char) g_idx_to_char_arr[idx] : (-(idx + 1));

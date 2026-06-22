@@ -328,6 +328,9 @@ SolverCtx make_solver_ctx(ColossusConfig *cfg, SharedData *shared, char *cribtex
 //   are each annealed (run_solver keeps the global best by n-gram score), so the per-
 //   period budget is smaller than Playfair's single-config budget to keep the whole
 //   solve in the same ballpark. Same small-scale temperature (mean log-probability).
+//   Trifid: the same fractionation-anneal as Bifid but over a 27-cell 3x3x3 cube (a
+//   larger permutation space than Bifid's 25-cell square), so it gets a larger per-
+//   period budget; otherwise identical small-scale temperature and per-period scheme.
 static const SearchDefaults g_search_defaults[] = {
     { .cipher_type = PLAYFAIR, .default_shape = SHAPE_ANNEAL,
       .a_n_restarts = 6, .a_n_hill_climbs = 400000,
@@ -340,6 +343,12 @@ static const SearchDefaults g_search_defaults[] = {
       .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 20, .s_n_hill_climbs = 200000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = TRIFID, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 6, .a_n_hill_climbs = 300000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 24, .s_n_hill_climbs = 300000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 

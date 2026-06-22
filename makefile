@@ -7,10 +7,10 @@ CC=gcc -Wall -O3 -funroll-loops
 # CC=gcc -Wall -lm -g -O0
 
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c
+PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
-SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c
+SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c trifid_solver.c
 
 # The full solver translation-unit set (everything but the test harnesses).
 SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) colossus.c
@@ -36,6 +36,8 @@ test:
 	./tests/test_playfair
 	$(CC) tests/test_bifid.c utils.c bifid.c -o tests/test_bifid
 	./tests/test_bifid
+	$(CC) tests/test_trifid.c utils.c trifid.c -o tests/test_trifid
+	./tests/test_trifid
 
 # Slow optimizer regression suite (~30s): planted-cipher recovery through the
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
@@ -47,6 +49,8 @@ testopt:
 	./tests/test_playfair_solver
 	$(CC) -DCOLOSSUS_NO_MAIN tests/test_bifid_solver.c $(SOLVER_SRC) -o tests/test_bifid_solver
 	./tests/test_bifid_solver
+	$(CC) -DCOLOSSUS_NO_MAIN tests/test_trifid_solver.c $(SOLVER_SRC) -o tests/test_trifid_solver
+	./tests/test_trifid_solver
 
 # Everything.
 testall: test testopt
@@ -67,6 +71,11 @@ playfair_gen:
 bifid_gen:
 	$(CC) tools/bifid_gen.c bifid.c utils.c -o tools/bifid_gen
 
+# Standalone test-data generator for Trifid ciphers. Reuses the real cipher code
+# (trifid.c + utils.c) so the generator and solver can never drift in convention.
+trifid_gen:
+	$(CC) tools/trifid_gen.c trifid.c utils.c -o tools/trifid_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen
 

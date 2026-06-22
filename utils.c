@@ -11,8 +11,8 @@ uint32_t rng_state = 123456789;
 // is given. ---
 int  g_alpha = ALPHABET_SIZE;
 int  g_char_to_idx[128];
-char g_idx_to_char_arr[ALPHABET_SIZE + 1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-double g_monograms[ALPHABET_SIZE];
+char g_idx_to_char_arr[MAX_ALPHABET_SIZE + 1] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+double g_monograms[MAX_ALPHABET_SIZE];
 
 // n-gram scoring mode. false (default) keeps the historical reward-only normalized
 // log(1+count) table, so every existing solve is bit-identical. true selects the
@@ -42,6 +42,21 @@ void init_alphabet(const char *excluded) {
     g_alpha = pos;
 }
 
+// Trifid 27-symbol alphabet: the full A..Z (0..25) plus TRIFID_EXTRA_CHAR ('+') at
+// index 26, so the 3x3x3 cube has exactly 27 cells. The extra symbol is registered in
+// g_char_to_idx (so it decodes from the ciphertext, unlike a sentinel) and given a
+// negligible monogram weight -- the cube attack is a bijection and uses no monogram
+// penalty, and '+' never occurs in the A..Z plaintext the n-gram score sees.
+void init_alphabet_trifid(void) {
+    init_alphabet(NULL);                                  // A..Z -> 0..25, g_alpha = 26
+    int pos = g_alpha;                                    // == DEFAULT_ALPHABET_SIZE (26)
+    g_idx_to_char_arr[pos] = TRIFID_EXTRA_CHAR;
+    g_idx_to_char_arr[pos + 1] = '\0';
+    g_char_to_idx[(unsigned char) TRIFID_EXTRA_CHAR] = pos;
+    g_monograms[pos] = 1e-6;                              // negligible (unused by Trifid)
+    g_alpha = pos + 1;                                    // 27
+}
+
 int gcd(int a, int b) {
     while (b) { a %= b; int t = a; a = b; b = t; }
     return a;
@@ -66,9 +81,11 @@ double entropy(int text[], int len) {
 
 
 double chi_squared(int plaintext[], int len) {
-    int i, counts[ALPHABET_SIZE];
+    // counts sized MAX_ALPHABET_SIZE: the loop runs to g_alpha, which can be 27 (Trifid),
+    // so a 26-wide array would read one past the end. Bit-identical for alphabets <= 26.
+    int i, counts[MAX_ALPHABET_SIZE];
     double frequency, chi2 = 0.;
-    tally(plaintext, len, counts, ALPHABET_SIZE);
+    tally(plaintext, len, counts, MAX_ALPHABET_SIZE);
     for (i = 0; i < g_alpha; i++) {
         frequency = ((double) counts[i])/len;
         chi2 += pow(frequency - g_monograms[i], 2)/g_monograms[i];
@@ -136,9 +153,12 @@ void print_text(int indices[], int len) {
 void ord(char *text, int indices[]) {
     for (int i = 0; i < strlen(text); i++) {
         unsigned char c = (unsigned char) text[i];
-        int v = isalpha(c) ? g_char_to_idx[toupper(c)] : -1;
-        // Letters outside the runtime alphabet (e.g. 'P' under -excludeletter P)
-        // and all non-letters are carried as reversible negative sentinels.
+        // Consult g_char_to_idx for any ASCII char (not just isalpha): it is -1 for
+        // every unregistered byte, so A..Z inputs are byte-for-byte unchanged, but a
+        // registered non-letter (the Trifid '+') maps to its index instead of a
+        // sentinel. Letters outside the runtime alphabet and all unregistered
+        // non-letters are carried as reversible negative sentinels.
+        int v = (c < 128) ? g_char_to_idx[toupper(c)] : -1;
         indices[i] = (v >= 0) ? v : (-(int) c - 1);
     }
 }
@@ -146,9 +166,11 @@ void ord(char *text, int indices[]) {
 
 
 // Map a single character to a letter index, the way ord() does: A..Z (runtime
-// alphabet) -> 0..g_alpha-1, anything else a reversible negative sentinel.
+// alphabet) -> 0..g_alpha-1, anything else a reversible negative sentinel. Any ASCII
+// char registered in g_char_to_idx maps (so the Trifid '+' decodes); unregistered
+// bytes stay -1, keeping every A..Z decode byte-for-byte identical.
 static int char_to_index(unsigned char c) {
-    int v = isalpha(c) ? g_char_to_idx[toupper(c)] : -1;
+    int v = (c < 128) ? g_char_to_idx[toupper(c)] : -1;
     return (v >= 0) ? v : (-(int) c - 1);
 }
 
@@ -256,10 +278,13 @@ void tally(int plaintext[], int len, int frequencies[], int n_frequencies) {
 
 
 float index_of_coincidence(int plaintext[], int len) {
-    int i, frequencies[ALPHABET_SIZE];
+    // Sized MAX_ALPHABET_SIZE so a live symbol id up to g_alpha-1 (the Trifid '+' at 26,
+    // present in the ciphertext the period estimator scans via mean_ioc) is counted, not
+    // dropped. For any alphabet <= 26 the extra bin stays 0, so the IoC is bit-identical.
+    int i, frequencies[MAX_ALPHABET_SIZE];
     double ioc = 0.;
-    tally(plaintext, len, frequencies, ALPHABET_SIZE);
-    for (i = 0; i < ALPHABET_SIZE; i++) ioc += frequencies[i]*(frequencies[i] - 1);
+    tally(plaintext, len, frequencies, MAX_ALPHABET_SIZE);
+    for (i = 0; i < MAX_ALPHABET_SIZE; i++) ioc += frequencies[i]*(frequencies[i] - 1);
     ioc /= len*(len - 1);
     return ioc;
 }

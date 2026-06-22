@@ -114,6 +114,9 @@ int parse_cipher_type(const char *arg) {
     // Bifid (Delastelle fractionation over a keyed Polybius square)
     if (str_eq(arg, "bifid") || str_eq(arg, "bf")) return BIFID;
 
+    // Trifid (Delastelle fractionation over a 3x3x3 keyed cube)
+    if (str_eq(arg, "trifid") || str_eq(arg, "tf") || str_eq(arg, "tri")) return TRIFID;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

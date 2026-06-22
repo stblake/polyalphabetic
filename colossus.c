@@ -216,6 +216,7 @@
 #include "homophonic_solver.h"
 #include "playfair_solver.h"
 #include "bifid_solver.h"
+#include "trifid_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -573,16 +574,16 @@ int main(int argc, char **argv) {
             }
             printf("-readdir %s\n", dir_arg);
         } else if (strcmp(argv[i], "-period") == 0) {
-            // Bifid: pin the fractionation period (block size) instead of estimating it.
+            // Bifid/Trifid: pin the fractionation period (block size) vs estimating it.
             cfg.period_present = true;
             cfg.period = atoi(argv[++i]);
             printf("-period %d\n", cfg.period);
         } else if (strcmp(argv[i], "-maxperiod") == 0) {
-            // Bifid: largest period the IoC estimator scans (default min(20, len/2)).
+            // Bifid/Trifid: largest period the IoC estimator scans (default min(20, len/2)).
             cfg.max_period = atoi(argv[++i]);
             printf("-maxperiod %d\n", cfg.max_period);
         } else if (strcmp(argv[i], "-nperiods") == 0) {
-            // Bifid: how many top-IoC candidate periods to anneal (default 5).
+            // Bifid/Trifid: how many top-IoC candidate periods to anneal (default 5).
             cfg.n_periods = atoi(argv[++i]);
             printf("-nperiods %d\n", cfg.n_periods);
         } else {
@@ -657,6 +658,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Playfair cipher (digraphic substitution over a 5x5 keyed grid).\n\n");
     } else if (cfg.cipher_type == BIFID) {
         printf("\nAttacking a Bifid cipher (fractionation over a keyed Polybius square).\n\n");
+    } else if (cfg.cipher_type == TRIFID) {
+        printf("\nAttacking a Trifid cipher (fractionation over a keyed 3x3x3 cube).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -699,7 +702,7 @@ int main(int argc, char **argv) {
     // by ACA convention) unless the user has already shrunk it with -excludeletter.
     // Must happen before load_ngrams so the n-gram table is built over the same 25
     // letters (mod-25 packing), and before any ciphertext is decoded.
-    if (cfg.cipher_type == PLAYFAIR && g_alpha == ALPHABET_SIZE) {
+    if (cfg.cipher_type == PLAYFAIR && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type playfair: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
@@ -708,10 +711,19 @@ int main(int argc, char **argv) {
     // Bifid defaults to the same 5x5 (25-letter, J->I) square as Playfair. Force it
     // here -- before load_ngrams -- unless the user already shrank the alphabet (e.g.
     // -excludeletter for a different excluded letter, or a 36-letter 6x6 alphabet).
-    if (cfg.cipher_type == BIFID && g_alpha == ALPHABET_SIZE) {
+    if (cfg.cipher_type == BIFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type bifid: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
+    }
+
+    // Trifid runs on a 27-symbol cube (A..Z + '+'): force that alphabet here -- before
+    // load_ngrams, so the n-gram table is built over the same 27 symbols (base-27
+    // packing) and the ciphertext '+' decodes -- unless the user already changed it.
+    if (cfg.cipher_type == TRIFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet_trifid();
+        printf("-type trifid: alphabet forced to %d symbols (A..Z + '%c'): %s\n",
+            g_alpha, TRIFID_EXTRA_CHAR, g_idx_to_char_arr);
     }
 
     // --- Resource Loading ---
@@ -828,7 +840,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     if (cfg->skip_spaces && !symbol_mode) {
         int w = 0;
         for (int r = 0; ciphertext_str[r] != '\0'; r++) {
-            if (isalpha((unsigned char) ciphertext_str[r]))
+            unsigned char c = (unsigned char) ciphertext_str[r];
+            // Keep letters and any other char registered in the active alphabet (the
+            // Trifid '+'); drop spaces/punctuation. For the default A..Z alphabet this
+            // is byte-for-byte the historical isalpha() filter.
+            if (isalpha(c) || (c < 128 && g_char_to_idx[toupper(c)] >= 0))
                 ciphertext_str[w++] = ciphertext_str[r];
         }
         ciphertext_str[w] = '\0';
@@ -943,6 +959,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == BIFID) {
         solve_bifid(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == TRIFID) {
+        solve_trifid(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }
