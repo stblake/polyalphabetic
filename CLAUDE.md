@@ -35,7 +35,7 @@ polyalpha_solver.c/.h    # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/
 transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h   # transposition solvers
 railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
 redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
-indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h hill_solver.c/.h   # each: a CipherModel + solve_<type>()
+indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h hill_solver.c/.h phillips_solver.c/.h   # each: a CipherModel + solve_<type>()
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c gronsfeld.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
@@ -43,6 +43,7 @@ playfair.c           # Playfair primitives: grid build / prepare / encrypt / dec
 bifid.c              # Bifid primitives: square build / encrypt / decrypt (side-generic keyed Polybius square)
 trifid.c             # Trifid primitives: cube build / encrypt / decrypt (side-generic keyed 3x3x3 cube)
 hill.c               # Hill primitives: matrix multiply / encrypt / decrypt / det+inverse mod 26 (generic k x k)
+phillips.c           # Phillips primitives: derive 8 squares from a base / encrypt / decrypt (side-generic, 3 variants)
 transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
 dict.c               # dictionary load + word-finding (scores plaintext readability)
 utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
@@ -56,6 +57,7 @@ tools/bifid_gen.c            # standalone Bifid test-data generator (make bifid_
 tools/trifid_gen.c           # standalone Trifid test-data generator (make trifid_gen)
 tools/hill_gen.c             # standalone Hill test-data generator (make hill_gen)
 tools/gronsfeld_gen.c        # standalone Gronsfeld test-data generator (make gronsfeld_gen)
+tools/phillips_gen.c         # standalone Phillips test-data generator (make phillips_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -104,7 +106,14 @@ non-multiples of k, and the k=1 edge cases), and
 numeric-key convention — HELLOWORLD + key 12345 → IGOPTXQUPI — plus the zero-shift
 identity and mod-26 wrap, encrypt/decrypt round-trips over random digit keys × random
 lengths, exact agreement with `vigenere_*` fed the same digits as its cycleword, and the
-keylen-1 / over-long-key edge cases).
+keylen-1 / over-long-key edge cases), and
+`tests/test_phillips.c` (the Phillips primitives: the full ACA `DIAGONALS` worked-example
+known-answer vector — the 81-letter `squares one…is forty` → `KZWLY…GREYXO` — plus an
+assertion pinning `phillips_build_squares`' 8-square Row table cell-for-cell against the
+ACA's printed squares #1–#8, encrypt/decrypt round-trips over random base squares × random
+lengths for ALL THREE variants and a side-generic 6x6, and the documented structural facts
+— the column-rotation symmetry, its row-rotation dual, the #1≡#5 / #2≡#8 cyclic equivalences,
+and that the 8 derived squares are distinct grids).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -116,15 +125,20 @@ rate, a capability floor with the period *estimated* end-to-end, and the length 
 k swept, a k=2 and a k=3 capability floor, and the k=2 length cliff), and
 `tests/test_gronsfeld_solver.c` (Gronsfeld: confirms it has *no* registry entry and rides
 the polyalpha defaults, a capability floor with the period *estimated* end-to-end and again
-pinned, and the length cliff).
+pinned, and the length cliff), and
+`tests/test_phillips_solver.c` (Phillips: registry validation for all three variant types
+plus a non-registry type left untouched, a ~760-char capability floor for EACH variant — Row
+through the registry default, Column/Row-Column at an explicit budget — and a Row length
+cliff showing recovery from ~200 characters).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-36 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+39 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
-cipher, a Bifid cipher, a Trifid cipher, and a Hill cipher) that each
+cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, and the three Phillips
+variants — Row / Column / Row-Column) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -135,7 +149,8 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 21-case fast tier in ~50s (use while iterating),
-`--slow` the 14 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid and ~18s Trifid solves), no flag runs both.
+`--slow` the 17 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid and the
+three ~13s Phillips solves), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -157,7 +172,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
 `transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31`,
-`trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34` (full list in
+`trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34`,
+`phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37` (full list in
 `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -335,6 +351,30 @@ the polyalphabetic search defaults (no registry entry) and the default reward-on
 table (no `-logprob` needed, like Vigenère). Generate test ciphers with
 `tools/gronsfeld_gen.c` (`make gronsfeld_gen`; the key arg is a digit string, e.g. `31415926`).
 
+The **Phillips** type (`solve_phillips()`, `PHILLIPS_MODEL`, `SHAPE_ANNEAL`) is a **periodic
+monographic substitution over 8 keyed Polybius squares** derived from one base 5x5 square. The
+plaintext is split into blocks of 5 letters; block `b` is enciphered with square `(b mod 8)`,
+each letter going to the one diagonally **down-right with wrap** (`cipher = sq[(r+1)%5][(c+1)%5]`),
+so the overall period is 40. The 8 squares are derived from the base by a fixed row-reinsertion
+table (squares 1–5: base row 0 reinserted at row positions 0–4; squares 6–8: then row 1 reinserted
+at positions 1–3) — verified cell-for-cell against the ACA worked example. It runs on the same
+25-letter (J→I) grid as Playfair/Bifid (`init_alphabet("J")` before `load_ngrams`), with the base
+square a permutation of `0..24` in the `key` lane. The only unknown is that base square, so the
+attack is **identical to Playfair's** (cell-swap-dominated anneal + row/column swaps and grid
+reflections, no anti-collapse penalty — every derived square, and hence the whole map, is a
+bijection) — but *monographic* (no digraph prep) and with **no period to estimate** (block size 5
+and the 8-square cycle are fixed → a single engine config). Because it carries more signal per
+character than digraphic Playfair, it recovers reliably from **~200+ characters** (see
+`tests/test_phillips_solver.c`) and rides a leaner registry budget than Playfair (`4×250000`).
+Like the other near-the-limit square types it effectively needs `-logprob`. The cyclic-column
+rotation of the base re-enciphers identically, so the recovered square is unique only up to that
+(the plaintext is unique). **Three variants** select how the 8 squares are built, all sharing the
+solver/primitive: `phillips` (the ACA-standard **Row** type), `phillips-c` (**Column** — the same
+reinsertion applied to columns), and `phillips-rc` (**Row-Column** — rows for squares 2–5, columns
+for 6–8). The primitives (`phillips.c`) are **side-generic** (`2·side−2` squares of `side` letters).
+Generate test ciphers with `tools/phillips_gen.c` (`make phillips_gen`; the variant arg is
+`row`/`col`/`rowcol`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -346,9 +386,12 @@ Types with no entry keep the global defaults bit-for-bit (so the regression suit
 unaffected) — currently Playfair (`SHAPE_ANNEAL`, `6x400000`, `inittemp 0.08`,
 `backtrack 0.30`), Bifid (`SHAPE_ANNEAL`, `4x200000` per period, `inittemp 0.08`,
 `backtrack 0.30`), Trifid (`SHAPE_ANNEAL`, `6x300000` per period, `inittemp 0.08`,
-`backtrack 0.30` — a larger budget for the 27-cell cube) and Hill (`SHAPE_ANNEAL`,
+`backtrack 0.30` — a larger budget for the 27-cell cube), Hill (`SHAPE_ANNEAL`,
 `250x8000` per swept block size, `inittemp 0.10`, `backtrack 0.25` — many short restarts,
-since the small matrix climbs converge fast) have tuned entries. This is the mechanism for moving the magic
+since the small matrix climbs converge fast) and Phillips and its two variants
+(`SHAPE_ANNEAL`, `4x250000`, `inittemp 0.08`, `backtrack 0.30` — a single config, leaner
+than Playfair since monographic Phillips recovers from shorter text) have tuned entries.
+This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
 

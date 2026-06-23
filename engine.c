@@ -362,6 +362,31 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.25,
       .s_n_restarts = 250, .s_n_hill_climbs = 8000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Phillips (and its column / row-column variants): the same 5x5-square anneal as
+    // Playfair (one config, the base grid is the only unknown), so it shares Playfair's
+    // small-scale temperature and backtracking. But Phillips is MONOGRAPHIC (every letter
+    // is independently substituted, period 40), so it carries more signal per character
+    // than digraphic Playfair and recovers reliably from ~200 characters at a leaner
+    // budget -- 4x250000 lands a 760-char solve at ~100% in ~16s (see
+    // tests/test_phillips_solver.c). Same profile for all three variants.
+    { .cipher_type = PHILLIPS, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 4, .a_n_hill_climbs = 250000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 250000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = PHILLIPS_C, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 4, .a_n_hill_climbs = 250000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 250000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = PHILLIPS_RC, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 4, .a_n_hill_climbs = 250000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 250000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

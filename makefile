@@ -7,10 +7,10 @@ CC=gcc -Wall -O3 -funroll-loops
 # CC=gcc -Wall -lm -g -O0
 
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c gronsfeld.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c hill.c
+PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c gronsfeld.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c hill.c phillips.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
-SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c trifid_solver.c hill_solver.c
+SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c trifid_solver.c hill_solver.c phillips_solver.c
 
 # The full solver translation-unit set (everything but the test harnesses).
 SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) colossus.c
@@ -42,6 +42,8 @@ test:
 	./tests/test_trifid
 	$(CC) tests/test_hill.c utils.c hill.c -o tests/test_hill
 	./tests/test_hill
+	$(CC) tests/test_phillips.c utils.c phillips.c -o tests/test_phillips
+	./tests/test_phillips
 
 # Slow optimizer regression suite (~30s): planted-cipher recovery through the
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
@@ -59,6 +61,8 @@ testopt:
 	./tests/test_trifid_solver
 	$(CC) -DCOLOSSUS_NO_MAIN tests/test_hill_solver.c $(SOLVER_SRC) -o tests/test_hill_solver
 	./tests/test_hill_solver
+	$(CC) -DCOLOSSUS_NO_MAIN tests/test_phillips_solver.c $(SOLVER_SRC) -o tests/test_phillips_solver
+	./tests/test_phillips_solver
 
 # Everything.
 testall: test testopt
@@ -94,6 +98,11 @@ hill_gen:
 gronsfeld_gen:
 	$(CC) tools/gronsfeld_gen.c gronsfeld.c utils.c -o tools/gronsfeld_gen
 
+# Standalone test-data generator for Phillips ciphers. Reuses the real cipher code
+# (phillips.c + utils.c) so the generator and solver can never drift in convention.
+phillips_gen:
+	$(CC) tools/phillips_gen.c phillips.c utils.c -o tools/phillips_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen
 

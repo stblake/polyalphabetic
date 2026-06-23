@@ -123,6 +123,14 @@ int parse_cipher_type(const char *arg) {
     // Gronsfeld (Vigenere with a numeric key: per-column shifts 0..9)
     if (str_eq(arg, "gronsfeld") || str_eq(arg, "gron")) return GRONSFELD;
 
+    // Phillips (8-square keyed-Polybius substitution) and its column / row-column variants.
+    // Test the variants before the bare "phillips" so the longer aliases win.
+    if (str_eq(arg, "phillips-c") || str_eq(arg, "phillipsc") || str_eq(arg, "phillips_c") ||
+        str_eq(arg, "phillipscolumn")) return PHILLIPS_C;
+    if (str_eq(arg, "phillips-rc") || str_eq(arg, "phillipsrc") || str_eq(arg, "phillips_rc") ||
+        str_eq(arg, "phillipsrowcolumn")) return PHILLIPS_RC;
+    if (str_eq(arg, "phillips") || str_eq(arg, "phil")) return PHILLIPS;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

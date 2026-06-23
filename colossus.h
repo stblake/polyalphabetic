@@ -51,6 +51,9 @@
 #define TRIFID         32   // Trifid (Delastelle): fractionation over a 3x3x3 keyed cube
 #define HILL           33   // Hill (polygraphic substitution by a k x k matrix mod 26)
 #define GRONSFELD      34   // Gronsfeld (Vigenere with a numeric key: per-column shifts 0..9)
+#define PHILLIPS       35   // Phillips ("Row" type): 8 keyed-square substitution, period 40
+#define PHILLIPS_C     36   // Phillips-C: the column-shift dual of the Row square generation
+#define PHILLIPS_RC    37   // Phillips-RC: rows for squares 2-5, columns for squares 6-8
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -68,6 +71,14 @@
 #define TRIFID_MAX_SIDE 4       // largest cube side the side-generic primitive supports
 #define TRIFID_MAX_CELLS 64     // TRIFID_MAX_SIDE^3 (headroom for primitive stress tests)
 #define TRIFID_EXTRA_CHAR '+'   // the 27th symbol completing A..Z into a 27-cell cube
+
+#define PHILLIPS_SIDE 5         // Phillips grid side (the classic 5x5)
+#define PHILLIPS_GRID 25        // Phillips grid size (PHILLIPS_SIDE * PHILLIPS_SIDE)
+#define PHILLIPS_MAX_SIDE 6     // largest side the side-generic primitive/tests support
+#define PHILLIPS_MAX_GRID 36    // PHILLIPS_MAX_SIDE * PHILLIPS_MAX_SIDE
+#define PHILLIPS_MAX_SQUARES 10 // 2*PHILLIPS_MAX_SIDE - 2 (squares derived per base)
+// Phillips square-generation variants (which axis the derived squares permute).
+enum { PHILLIPS_ROW, PHILLIPS_COL, PHILLIPS_ROWCOL };
 
 #define ALPHABET_SIZE 26        // the classical 26-letter alphabet. This is BOTH the size
                                 // of the polyalphabetic keyword lanes AND the hardcoded
@@ -574,6 +585,21 @@ void bifid_build_inverse(const int grid[], int pos[], int n);
 void bifid_encrypt(const int plain[], int len, const int grid[], int side, int period, int out[]);
 void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int period, int out[]);
 void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
+
+
+// Phillips cipher (phillips.c). A periodic monographic substitution over `nsq = 2*side-2`
+// keyed Polybius squares derived from one base square (a permutation of the active
+// n = side*side letter alphabet, carried in 0..n-1 indices: base[p] is the letter at cell
+// p, row p/side col p%side). The plaintext is split into blocks of `side` letters and
+// block b is enciphered with square (b mod nsq); each letter is replaced by the one
+// diagonally down-right (with wrap), so the overall period is nsq*side (40 for the 5x5).
+// The `variant` selects how the derived squares are built (PHILLIPS_ROW / _COL / _ROWCOL,
+// see phillips.c). The solver needs only phillips_decrypt(); build_squares/encrypt/
+// grid_from_keyword serve the test-data generator and the unit tests.
+void phillips_build_squares(const int base[], int side, int variant, int squares[]);
+void phillips_encrypt(const int plain[], int len, const int base[], int side, int variant, int out[]);
+void phillips_decrypt(const int cipher[], int len, const int base[], int side, int variant, int out[]);
+void phillips_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
 
 
 // Trifid cipher (trifid.c). The 3D generalization of Bifid: side-generic over a

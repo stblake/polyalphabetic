@@ -216,6 +216,7 @@
 #include "homophonic_solver.h"
 #include "playfair_solver.h"
 #include "bifid_solver.h"
+#include "phillips_solver.h"
 #include "trifid_solver.h"
 #include "hill_solver.h"
 
@@ -665,6 +666,9 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Trifid cipher (fractionation over a keyed 3x3x3 cube).\n\n");
     } else if (cfg.cipher_type == HILL) {
         printf("\nAttacking a Hill cipher (polygraphic substitution by a k x k matrix mod 26).\n\n");
+    } else if (cfg.cipher_type == PHILLIPS || cfg.cipher_type == PHILLIPS_C ||
+               cfg.cipher_type == PHILLIPS_RC) {
+        printf("\nAttacking a Phillips cipher (8-square keyed-Polybius substitution, period 40).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -719,6 +723,15 @@ int main(int argc, char **argv) {
     if (cfg.cipher_type == BIFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type bifid: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // Phillips runs on the same 5x5 (25-letter, J->I) grid as Playfair/Bifid. Force it
+    // here -- before load_ngrams -- unless the user already shrank the alphabet.
+    if ((cfg.cipher_type == PHILLIPS || cfg.cipher_type == PHILLIPS_C ||
+         cfg.cipher_type == PHILLIPS_RC) && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type phillips: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -976,6 +989,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == HILL) {
         solve_hill(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == PHILLIPS || cfg->cipher_type == PHILLIPS_C ||
+        cfg->cipher_type == PHILLIPS_RC) {
+        solve_phillips(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }
