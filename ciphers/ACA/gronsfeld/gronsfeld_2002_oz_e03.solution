@@ -1,0 +1,10 @@
+# solution for gronsfeld_2002_oz_e03.txt
+status:      SOLVED (clean)
+true_type:   Gronsfeld
+solver:      gron
+length:      113  (cipher symbols)
+score:       3.28
+solve_time:  44.69s  (CPU user+sys, single-threaded)
+command:     ./colossus -type gron -cipher ciphers/ACA/gronsfeld/gronsfeld_2002_oz_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -nrestarts 4000 -nhillclimbs 3000 -seed 1234
+ciphertext:  YHPJSJZOGHEHTJYDGUICWWTAQEIGZJKFGWAFIWKVDOMHMIOUQUHFZYUSKYIBBFRSVRQBSJGJCJIPNQGDUISSWZXZGOZFAFTKVRWUISJVPWLFXJXJJ
+plaintext:   WELIKETHEEAGLESWEREBORNTOBEFREEYETWEAREOBLIGEDINORDERTOLIVEATALLTOMAKEACAGEOFLAWSFOROURSELVESANDTOSTANDONTHEPERCH

@@ -1,0 +1,10 @@
+# solution for transposition_2008_digitalcons_e08_3.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      91
+score:       3.30
+solve_time:  6.32s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2008_digitalcons_e08_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  ERSTAPIESYGRYERSLNTWEMOGOCPHBGNTWEILTOOORNIIANDIVDOOETGSAOTGNTRIBNEBSASEEHHTAEELSUEEOEHHLNI
+plaintext:   THOSEWHOARETOOSMARTTOENGAGEINPOLITICSAREPUNISHEDBYBEINGGOVERNEDBYTHOSEWHOARELESSINTELLIGENT

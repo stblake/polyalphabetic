@@ -1,0 +1,10 @@
+# solution for transposition_2010_digitalcons_e04_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      nihilist
+length:      100
+score:       3.00
+solve_time:  6.68s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2010_digitalcons_e04_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  HOMTOGPILFDCYFIERLKNAIWVHWTSTIRRGXEIEAHNLEYSDANEVILEKYNUARNURLOLAUICEGLOSIETMAHWKCISROOOLYCKOHOSNANW
+plaintext:   MOPOFLIGHTSOMEWHATLIKEANUNRULYWITHITSWAVYCRINKLEDFOLIAGECURLYENDIVEALSOKNOWNASCHICORYLOOKSGREENHAIRX

@@ -1,0 +1,10 @@
+# solution for transposition_2014_digitalcons_e13.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      130
+score:       3.18
+solve_time:  2.81s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2014_digitalcons_e13.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  SAOWNIDNTEBTOVEEIVEHLEOVHNANUITLVWOERBWEUTIWEHNLTEBLAIFGOLETAIRTRGAGNOKWNODRBEGOODAISDOPRTEEEPDLSPOEWOIEPOLPIGLPEITTOHELNOEOCRAXCD
+plaintext:   STEVENWEINBERGWRITESWITHORWITHOUTRELIGIONGOODPEOPLECANBEHAVEWELLANDBADPEOPLECANDOEVILBUTFORGOODPEOPLETODOEVILNOWTHATTAKESRELIGIONX

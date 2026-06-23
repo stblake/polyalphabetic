@@ -1,0 +1,10 @@
+# solution for transposition_2008_digitalcons_e11.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      100
+score:       3.10
+solve_time:  4.23s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2008_digitalcons_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  DNDRTYAAOSBUAWNGPERARREILSLOAECNAAUUNEIDUORDDEANFEVADLNUOITBEYCRVELPBUASLEEITDYICESENREAANTCMWSSTIIE
+plaintext:   DAWARSAIDAVIRUSISASTRANGEANDUNLOVELYENTITYAPIECEOFNUCLEICACINOBELLAUREATEPETERMEDSURROUNDEDBYBADNEWS

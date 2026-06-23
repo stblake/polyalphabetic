@@ -1,0 +1,10 @@
+# solution for homophonic_2002_cereeus_e02.txt
+status:      PARTIAL (words recovered)
+true_type:   Homophonic
+solver:      homophonic
+length:      61  (cipher symbols)
+score:       -4.65
+solve_time:  4.17s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_2002_cereeus_e02.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  95,11,76,64,55,47,30,65,11,14,43,29,73,94,47,95,76,91,52,83,10,41,97,43,51,16,31,48,36,50,02,47,43,14,36,05,35,45,51,17,15,53,02,18,47,34,62,31,94,74,93,47,53,64,28,81,15,76,68,70,70
+plaintext:   UESALONGEAREVIOUSTHATHEREPLANSTORANDTHEMENTIONALITIONANCESOFF

@@ -1,0 +1,10 @@
+# solution for transposition_2004_digitalcons_e16.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      transcol
+length:      152
+score:       3.34
+solve_time:  5.35s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/transposition_2004_digitalcons_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  ASOGOTEMOWNIPSLTNRORRTLOSGSHSNRTNWEOHDIRIRTFIDIENBIDTKITSEPEARTIPLNODIACIOGNOUACANNNCOARHLAUOVSREETOHIIDNYAEMCONIVOZSIASNNATAEILMGEATRREFEYIIDFNUFOCABIO
+plaintext:   ATHEORYISANESSENTIALSCIENTIFICTOOLPROVIDINGAMETHODFORORGANIZINGOTHERWISEUNRELATEDINFORMATIONABOUTOURPHYSICALWORLDANDACONVENIENTBASISFORMAKINGPREDICTIONS

@@ -1,0 +1,10 @@
+# solution for myszkowski_2003_elcondor_x11.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Myszkowski
+solver:      myszkowski
+length:      160
+score:       2.72
+solve_time:  9.04s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/myszkowski_2003_elcondor_x11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  DROFARLNESAPSAAOCAOEUEEMIUUOUAAOAILNTULIEUCNRLNAAQUYTAEEEAAALCSNSEGRNHPAIERTBIMACZUERAEFOMEFOASNAEUUIGOEAAMNUNLDDULAULASEUNLASRAAEESIDTORFFRLAVBSESGEDTSRLOTEDCE
+plaintext:   DVNBURIERGLONFATEGRACARESESLEASUNTBFOLEUSQUERIANAPAGFISEEDSAMAFEEANOULANCURCAATODOSURNEZURALULEYILHEALEMCLATIOUTSURALARUDOTESPEANUANESOADICAOFOAMEADIAUSAMEALNEE

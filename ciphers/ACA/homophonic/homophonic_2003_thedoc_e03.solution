@@ -1,0 +1,10 @@
+# solution for homophonic_2003_thedoc_e03.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Homophonic
+solver:      homophonic
+length:      67  (cipher symbols)
+score:       -4.65
+solve_time:  4.36s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_2003_thedoc_e03.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  74,84,78,74,59,59,30,22,51,76,00,30,85,50,47,83,22,78,80,48,14,49,24,43,84,06,45,14,79,96,14,35,00,28,12,75,18,84,78,62,62,36,50,18,17,31,68,85,75,41,37,06,22,79,98,14,79,53,29,47,05,12,15,62,92,05,46
+plaintext:   EARELLHOMETHANDFORTHISPRACTINGINTHESTAREEINTHEWASTOCONTINANDSEVERSU

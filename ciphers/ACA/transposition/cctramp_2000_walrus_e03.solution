@@ -1,0 +1,10 @@
+# solution for cctramp_2000_walrus_e03.txt
+status:      SOLVED (clean)
+true_type:   CC Tramp
+solver:      myszkowski
+length:      84
+score:       3.49
+solve_time:  5.78s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/cctramp_2000_walrus_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  ECTPSTAANELNTEVITOOAWBURLOAPNTEEYTTLESTSRIOHPWTHHBSUHTOTREHLASYLCUYEDDETAEHHEEOAAEHP
+plaintext:   EVERNOTICETHATTHEPEOPLEWHOSAYTHATSTHEWAYTHEBALLBOUNCESAREUSUALLYTHEONESTHATDROPPEDIT

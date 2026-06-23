@@ -1,0 +1,10 @@
+# solution for transposition_2007_digitalcons_e08_3.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      64
+score:       3.28
+solve_time:  4.17s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2007_digitalcons_e08_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  TFXIJANKPSPLIMSWALSNELSAHECPONENRTTBTAOTHFLIOAUMEIEAYISOTIECNLIN
+plaintext:   MANKNOWTHATTHEPRINCIPALBUSINESSOFLIFEISTOENJOYITALLANIMALSEXCEPT

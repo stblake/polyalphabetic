@@ -1,0 +1,10 @@
+# solution for transposition_2005_digitalcons_ac796.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      grille
+length:      169
+score:       3.23
+solve_time:  9.80s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2005_digitalcons_ac796.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  IINOONFOOSALTITLATNCLUYRDMEDOITELONEECSIEMIVISARLKETIAZNATMADTTITCHIENHGOPLUBNLOOIOKSINRCTOLFLAOACVLSSTEVULESYODETGEALESSCLVONDASLCYOIEWSICETIACLCEMUSIINSBCRITERASDOADEG
+plaintext:   NOTINCLUDETELEMARKETINGORLASVEGASONLYOCCASIONALLYDOESITMATCHPUBLICTASTESTEVEWEINBERGFORMECIVILIZATIONINCLUDESCLASSICALMUSICRADIOSTATIONSANDTHELOOKSOFLOVELYOLDCITIESITDOE

@@ -1,0 +1,10 @@
+# solution for redefence_2000_phoenix_e06.txt
+status:      SOLVED (clean)
+true_type:   Redefence
+solver:      redefence
+length:      60
+score:       3.34
+solve_time:  4.71s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/redefence_2000_phoenix_e06.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  ELADAKETONNRTCFHNMIGANOEEHEAYORINIHTTOHNNSHNDESAVTCOMTHIHNRR
+plaintext:   THEREISNOMANLIVINGTHATCANNOTDOMORETHANHETHINKSHECANHENRYFORD

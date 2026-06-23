@@ -1,0 +1,10 @@
+# solution for transposition_2013_digitalcons_e01_4.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      transcol
+length:      120
+score:       3.18
+solve_time:  4.45s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/transposition_2013_digitalcons_e01_4.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  ALSMERRTARLHWEFSLEMBERBOCREUFODBEOYNIDRITOSESSRLRVOEWDELEESLLEODEUICTEANEERHFNRISYEMMNTTIAFWUOVAABDTASOEDUACIEYOELELWDBI
+plaintext:   AMERICAWILLNEVERBEDESTROYEDFROMTHEOUTSIDEIFWEFALTERANDLOSEOURFREEDOMSITWILLBEBECAUSEWEDESTROYEDOURSELVESBYABRAHAMLINCOLN

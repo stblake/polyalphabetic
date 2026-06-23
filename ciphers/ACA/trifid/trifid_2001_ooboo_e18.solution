@@ -1,0 +1,10 @@
+# solution for trifid_2001_ooboo_e18.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Trifid
+solver:      trifid
+length:      147  (cipher symbols)
+score:       -7.30
+solve_time:  53.64s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_2001_ooboo_e18.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  HADRBRNRHHTFIHINLJHUQUCYFMIBEAFQMACCBLOHBCONDFSODEADFDEFFEJIILTMFRR+KXOESMEYZSRLCRMFTHYCPWMZEFUCZMSTUVMUSDFKR+EACRRFXMEEURHFXMGECOYCXXOEFAUBHWAIODM
+plaintext:   FLSBAXINFESTIMNALYCHZARDHETRENDHELEDTFILDUKNHUADADDEDCHFAGULYMSLANARYMITEAREVHAMMTHEFITTIVEWMSDDIFACUTEICBSAOOIKRTHEFIMEHTSEAIMCOUTOTIMTHODBAGSISQU

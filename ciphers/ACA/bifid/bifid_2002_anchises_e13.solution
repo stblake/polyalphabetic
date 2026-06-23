@@ -1,0 +1,10 @@
+# solution for bifid_2002_anchises_e13.txt
+status:      PARTIAL (words recovered)
+true_type:   Bifid
+solver:      bifid
+length:      137  (cipher symbols)
+score:       -7.23
+solve_time:  34.84s  (CPU user+sys, single-threaded)
+command:     ./colossus -type bifid -cipher ciphers/ACA/bifid/bifid_2002_anchises_e13.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 12 -nhillclimbs 200000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  YIWCGANXBGFPLYGPDXCRKPFWWABNHUNVCRPSTFKBGFKWDDDINACRNRQTBFPNWSIWYQAGWZPERFSRXUTYPPGVNRFRQPIMSYIDAGFPBCKMMXBGRLYTOWPIFNIIDDMPAFLNNBNEABRTY
+plaintext:   NPAVESENGDIATEIKAROPYORLVMLSAFTEKSSINGNBOSENDFORDSAWNGUNDKLFEAKYGLIRRDERODATEHITONAANINRQUITALRAGNBUTBCENTNRIMBABODYEMITAQSRPAKISREEASTCM

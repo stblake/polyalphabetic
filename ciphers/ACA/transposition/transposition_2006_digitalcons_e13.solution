@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_e13.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      69
+score:       3.21
+solve_time:  5.21s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_e13.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  ERITEFBASSSRLDUTCRTWIAESONMTNISABHWORLFOISSSOSUERNOTOSONENTSAIRETFSEN
+plaintext:   THEWORSTSORROWSINLIFEARENOTITSLOSSESANDMISFORTUNESBUTITSFEARSACBENSON

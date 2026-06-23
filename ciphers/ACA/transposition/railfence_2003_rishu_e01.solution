@@ -1,0 +1,10 @@
+# solution for railfence_2003_rishu_e01.txt
+status:      SOLVED (clean)
+true_type:   Railfence
+solver:      railfence
+length:      60
+score:       3.15
+solve_time:  0.11s  (CPU user+sys, single-threaded)
+command:     ./colossus -type railfence -cipher ciphers/ACA/transposition/railfence_2003_rishu_e01.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 20 -nhillclimbs 3000
+ciphertext:  URTMRELRSUMUPROTUVRLHTTOOBUUNNSIWEOSPTIYNYTOEITLEDLEUNEYYONM
+plaintext:   PUTTRUSTINYOURMONEYBUTPUTYOURMONEYINTRUSTOLIVERWENDELLHOLMES

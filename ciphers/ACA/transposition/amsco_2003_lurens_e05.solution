@@ -1,0 +1,10 @@
+# solution for amsco_2003_lurens_e05.txt
+status:      PARTIAL (words recovered, blocks may be shuffled)
+true_type:   Amsco
+solver:      myszkowski
+length:      94
+score:       3.12
+solve_time:  5.91s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/amsco_2003_lurens_e05.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  IGTSHRLNUSINAFTEHIRHEATIINGCUPDSNHSEIEBNHAINIETHTSUTOFASSIEDGARRENPATCEOTIFLEASOATSLLRLEVSHNRW
+plaintext:   IANTSCIBUSINALGIVENTEDENCRTHEHOSTHIGHILEASRUGSIREARTHPASTFULNERARIALINSEDTHEWHENTSSIONSFOFALTP

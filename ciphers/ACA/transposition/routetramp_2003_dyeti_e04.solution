@@ -1,0 +1,10 @@
+# solution for routetramp_2003_dyeti_e04.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Route Tramp
+solver:      myszkowski
+length:      72
+score:       3.06
+solve_time:  5.48s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/routetramp_2003_dyeti_e04.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  GIEAOFBFITRTEMOUDAGESIDSITYXUSNCTILAEDAASOUMHINTENRPTROIRITLFEIOPSAEOCTN
+plaintext:   PIFGEILITIALOREDATTACTEREABYPOXFINASDISOFAMUMOUNGTOURSHISEINTERINSTOTECD

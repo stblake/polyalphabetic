@@ -1,0 +1,10 @@
+# solution for transposition_2016_digitalcons_jf5.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      transcol
+length:      72
+score:       3.26
+solve_time:  2.83s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/transposition_2016_digitalcons_jf5.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  LNIIYTNOEECUTCMDECTBOHSSELRSBIECKYORHOOEDHHAOTTTIMAGAERNIAOCNELNRCYTGRNT
+plaintext:   THELINCOLNMEMORIALDESIGNEDBYARCHITECTHENRYBACONTOOKEIGHTYEARSTOCONSTRUCT

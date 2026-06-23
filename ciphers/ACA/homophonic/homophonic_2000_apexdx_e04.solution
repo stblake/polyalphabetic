@@ -1,0 +1,10 @@
+# solution for homophonic_2000_apexdx_e04.txt
+status:      PARTIAL (words recovered)
+true_type:   Homophonic
+solver:      homophonic
+length:      59  (cipher symbols)
+score:       -4.28
+solve_time:  3.75s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_2000_apexdx_e04.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  64,33,09,37,15,76,16,30,97,51,70,97,43,38,77,57,97,38,15,38,87,53,80,52,04,19,42,43,19,76,56,68,89,22,58,00,26,02,65,93,72,38,21,57,97,74,25,96,68,34,81,68,18,83,17,89,08,93,67
+plaintext:   UCTIONFORMORETHERTOTHEBECAMEANDINGSANDWASTHERESTILLISTINGAP

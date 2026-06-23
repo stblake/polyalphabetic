@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_ac823.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      124
+score:       2.90
+solve_time:  6.98s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_ac823.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  GFEVSENTHOLOTHTSAAAXTNOKSIHLITHTRORELONDRRIPROTDEEEMFAFTFETONSLOOHIAANFNODEOFESOUNEDTNSSTANHTLYSDTIEPRIRIEESAECVGTADFEWENNEI
+plaintext:   RESSOTHGINGHASTOSIONSFEITHLSADEOULDNOTINFAFLETANDRTETENTHEFISNEHEOTATEENTOESHORIEWOATRANDPEDTOMKADRIVEFOFALOPRRENCYEXTFIVNSL

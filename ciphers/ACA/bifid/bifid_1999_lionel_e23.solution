@@ -1,0 +1,10 @@
+# solution for bifid_1999_lionel_e23.txt
+status:      SOLVED (clean)
+true_type:   Bifid
+solver:      bifid
+length:      143  (cipher symbols)
+score:       -5.03
+solve_time:  34.73s  (CPU user+sys, single-threaded)
+command:     ./colossus -type bifid -cipher ciphers/ACA/bifid/bifid_1999_lionel_e23.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 12 -nhillclimbs 200000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  KHIEUDOZZKHCHWIRLGDLLRNFICUFUAKREFLIAOIDEIQBHUMUOYSELGSMMYZOUHMQTDULPDRZGOEADIEUCDMPRYSEAGSKONOKDLPWEFEHAZQXDGOQGRDXNEFIGWCUOERVTEGQIARYOKMUGTO
+plaintext:   HAPPINESSISHAVINGALARGEFUNFILLEDCARINGLOVINGSUPPORTIVECOMPASSIONATEUNDERSTANDINGCOOPERATIVEHELPFULCLOSEKNITFAMILYFAROFFINANOTHERCITYGEORGEBURNS

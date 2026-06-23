@@ -1,0 +1,10 @@
+# solution for transposition_2014_digitalcons_e08_3.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      swagman
+length:      156
+score:       2.95
+solve_time:  9.66s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2014_digitalcons_e08_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  SPRITEORCHIDAGEISMSAILORSTREAKETHNICRAGOUTTRIUNEEPICALDANGERSWERVEEMBODYNOTIFYEXOTICCURSEDACTUALTYLOTEHIGHERELICITYEASTYOBTUSEURGINGNUMBERGLYPHSENABLEREJECT
+plaintext:   EXOTICCURSEDACTUALTYLOTEHIGHERELICITYEASTYOBTUSEURGINGNUMBERGLYPHSENABLEREJECTSPRITEORCHIDAGEISMSAILORSTREAKETHNICRAGOUTTRIUNEEPICALDANGERSWERVEEMBODYNOTIFY

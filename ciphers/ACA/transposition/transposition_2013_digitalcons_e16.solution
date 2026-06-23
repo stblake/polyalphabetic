@@ -1,0 +1,10 @@
+# solution for transposition_2013_digitalcons_e16.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      cadenus
+length:      100
+score:       3.35
+solve_time:  2.22s  (CPU user+sys, single-threaded)
+command:     ./colossus -type cadenus -cipher ciphers/ACA/transposition/transposition_2013_digitalcons_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 200 -nhillclimbs 6000
+ciphertext:  RMDAUENOUOEAURNTOSASHLYINPEOAACMPSOIINOHARHAOUTVWRICENRYDAEHRDMDIWSERYMTPNYUUETCSANETPRMGOSETHEENTTS
+plaintext:   UPONSOMETHINGTHATMAYNEVEROCCURYOUSHOULDHOPETHATINSURANCEPREMIUMSAREMONEYWASTEDANDWORRYASINTERESTPAID

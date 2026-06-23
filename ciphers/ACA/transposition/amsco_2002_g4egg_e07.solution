@@ -1,0 +1,10 @@
+# solution for amsco_2002_g4egg_e07.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Amsco
+solver:      swagman
+length:      133
+score:       2.86
+solve_time:  2.80s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/amsco_2002_g4egg_e07.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  NEPTIRDNIOFNSELLEYXORVOMOSAICYTMEAIANSISWPOTTIOBEAAEXROSRNTVBEGDICNIEEDTSOEACCINDANTTTEIHNEPLLIHEMVEMCUFANNDTAAUANTCMETFIPPEIHESRIRVA
+plaintext:   PSYOISBEENTTHEMACIANIESTAIANCENTIVNTERENOVENTAREDATLENEFRINLAYWORBIAINHUANISTOLOMPEXTDODEMCDAPIDFRICIOSVECCIPATTHEREXMASTOGISNELFUMPV

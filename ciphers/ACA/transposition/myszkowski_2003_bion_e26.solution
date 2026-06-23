@@ -1,0 +1,10 @@
+# solution for myszkowski_2003_bion_e26.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Myszkowski
+solver:      myszkowski
+length:      179
+score:       2.65
+solve_time:  9.81s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/myszkowski_2003_bion_e26.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EORGFEANLYEMEEFLNECNSEDRILANCANWQSESAUSUWCLITRGEOCIMIANEFIFGDANELWCNNIUYNARSGTSISRAFEEUECDAAICTMPRUEGFUIATHNFGPTVSIGELDLORAIDTIATHCAIGNICDOINREFTNSAIORONGALANFAFECAZEESNESIGNUATIA
+plaintext:   AAFEDINEUINWQEANGISCANNCEISETULCHAELYENDSAUCLUOFINGWIZONSUPDERTECAMAVEWCLANAFSSSINTERNITGIESESINECLARGETUTIDRELYONGROCOMFORENCLPANIMIRAIGIADDRASFLANTUNAIISAEEANEFIGGAFTFRHTAGEFFGC

@@ -1,0 +1,10 @@
+# solution for homophonic_2001_gman_e01.txt
+status:      PARTIAL (words recovered)
+true_type:   Homophonic
+solver:      homophonic
+length:      72  (cipher symbols)
+score:       -4.42
+solve_time:  4.43s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_2001_gman_e01.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  77,18,55,30,00,13,52,44,95,21,60,38,89,14,60,31,99,05,62,39,77,07,70,45,93,09,63,26,91,18,73,35,76,24,52,44,91,09,60,38,98,07,64,26,87,23,73,27,81,09,60,35,83,12,64,31,81,18,59,30,77,22,64,26,86,13,53,33,98,17,54,43
+plaintext:   LCOURSARESTINGTHEREALONGINTHECASEPARENTINOTHESAMENTSOFTHECOULDTHESTANDWI

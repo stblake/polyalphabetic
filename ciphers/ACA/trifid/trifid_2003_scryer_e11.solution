@@ -1,0 +1,10 @@
+# solution for trifid_2003_scryer_e11.txt
+status:      SOLVED (clean)
+true_type:   Trifid
+solver:      trifid
+length:      137  (cipher symbols)
+score:       -4.80
+solve_time:  45.47s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_2003_scryer_e11.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  QEAHZSOEDLALKMUDGVEUDSFXSEYRMDHQXCDEJXXLGZLLHLBCTLAJLZYAQUFDPHKDHSVLXGHSLUHCDHEADEICRPPBEFKGEEDWVVENGYQKWHLBUECZDHMVCXOBRNLOFOBQFE+ZKQFNM
+plaintext:   THEPEOPLECANALWAYSBEBROUGHTTOTHEBIDDINGOFTHELEADERSALLYOUHAVETODOISTELLTHEMTHEYAREBEINGATTACKEDANDDENOUNCETHEPACIFISTSFORLACKOFPATRIOTISM

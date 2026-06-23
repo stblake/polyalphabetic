@@ -1,0 +1,10 @@
+# solution for transposition_2007_digitalcons_e14.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      grille
+length:      64
+score:       3.26
+solve_time:  3.88s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2007_digitalcons_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  HEFANROTDIERIEWSVREORSCALYNNEPAGNHARLSROMBESWIEMLRPNLCETMEKHTAEN
+plaintext:   FOREVERYPROBLEMTHEREISANANSWERTHATISCLEARSIMPLEANDWRONGHLMENCKEN

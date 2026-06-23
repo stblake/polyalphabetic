@@ -1,0 +1,10 @@
+# solution for grille_2000_ooboo_e23.txt
+status:      SOLVED (clean)
+true_type:   Grille
+solver:      grille
+length:      100
+score:       3.37
+solve_time:  6.06s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/grille_2000_ooboo_e23.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  SDTTWOEAFDMHOSIRCUITHHRENIPILSTUGEOROSTDSIPOWSEONHALSIFSTHTEECLSHSIOISAFOESARTIMSCIMBUMONREUDNTIRTUY
+plaintext:   SURPLUSWEALTHISASACREDTRUSTWHICHITSPOSSESSORISBOUNDTOADMINISTERINHISLIFETIMEFORTHEGOODOFTHECOMMUNITY

@@ -1,0 +1,10 @@
+# solution for nihilisttramp_2000_bitwise_e15.txt
+status:      SOLVED (clean)
+true_type:   Nihilist Tramp
+solver:      nihilist
+length:      100
+score:       3.24
+solve_time:  6.73s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/nihilisttramp_2000_bitwise_e15.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  DATEELHDIOEDGGTNYORCOUTRREEACBRCONNAAVHESITMSSRIGDTIANEHITVENEOVVSIYHSHLTTSELHENEVHEBTTDOIMIOOWRERNE
+plaintext:   YDAVIDTHORSOBEDIENCESLEASTHENREAUCIVILDINDORSETHEMIHEARTILYEVERNMENTGOVERNSBESTWHICHGOVERNOTTOTHATGO

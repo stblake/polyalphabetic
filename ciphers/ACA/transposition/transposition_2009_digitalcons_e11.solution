@@ -1,0 +1,10 @@
+# solution for transposition_2009_digitalcons_e11.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      125
+score:       3.23
+solve_time:  2.65s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2009_digitalcons_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  DISCONSOLATELYUNFEIGNINGNESSPAINSTAKINGLYLEXIPHANICISMCONTEMPTUOUSNESSDISTRIBUTIONALCONTRAVALLATIONNONPREDICATIVEMISTREATMENT
+plaintext:   CISMCONTEMPTUOUSNESSDISTRIBUTIONALCONTRAVALLATIONNESSPAINSTAKINGLYLEXIPHANIONPREDICATIVEMISTREATMENTDISCONSOLATELYUNFEIGNINGN

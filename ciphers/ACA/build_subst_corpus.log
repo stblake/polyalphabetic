@@ -1,0 +1,43 @@
+extracted 40 ciphers (Counter({'Playfair': 24, 'Homophonic': 16}))
+  [UNSOLVED] cov=0.18  11.5s  playfair_1999_lifer_e21
+  [PARTIAL ] cov=0.60   3.9s  homophonic_1999_elcondor_e01
+  [UNSOLVED] cov=0.22   9.9s  playfair_1999_matanza_e20
+  [UNSOLVED] cov=0.23  10.4s  playfair_2000_bozol_e17
+  [PARTIAL ] cov=0.54   4.8s  homophonic_2000_kapitancrypto_cc03
+  [PARTIAL ] cov=0.54   4.3s  homophonic_2000_kapitancrypto_cc11
+  [PARTIAL ] cov=0.58  15.2s  playfair_2000_kapitancrypto_cc14
+  [PARTIAL ] cov=0.68   3.7s  homophonic_2000_apexdx_e04
+  [UNSOLVED] cov=0.28  12.2s  playfair_2000_revlosdalg_e21
+  [UNSOLVED] cov=0.33   9.4s  playfair_2000_walrus_e19
+  [UNSOLVED] cov=0.24   9.1s  playfair_2000_g4egg_e20
+  [UNSOLVED] cov=0.25   9.9s  playfair_2000_erno_e20
+  [PARTIAL ] cov=0.64   4.2s  homophonic_2000_marshen_e02
+  [UNSOLVED] cov=0.28   9.0s  playfair_2000_oxymoron_e18
+  [PARTIAL ] cov=0.62   4.2s  homophonic_2001_lionel_e05
+  [UNSOLVED] cov=0.21  12.6s  playfair_2001_hano_e20
+  [PARTIAL ] cov=0.57   4.5s  homophonic_2001_walrus_e05
+  [PARTIAL ] cov=0.63   8.9s  playfair_2001_cereeus_e18
+  [UNSOLVED] cov=0.36   8.9s  playfair_2001_lifer_e10
+  [PARTIAL ] cov=0.65   4.4s  homophonic_2001_gman_e01
+  [PARTIAL ] cov=0.62   8.3s  playfair_2001_lionel_e16
+  [UNSOLVED] cov=0.12  12.7s  playfair_2001_lifer_e19
+  [PARTIAL ] cov=0.69   4.5s  homophonic_2002_lionel_e02
+  [UNSOLVED] cov=0.25  15.6s  playfair_2002_g4egg_e17
+  [UNSOLVED] cov=0.19  11.8s  playfair_2002_gman_e20
+  [PARTIAL ] cov=0.57   4.5s  homophonic_2002_lionel_x11
+  [PARTIAL ] cov=0.54   4.1s  homophonic_2002_cereeus_e02
+  [UNSOLVED] cov=0.17   9.8s  playfair_2002_alchemyst_e17
+  [PARTIAL ] cov=0.68  10.8s  playfair_2002_gman_e10
+  [PARTIAL ] cov=0.67   4.1s  homophonic_2002_thedoc_e01
+  [UNSOLVED] cov=0.25  11.5s  playfair_2002_g4egg_e18
+  [UNSOLVED] cov=0.22   9.6s  playfair_2002_linb_e20
+  [UNSOLVED] cov=0.33   6.1s  homophonic_2003_mscrep_e03
+  [UNSOLVED] cov=0.30  13.8s  playfair_2003_erno_e17
+  [UNSOLVED] cov=0.43   4.4s  homophonic_2003_thedoc_e03
+  [UNSOLVED] cov=0.26   8.6s  playfair_2003_crotalus_e24
+  [UNSOLVED] cov=0.17   9.5s  playfair_2003_erno_e22
+  [UNSOLVED] cov=0.32   8.8s  playfair_2003_lifer_e18
+  [PARTIAL ] cov=0.72   4.0s  homophonic_2003_angoka_e02
+  [PARTIAL ] cov=0.52   3.7s  homophonic_2003_aries_x10
+
+wrote 40 .solution files: {'UNSOLVED': 22, 'PARTIAL': 18}

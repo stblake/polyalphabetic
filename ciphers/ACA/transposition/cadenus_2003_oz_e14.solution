@@ -1,0 +1,10 @@
+# solution for cadenus_2003_oz_e14.txt
+status:      SOLVED (clean)
+true_type:   Cadenus
+solver:      cadenus
+length:      100
+score:       3.43
+solve_time:  2.07s  (CPU user+sys, single-threaded)
+command:     ./colossus -type cadenus -cipher ciphers/ACA/transposition/cadenus_2003_oz_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 200 -nhillclimbs 6000
+ciphertext:  HOHNSICSYERRWOSROTNBITRTHEEIILLHSEEEHTOEEHOLSEACAPACLSECATANTTNAVEOLTIIRAARNAHTNNSLYEALCOITVNROPAEEE
+plaintext:   EITHERACLEARCONSCIENCEORNONEATALLTHERESONLYONEWAYTOACHIEVEHAPPINESSONTHISTERRESTRIALBALLTHATISTOHAVE

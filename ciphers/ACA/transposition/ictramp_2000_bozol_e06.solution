@@ -1,0 +1,10 @@
+# solution for ictramp_2000_bozol_e06.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      myszkowski
+length:      128
+score:       3.31
+solve_time:  7.41s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/ictramp_2000_bozol_e06.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  VSRGACDNNENEFIHHITEFOIOSITRTADSHRSNEEFHRIGWDOTLWEEDENHNEORRSTSAIRENBSERAROKEPTTNSWEDSCAIIOELISDSDIDDNUMEHTGLLGNTAHMASACANMIOEERT
+plaintext:   CIVILWARSOLDIERSGOINGINTOBATTLESCRAWLEDTHEIRNAMESANDADDRESSESONHANDKERCHIEFSANDPINNEDTHEMONTHEIRUNIFORMSTHESEWERETHEFIRSTDOGTAGS

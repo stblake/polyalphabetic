@@ -1,0 +1,10 @@
+# solution for cadenus_2002_lurens_e09.txt
+status:      SOLVED (clean)
+true_type:   Cadenus
+solver:      cadenus
+length:      125
+score:       3.30
+solve_time:  2.65s  (CPU user+sys, single-threaded)
+command:     ./colossus -type cadenus -cipher ciphers/ACA/transposition/cadenus_2002_lurens_e09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 200 -nhillclimbs 6000
+ciphertext:  ERTRNGUOFNNATOHEINLNEMGTOIRAENERSMOYFIISIJUDDFAOHOEUNTEMMLHAETONDEAANASEPKFTRSRORTETEYSHMERETRYDPRPERNESANMIVAWRPEYTIIRCTCSVS
+plaintext:   JOKECANRESULTINMOMENTARYHAPPINESSFOREVENTHEMOSTRESERVEDPERSONIFTEMPORARILYDISTRACTEDFROMROUTINEANDWEIGHTYMATTERSHEARINGAFUNNY

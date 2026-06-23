@@ -1,0 +1,10 @@
+# solution for routetramp_2002_rigrmortis_e07.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Route Tramp
+solver:      myszkowski
+length:      55
+score:       3.15
+solve_time:  4.04s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/routetramp_2002_rigrmortis_e07.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  COULKOCUIINNTDETECGARPHHATTOOYFTVSSLIEOACFNHAIAUTOTCIFF
+plaintext:   VICOFFHEATTHASICANCECOUKINGSTOINTHATOFAULDUCEFORYLOTTPI

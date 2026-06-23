@@ -1,0 +1,10 @@
+# solution for transposition_2016_digitalcons_e12_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      grille
+length:      49
+score:       3.26
+solve_time:  3.09s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2016_digitalcons_e12_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  BAESTLTDHLIVIEDEIFODEUSEXPBAMURTSUEWNTIIENOHOPTVE
+plaintext:   BELIEFSAREWHATDIVIDEXPEOPLEDOUBTUNITESTHEMUSTINOV

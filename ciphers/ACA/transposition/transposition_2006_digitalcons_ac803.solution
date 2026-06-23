@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_ac803.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      174
+score:       3.27
+solve_time:  6.93s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_ac803.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  RWENWPHSRICHEOEAUEVISNNNPDYYSEEOSTOIEUOCUSAITYUARSRHOEPENEIETSRWMEARARIWGGSOONNSAOOHTNGLHOIOONDNRMOOCSKOIAOTRNLENIENSRWERAFBTOYEHEROETMRTSTGHIEREMNOEETARWWBEASTDONHTRRAHKSFAT
+plaintext:   WHENYOUAREWRONGNOONEFORGETSAFRIENDSEYEISAGOODMIRRORTHEWORKWHENYOUARERIGHTNOONEREMEMBERSPRAISESTHEMANALOCKISBETTERTHANSUSPICIONTWOSHORTENTHEROADTHECOVETOUSPERSONISALWAYSINWANT

@@ -1,0 +1,10 @@
+# solution for transposition_2014_digitalcons_e07_3.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      190
+score:       2.74
+solve_time:  9.43s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2014_digitalcons_e07_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  VVEOISAESEOFEEGALLESEANTOUGVTHNNPLOLEVEAHLEAEBNCOIESOREDPLESEDVEYSOLTNULEHEDEARONIESMYHDNHYIBDWASNNASBODAYESCASHIOALSBERBNTPAYGENDDUESECAVPDAECCENSODTOINTRSIATISLRAVRIEEODORHEAACUTHEWHOHATER
+plaintext:   AYPRNDVGATHEINANGLEASSECVSSECDVATEENPLABOULAVERSYSTOEICHOISOINTEVIDEHALLTEONUESCACALEBIADOHLLWEWALEHOSEDHEATEBEDONSDUEBEANOCEARORONHEVINBIRDTOUGOINSEASSESHTMYTFPSSPHEAREEVORANEEDEDNAYHYREDLO

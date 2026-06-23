@@ -1,0 +1,10 @@
+# solution for trifid_2003_oz_e09.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Trifid
+solver:      trifid
+length:      164  (cipher symbols)
+score:       -7.86
+solve_time:  54.75s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_2003_oz_e09.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  IAZWCTFHAAMLEMEICMHXPLJHNVNGLLHT+KVTLDHZ+KLLDDBHUJIOPBBUTHLUTNIGLQKPBTIHFS+WEGCBDYMCGGYUQYFVBAYUPBQJCKEMKIQLEKILACHNNQVJDNPPHJIRALKLSVUHIHROAQMEPIJPPUSCGBULCBZEDFKE
+plaintext:   WCKATAIFDUCHMLFLOUVEFAONEGELHGTGECQHXVMFFYAKEACCUANSROURNSSLKAELSTAFTSLIFEDDAYOPGBRIGQBSTYWAWAYNILGAPRLAWCORTERNKAUGEEXESCANONUNGITCSIATAGIBKINEBLDYSEDSRILCOELIWOUJ

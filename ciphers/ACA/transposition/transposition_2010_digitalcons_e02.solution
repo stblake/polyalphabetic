@@ -1,0 +1,10 @@
+# solution for transposition_2010_digitalcons_e02.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      81
+score:       3.16
+solve_time:  5.46s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2010_digitalcons_e02.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  GTSAANSORAMRTCCUTRYNBPNUSEAVHEPWOPGSNEOOAOLGNRCEUYPOBAEITAANPEHNHRLSAREWOWPYLTURD
+plaintext:   RNARDSHAWANYGOVERNMENTWHICHROBSPETERCOUNTONPAULSSUPPORTGEORGEBECANALWAYSTOPAYPAUL

@@ -1,0 +1,10 @@
+# solution for ictramp_2003_wabbit_e07.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      myszkowski
+length:      73
+score:       3.34
+solve_time:  5.50s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/ictramp_2003_wabbit_e07.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  TYOIADADTOAGTRSALESOBLHSADIOHLCLGTTAEENRTNUEKANINLTTEONKBTOUATSLASOGULAOF
+plaintext:   ACTUALLYANEGOTISTISNOTALLBADATLEASTHEDOESNTGOAROUNDTALKINGABOUTOTHERFOLKS

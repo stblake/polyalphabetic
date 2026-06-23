@@ -1,0 +1,10 @@
+# solution for railfence_2002_aries_x09.txt
+status:      SOLVED (clean)
+true_type:   Railfence
+solver:      myszkowski
+length:      55
+score:       3.31
+solve_time:  4.03s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/railfence_2002_aries_x09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  IESLIOSOLENLCLPAIENRLOETSEETTLTAEISTNCOICNIRMREUCAEGONO
+plaintext:   SLATOLIERESONMOREGINTENTILLINCESTUALTOCOACONREELIESPECI

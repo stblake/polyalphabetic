@@ -1,0 +1,10 @@
+# solution for gronsfeld_2000_lifer_e02.txt
+status:      SOLVED (clean)
+true_type:   Gronsfeld
+solver:      gron
+length:      87  (cipher symbols)
+score:       3.34
+solve_time:  45.70s  (CPU user+sys, single-threaded)
+command:     ./colossus -type gron -cipher ciphers/ACA/gronsfeld/gronsfeld_2000_lifer_e02.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -nrestarts 4000 -nhillclimbs 3000 -seed 1234
+ciphertext:  VTPSVYUJEPQXJJQYRHWHUPRRQKQZHYFTSHQHQRTLTYGSDLVMPHMBGIHJFKEEEPTOLJVWFNLWVJSZDRFHPBQXGWT
+plaintext:   TOOLSUSEDINTHEPRODUCTIONOFPSEUDORANDOMSEQUENCESINCLUDEFEEDBACKSHIFTREGISTERSANDCOUNTERS

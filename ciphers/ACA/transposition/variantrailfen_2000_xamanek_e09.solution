@@ -1,0 +1,10 @@
+# solution for variantrailfen_2000_xamanek_e09.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Variant Railfen
+solver:      myszkowski
+length:      61
+score:       3.25
+solve_time:  3.92s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/variantrailfen_2000_xamanek_e09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  GLKIASEARYPLMIEEEREKAELSMAOANNFNADFAARANIOLTGILTNHTCEHHISNEOR
+plaintext:   KHEINASDEEFORSHINGENACHILLANERATEROYMARKATAPITALLINESENGOFLAM

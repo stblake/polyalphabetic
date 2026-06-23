@@ -1,0 +1,10 @@
+# solution for trifid_2002_apexdx_e21.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Trifid
+solver:      trifid
+length:      150  (cipher symbols)
+score:       -7.54
+solve_time:  55.23s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_2002_apexdx_e21.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  OTEZTPPRPJQQ+EPTAFJCRTITUYEUAAIAZKRTSPHTHB+TTBZFHLAOPHQIITGAERRAOURRKENNZQBZCTFKBTEDRISXHIOIUFOICYFG+ERB+TNVZTJPKBFEKCCIGYJTRXDNNPFXJBRRA+GHOGANUFVFXM
+plaintext:   KULTCLATWELMIFBOUFINATAREBEILUNEDNITIZFLJSPOWHISHFLMYINSHIRTINANEGUANDANFSJUNAOKENPHCEDICINBIEOSTOILOALSPOONRWDSOACKIURABARQWACRMNGDELTOORDEWIALAEGHLA

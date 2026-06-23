@@ -1,0 +1,10 @@
+# solution for ictramp_2001_bacedi_e05.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      myszkowski
+length:      83
+score:       3.19
+solve_time:  5.86s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/ictramp_2001_bacedi_e05.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  AETGFSIUIOEBKOOGETCKPIIISTBEFNSBRPECLWTMCTTNRYRNLSFRSSHRMUNNNVRUMYFUONCIUBTOTLOEWTT
+plaintext:   CRAFTYWORKMENOFTENPUTSTUMBLINGBLOCKSINFRONTOFINSPECTORSVIEWINGSTRUCTURESBUILTBYTHEM

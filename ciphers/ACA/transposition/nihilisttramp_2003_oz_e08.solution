@@ -1,0 +1,10 @@
+# solution for nihilisttramp_2003_oz_e08.txt
+status:      SOLVED (clean)
+true_type:   Nihilist Tramp
+solver:      nihilist
+length:      64
+score:       3.39
+solve_time:  4.22s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/nihilisttramp_2003_oz_e08.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  VHSDEOSAUNMTROIIFTTROYLIPRNYAEAIADEDNEIWSHNEBAEEADMILEISETAEPHGN
+plaintext:   IDEANDWEAREPAYINGTHEPENALTYFORITINOURTIMEHASBEENSHOVEDASIDEALISM

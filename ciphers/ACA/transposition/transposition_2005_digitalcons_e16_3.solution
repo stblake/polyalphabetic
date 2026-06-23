@@ -1,0 +1,10 @@
+# solution for transposition_2005_digitalcons_e16_3.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      103
+score:       3.19
+solve_time:  6.51s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2005_digitalcons_e16_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EELURENIAAIBORASWSUAEHNIHENNAAINNILTSGTKUGATNOHYMWSIDTEISMIROEHENINNCNERKBSEDSLHSASTTIIWKMOOBHUNWBMTTAN
+plaintext:   ABANKERISSOMEONEWHOLENDSYOUHISUMBRELLAWHENTHESUNISSHININGANDWANTSITBACKTHEMINUTEITBEGINSTORAINMARKTWAIN

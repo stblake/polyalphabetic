@@ -1,0 +1,10 @@
+# solution for homophonic_1999_elcondor_e01.txt
+status:      PARTIAL (words recovered)
+true_type:   Homophonic
+solver:      homophonic
+length:      67  (cipher symbols)
+score:       -4.54
+solve_time:  3.95s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_1999_elcondor_e01.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  20,71,47,69,26,55,56,57,35,92,90,02,36,99,80,78,85,87,79,64,04,87,94,47,90,58,16,10,91,67,10,35,10,14,79,31,34,75,43,36,10,52,86,43,30,78,86,72,08,75,64,45,84,87,43,83,78,77,10,86,56,06,66,34,06,04,41
+plaintext:   DDOUBLEPRINGTHEINTOMATIONTHEYWEREFORELATERNATINGALMOSTATIVENESSESAC

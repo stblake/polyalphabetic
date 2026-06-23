@@ -1,0 +1,10 @@
+# solution for bifid_2001_kosty_e17.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Bifid
+solver:      bifid
+length:      129  (cipher symbols)
+score:       -7.24
+solve_time:  32.61s  (CPU user+sys, single-threaded)
+command:     ./colossus -type bifid -cipher ciphers/ACA/bifid/bifid_2001_kosty_e17.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 12 -nhillclimbs 200000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  BHHGDBHVXAETAIRAHBEKALLYZNUMKFYKTSMBAAHDBQNMTGPOSHTHINCHHIODHLLMVKRDBUPRNNOPPGHAOAPMEQRITYORIEREBIARFLEFUDFQYOPAMCIFOPONLSPPYURCN
+plaintext:   BSHFEEGSCHITOFDINRPACECNRDGRMNUITSATUBGALELATESSPOEIVAAHAEAINABLEORILEISURPOPSVAHEWAROUINORDERBRITARYHSWXAKASUBHOUTDULIMEQOROYAIL

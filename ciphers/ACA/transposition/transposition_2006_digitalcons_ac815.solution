@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_ac815.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      159
+score:       3.36
+solve_time:  11.70s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_ac815.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  UHPINAREWSTEWRLRTTEGNUEADLTHEDHONLNKNSTWESUCTEHTENNFOABBTREAINWTFHNBOKNETHNCAERHTEEEFTPUNTEHDXRGAHTCYWETOPDYCTOOERINEHUGRCIAHOOIITTAOINZISUSMUORELPEHBEHERMLELE
+plaintext:   THOUGHITHADBEENPRIZEDBYTHEINCASFORCENTURIESPLATINUMWASUNKNOWNTOTHERESTOFTHEWORLDWHENEXPLORERSBROUGHTITBACKINTHEEIGHTEENTHCENTURYTHENEWMETALENCHANTEDALLOFEUROPE

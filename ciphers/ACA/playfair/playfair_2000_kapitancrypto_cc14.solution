@@ -1,0 +1,10 @@
+# solution for playfair_2000_kapitancrypto_cc14.txt
+status:      SOLVED (clean)
+true_type:   Playfair
+solver:      playfair
+length:      154  (cipher symbols)
+score:       -5.62
+solve_time:  15.28s  (CPU user+sys, single-threaded)
+command:     ./colossus -type playfair -cipher ciphers/ACA/playfair/playfair_2000_kapitancrypto_cc14.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 20 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  BNABULAQDNMRNCHQZHMRAFTSHDMTBNHNEWRCRNATEASHXAQZZNNHAFQZZNIAHTQHHNGWLAFEDOTFGZGCRGQFUINHMKHMGQLUOHABKBLSHLFCXAMLAFQCCTCDHZXKFDMFTUODGIIACQNSVMHMMERGMVQHBV
+plaintext:   IDESIRETOGOTOHELLNOTHEAVENSAIDNICXCOLOMACHIAVELXLIINHELXLISHALLENIOYTHECOMPANYOFPOPESKINGSANDPRINCESBUTINHEAVENTHEREAREONLYBEGGARSMONKSHERMITSANDAPOSTLESX

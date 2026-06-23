@@ -1,0 +1,10 @@
+# solution for bifid_2003_gman_e17.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Bifid
+solver:      bifid
+length:      146  (cipher symbols)
+score:       -7.30
+solve_time:  36.65s  (CPU user+sys, single-threaded)
+command:     ./colossus -type bifid -cipher ciphers/ACA/bifid/bifid_2003_gman_e17.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 12 -nhillclimbs 200000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  CCOWSCLNKNAMFQKQHIYGZOOFVBNMUKIEOGADDONEDKNRPMADKPIFFHDOORKXRAGAETXKFTCCOICPDOLDUYIXXOILOFRDVCSNLASZUFCTDKSPCRRENXAGICRQEDUICNLNVARTOKLVDHMCRQDOMR
+plaintext:   NAVAONLHKBSATBFIBSURPHONIYATCHIDEDINHOSFISACRCCOPPIOFOKILNTSRTUSLOAFETYSRAINTDRAFHRETDGBLENOTACLCSSZAHAMYSOLOFVIEINCHESABOTAKHOTCANTILTNFYHAROESOF

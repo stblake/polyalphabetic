@@ -1,0 +1,10 @@
+# solution for swagman_2000_phoenix_e11.txt
+status:      SOLVED (clean)
+true_type:   Swagman
+solver:      swagman
+length:      156
+score:       3.12
+solve_time:  9.94s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/swagman_2000_phoenix_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  TAERANDOSDOMACDHRNEIZAEOADNOPNTLPLNYEIBIOOANFUSAIRTPNSDTSAHIRCHHIEWAAAOTNMIONPSRHYSETOLABIAXONDSRRTTRTHEAYHESECEDTOWUOELARECACSORDBEDKNGTFOAEDEHSSAOHLTTUEXT
+plaintext:   RODENTINTHEWORLDTHEWEBFOOTAMAZONIAISHOMETOTHELARGESTEDCAPYBARAITISONRECORDTHATASHOALOFPIRANHASREDUCEDAHUNDREDPOUNDCAPYBARATOASKELETONINLESSTHANSIXTYSECONDSX

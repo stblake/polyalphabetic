@@ -1,0 +1,10 @@
+# solution for transposition_2007_digitalcons_e07.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      amsco
+length:      77
+score:       3.19
+solve_time:  5.88s  (CPU user+sys, single-threaded)
+command:     ./colossus -type amsco -cipher ciphers/ACA/transposition/transposition_2007_digitalcons_e07.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 12 -nrestarts 40 -nhillclimbs 5000
+ciphertext:  EESFGYTONAYABRAUCLCREUNISTLDLTELLHTONISHYELEAUILTEPIGVELOWIYOLBAEKEOOLETSNOUG
+plaintext:   LUCILLEBALLTHESECRETOFKEEPINGYOUNGISTOLIVEHONESTLYEATSLOWLYANDLIEABOUTYOURAGE

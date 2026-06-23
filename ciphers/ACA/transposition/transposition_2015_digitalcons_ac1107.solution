@@ -1,0 +1,10 @@
+# solution for transposition_2015_digitalcons_ac1107.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      176
+score:       3.21
+solve_time:  9.35s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2015_digitalcons_ac1107.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EFMUDROYMAATHMNWBPANOAHATOITSSDETHSAEOFAIDEFVAHALSOAAEBGTAADNRDGPUIDAPESOWTEEOLSNCGLLCUOYIERTSPRENADNIHHDNHBDNIAHDOIAFNPDTPOTRIHSSRLTOTEOSTEIHNEIELUAMSHIDURANINARSCREINSEHEANHU
+plaintext:   THEPENFIELDHOMUNCULUSISADIAGRAMOFANODDLYSHAPEDMANLAIDATOPAPICTUREOFTHEHUMANBRAINSHOWINGHISBODYPARTSDRAWNINSCALETOTHEAREAOFTHEBRAINDEVOTEDTOSENSATIONSTHEREHISLIPSANDHANDSAREHUGE

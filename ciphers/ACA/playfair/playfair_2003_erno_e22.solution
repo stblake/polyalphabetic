@@ -1,0 +1,10 @@
+# solution for playfair_2003_erno_e22.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Playfair
+solver:      playfair
+length:      98  (cipher symbols)
+score:       -6.70
+solve_time:  9.41s  (CPU user+sys, single-threaded)
+command:     ./colossus -type playfair -cipher ciphers/ACA/playfair/playfair_2003_erno_e22.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 20 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  MFZLPLFUSOORFXKFUOSFHPVKSQLOOLUIMQTPZIKFNPDOPROLUISQLZIKORHLDOTFWSXYYFFMPLNSQHLSQSCZSQLDHFBTBNCGIT
+plaintext:   AMTDSTPROCREAREARSOPTAADONESSERTACPSTYEASVENFUSERTONDTHERETKENIPUNGHIMMASTSOXATUNONYONELIALYDCGBYI

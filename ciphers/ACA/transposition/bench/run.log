@@ -1,0 +1,35 @@
+795 ciphers, 6504 jobs over 11 solver types, 15 workers
+  200/6504  81s elapsed  ETA 2550s
+  400/6504  146s elapsed  ETA 2233s
+  600/6504  210s elapsed  ETA 2066s
+  800/6504  292s elapsed  ETA 2083s
+  1000/6504  334s elapsed  ETA 1836s
+  1200/6504  388s elapsed  ETA 1715s
+  1400/6504  492s elapsed  ETA 1793s
+  1600/6504  554s elapsed  ETA 1698s
+  1800/6504  628s elapsed  ETA 1640s
+  2000/6504  696s elapsed  ETA 1568s
+  2200/6504  766s elapsed  ETA 1499s
+  2400/6504  852s elapsed  ETA 1458s
+  2600/6504  920s elapsed  ETA 1381s
+  2800/6504  1002s elapsed  ETA 1325s
+  3000/6504  1083s elapsed  ETA 1265s
+  3200/6504  1146s elapsed  ETA 1183s
+  3400/6504  1222s elapsed  ETA 1116s
+  3600/6504  1287s elapsed  ETA 1038s
+  3800/6504  1361s elapsed  ETA 968s
+  4000/6504  1436s elapsed  ETA 899s
+  4200/6504  1519s elapsed  ETA 833s
+  4400/6504  1592s elapsed  ETA 761s
+  4600/6504  1666s elapsed  ETA 690s
+  4800/6504  1776s elapsed  ETA 631s
+  5000/6504  1822s elapsed  ETA 548s
+  5200/6504  1911s elapsed  ETA 479s
+  5400/6504  1961s elapsed  ETA 401s
+  5600/6504  2091s elapsed  ETA 338s
+  5800/6504  2115s elapsed  ETA 257s
+  6000/6504  2206s elapsed  ETA 185s
+  6200/6504  2258s elapsed  ETA 111s
+  6400/6504  2312s elapsed  ETA 38s
+  6504/6504  2340s elapsed  ETA 0s
+DONE in 2340s -> ciphers/ACA/transposition/bench/results.csv

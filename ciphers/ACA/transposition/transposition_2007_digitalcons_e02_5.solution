@@ -1,0 +1,10 @@
+# solution for transposition_2007_digitalcons_e02_5.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      36
+score:       3.25
+solve_time:  2.54s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2007_digitalcons_e02_5.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  DNTHLTENSOORMMEEGBYOFVFSELEIDHAATSOE
+plaintext:   NOMANLOVESHISFETTERSBETHEYMADEOFGOLD

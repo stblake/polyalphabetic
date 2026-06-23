@@ -1,0 +1,10 @@
+# solution for ictramp_1999_wabbit_e07.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      transcol
+length:      147
+score:       3.18
+solve_time:  5.24s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/ictramp_1999_wabbit_e07.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  ACUGALMOTAODTPTEIITHNFIINREEFLLNOFAREREHISCGSENIEVCNYTTNNUOETSWNVTILOOHROANCLRIHNOENIXENEEOEEBNLIEYXLNEDENTOISNSHIDFNSITHPETCNRETETEEGLRRTFNCAOLDNI
+plaintext:   THEBALLPOINTPENCORTISONEFLUORESCENTLIGHTINGNUCLEARFISSIONNYLONTHEXEROXMACHINETEFLONANDINSTANTCOFFEEWEREALLINVENTEDORDISCOVEREDINNINETEENTHIRTYEIGHT

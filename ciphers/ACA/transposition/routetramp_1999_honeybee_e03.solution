@@ -1,0 +1,10 @@
+# solution for routetramp_1999_honeybee_e03.txt
+status:      SOLVED (clean)
+true_type:   Route Tramp
+solver:      swagman
+length:      42
+score:       3.28
+solve_time:  2.95s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/routetramp_1999_honeybee_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  THAYEYLESTNTAWYHOAEAGAMLNYSOTKISYOYSMSADBE
+plaintext:   YWAYSBYTHATALAYMOSTTOOKEASESIDENGLYSHEANYM

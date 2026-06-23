@@ -1,0 +1,10 @@
+# solution for transposition_2005_digitalcons_e22.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      108
+score:       3.41
+solve_time:  6.68s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2005_digitalcons_e22.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  EEOEBMFAEEGAMRISINOOUSDMTAFRRTRYHGYTOYIEHINCSOOFTUFRAOGHECUTNIHEAONSCOCTOSNIBATLBACNISITHCINHEHEATLEENCRMRTX
+plaintext:   MEMORYISTHECABINETOFIMAGINATIONTHETREASURYOFREASONTHEREGISTRYOFCONSCIENCEANDTHECOUNCILCHAMBEROFTHOUGHTBASILX

@@ -1,0 +1,10 @@
+# solution for trifid_1999_gungho_e20.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Trifid
+solver:      trifid
+length:      133  (cipher symbols)
+score:       -7.31
+solve_time:  46.94s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_1999_gungho_e20.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  TCNNOCMEUILKJZEAFRSZPP+ACFTOXYEGTQCOXCPWCUUJKFVEUWRZZPKBCAYWYCIAUUNEEALECGBHNGHGGFUHKCSLCLKDFXDSCUJUZVYGGTCGJVYMAHGDQEECJGRMGMIYRQYJ+
+plaintext:   +IDOSEKYSTAKELKAMEESWWDARCEMETEITYOMAUORCABATAOESEASMAROUCECFLNCOIAUTANYAABUITECRELVNEWLASTEOUTMARIREWHAGLITESOODHIMALRIJOPAYIUARDCXW

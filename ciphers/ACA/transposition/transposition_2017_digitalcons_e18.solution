@@ -1,0 +1,10 @@
+# solution for transposition_2017_digitalcons_e18.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      cadenus
+length:      150
+score:       3.37
+solve_time:  3.30s  (CPU user+sys, single-threaded)
+command:     ./colossus -type cadenus -cipher ciphers/ACA/transposition/transposition_2017_digitalcons_e18.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 200 -nhillclimbs 6000
+ciphertext:  IPHECWMFIWAIGAARTNNDSTSVOAEAHRENPEEERSIIRFDISSGGEYYTBTNLISIAEICERSELYORORBNRALDAINCMOYVEITHLSINCMIITECDEOSIFSTTLTGSKHECNIPEWAEINTLTPHIIGBVEYOGURUETLTE
+plaintext:   YFINDINGMEANINGINEVENTSISPOSITIVELYCORRELATEDWITHWELLBEINGBUTNEGATIVELYCORRELATEDWITHFORESIGHTTHATMAKESADEPRESSINGPOSSIBILITYISMISERYTHEPRICEOFACCURAC

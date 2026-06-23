@@ -1,0 +1,10 @@
+# solution for grille_2002_ooboo_e13.txt
+status:      SOLVED (clean)
+true_type:   Grille
+solver:      grille
+length:      144
+score:       3.33
+solve_time:  8.50s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/grille_2002_ooboo_e13.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  THPRELIRIOEMCIESETHMEANCROATNDLLNELYCANYNAYRTEOHTIHENGATPIEMAHKIENALTISMTTARNSALLAEWFHNEUWDTORHWELOPRESPEOPLLEDRATWNHEDHYQOUOCATOSNEESXLITSDLAER
+plaintext:   THEREISHARDLYANYTHINGINTHEWORLDTHATSOMEMENCANNOTMAKEALITTLEWORSEANDSELLALITTLECHEAPERANDTHEPEOPLEWHOCONSIDERPRICEONLYARETHISMANSLAWFULPREYQUOTEX

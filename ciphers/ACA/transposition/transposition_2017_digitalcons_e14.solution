@@ -1,0 +1,10 @@
+# solution for transposition_2017_digitalcons_e14.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      122
+score:       3.23
+solve_time:  6.46s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2017_digitalcons_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  LATESTWINGGOESWITHSTRONGHEROESANYONEENGAGEDUSESINDEPENDENTFOODONECOULDHATEFAMEFAULTMAKESBEINGFAIRDARINGFRIENDSURGEHARDSTOP
+plaintext:   LATESTWINGGOESWITHSTRONGHEROESANYONEENGAGEDUSESINDEPENDENTFOODONECOULDHATEFAMEFAULTMAKESBEINGFAIRDARINGFRIENDSURGEHARDSTOP

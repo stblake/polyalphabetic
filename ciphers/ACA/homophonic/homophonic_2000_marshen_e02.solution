@@ -1,0 +1,10 @@
+# solution for homophonic_2000_marshen_e02.txt
+status:      PARTIAL (words recovered)
+true_type:   Homophonic
+solver:      homophonic
+length:      74  (cipher symbols)
+score:       -4.45
+solve_time:  4.24s  (CPU user+sys, single-threaded)
+command:     ./colossus -type homophonic -cipher ciphers/ACA/homophonic/homophonic_2000_marshen_e02.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 200 -nhillclimbs 50000 -inittemp 0.02 -weightmono 1.5 -backtrackprob 0.15 -seed 1234
+ciphertext:  50,60,17,98,83,11,19,08,49,45,76,40,98,85,47,49,37,28,59,84,77,75,09,00,28,85,49,19,08,77,36,77,81,37,64,19,28,57,11,85,33,47,66,63,49,78,14,89,38,80,05,03,86,58,84,33,59,99,28,63,38,08,48,01,70,28,86,54,32,07,30,05,13,32
+plaintext:   UFORTHEDRIVERALRESINTHERSAREDTOTHERESTHATLEARWINNINGCONTIESANDTHESCOMPANYM

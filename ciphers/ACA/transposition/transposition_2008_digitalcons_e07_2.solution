@@ -1,0 +1,10 @@
+# solution for transposition_2008_digitalcons_e07_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      grille
+length:      121
+score:       2.97
+solve_time:  7.32s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2008_digitalcons_e07_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  NLAEBARUTRETAITTNDDUIOSZSILGSITRILYSOTEUSNEREDEHOTONECEHLDONHHESBMEYDASASFAATNSYFITYRNUFENATTSTAASEHBRIIOEEDBILEENICHTTEW
+plaintext:   LEAREDISTILSUSONSBEASASTASEEDEBUTTOITEROTHMYDFATYRUNSARIOBETWRITSZILEDONELDHEFINFEATBILICTENATANDUSGRYONEEHECHASNTYTHEINH

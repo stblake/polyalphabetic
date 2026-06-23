@@ -1,0 +1,10 @@
+# solution for transposition_2016_digitalcons_e08_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      68
+score:       3.16
+solve_time:  5.45s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2016_digitalcons_e08_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  VAMOISOBOIWANETSHHTOSSAOTNWLRAATOODRUIEGIRHMELERARTBNETDNRSTHSNSISOC
+plaintext:   NORTROWASUVANTHATTISLONDOTHEBITISMORESEMOTBERONSHADERSSHRIONGALWASCI

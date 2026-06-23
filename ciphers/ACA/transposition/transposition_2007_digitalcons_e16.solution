@@ -1,0 +1,10 @@
+# solution for transposition_2007_digitalcons_e16.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      grille
+length:      144
+score:       3.38
+solve_time:  8.50s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2007_digitalcons_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  TIDNEALRPEHNEODLEDVUEIDLGSSLCOHATPLIEPEARDGLEIDINNSLTHOYEIASOTSNTHOONTRIWHECOEHRREEARIWWLEESCAWHEREORNNTDEECWOYNICEENAUESIRTPEERTDTATSYOYODNAEYA
+plaintext:   DEPENDSLARGELYONWHEREWEWEREYESTERDAYINALLDISCIPLINESTHEORIESANDCONCEPTSAREDEVELOPEDINHISTORICALCONTINUITYONETHOUGHTLEADSTOANOTHERWHEREWEARETODAY

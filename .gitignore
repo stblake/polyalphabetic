@@ -18,3 +18,5 @@ tools/bifid_gen
 tools/trifid_gen
 tools/hill_gen
 *.o
+__pycache__/
+*.pyc

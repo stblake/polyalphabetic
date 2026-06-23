@@ -1,0 +1,10 @@
+# solution for transposition_2005_digitalcons_e08.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      60
+score:       3.34
+solve_time:  4.57s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2005_digitalcons_e08.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  ELADAKETONNRTCFHNMIGANOEEHEAYORINIHTTOHNNSHNDESAVTCOMTHIHNRR
+plaintext:   THEREISNOMANLIVINGTHATCANNOTDOMORETHANHETHINKSHECANHENRYFORD

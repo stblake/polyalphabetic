@@ -1,0 +1,10 @@
+# solution for railfence_2003_marshen_x09.txt
+status:      SOLVED (clean)
+true_type:   Railfence
+solver:      transcol
+length:      52
+score:       3.15
+solve_time:  2.15s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/railfence_2003_marshen_x09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  NSHSOPHLEANELASEMLERDNTERCANAISRIITLRBESLAUEROIVETOA
+plaintext:   DIOMENEARLSORUNIPLASTICALIBETTHENHOSASAVERELLRESARNE

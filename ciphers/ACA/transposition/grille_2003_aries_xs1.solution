@@ -1,0 +1,10 @@
+# solution for grille_2003_aries_xs1.txt
+status:      SOLVED (clean)
+true_type:   Grille
+solver:      transcol
+length:      36
+score:       3.28
+solve_time:  1.56s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/grille_2003_aries_xs1.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  ILPAEUESTSUEEAADMDOESROOLLOEACTMESNX
+plaintext:   OSEALSOMESEAMPIOUSCONEDURADEALLETTEX

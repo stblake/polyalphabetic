@@ -1,0 +1,10 @@
+# solution for nihilisttramp_2001_bark_e11.txt
+status:      PARTIAL (words recovered, blocks may be shuffled)
+true_type:   Nihilist Tramp
+solver:      nihilist
+length:      64
+score:       3.20
+solve_time:  4.23s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/nihilisttramp_2001_bark_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  TNOUEOLEEKHQHDLHETOBYEPTWBKATQOGOOWENNIRHUNLAUSERIWUWIETSWTRITTE
+plaintext:   KNOWHOWTOSPELLITALBUQUERGETTHEREQUEIDONTBUTIKNOWWHERETOSTAYWHENI

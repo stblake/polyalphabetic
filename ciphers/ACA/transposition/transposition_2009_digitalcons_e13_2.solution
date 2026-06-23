@@ -1,0 +1,10 @@
+# solution for transposition_2009_digitalcons_e13_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      150
+score:       3.15
+solve_time:  9.44s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2009_digitalcons_e13_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  BEAHYBEAEIMQAASURSUSRIABNIEICLSGSTALOAAUTULSSEYHANBDINATABTAMOROYFFENNUDACAOCRTUEMLRHEAPAENAUAARNIRPEPPIURDHMTINTOYUXSSOISCOITCMALAHIEIDUETSSETTRSOWML
+plaintext:   YEQUALTOTHATOFAURANIUMNUCLEUSWHIMSICALLYNAMEDTHEUNITISSAIDTOBEASBIGASABARNCOMPAREDTOOTHERMABARNISAUNITOFAREAAPPROXIMATELEASURESUSEDBYNUCLEARPHYSICISTS

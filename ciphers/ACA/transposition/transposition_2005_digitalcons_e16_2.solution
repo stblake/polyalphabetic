@@ -1,0 +1,10 @@
+# solution for transposition_2005_digitalcons_e16_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      100
+score:       3.23
+solve_time:  6.33s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2005_digitalcons_e16_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  TSAIAMDETYEEMRHDIEWSAOELHTOOHIONRTDEADNLLAFEAVHYAECATNIESQISHRDNEETAEMREHACANUTCVGOEWNTIDEFNNLCHTTST
+plaintext:   HLOVECRAFTEADWHICHCANETERNALLIEVENDEATHMAYDIEQUOTEDFROMTHENAMELESSCITYEANDWITHSTRANGEAEONSTHATISNOTD

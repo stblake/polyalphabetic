@@ -1,0 +1,10 @@
+# solution for transposition_2004_digitalcons_e03_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      84
+score:       3.49
+solve_time:  5.95s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2004_digitalcons_e03_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  ECTPSTAANELNTEVITOOAWBURLOAPNTEEYTTLESTSRIOHPWTHHBSUHTOTREHLASYLCUYEDDETAEHHEEOAAEHP
+plaintext:   EVERNOTICETHATTHEPEOPLEWHOSAYTHATSTHEWAYTHEBALLBOUNCESAREUSUALLYTHEONESTHATDROPPEDIT

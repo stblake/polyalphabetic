@@ -1,0 +1,10 @@
+# solution for transposition_2008_digitalcons_e15.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      grille
+length:      64
+score:       3.29
+solve_time:  3.91s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2008_digitalcons_e15.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  GCHOTTATTOENFDRAIPOSEUTFSTIWNHIIAYNMGPTOBLYYUEAORTUMDHOMOOUUATNH
+plaintext:   CANDIETINGBETHOUGHTOFASSIMPLYAMATTEROFWHATYOUDONOTPUTINYOURMOUTH

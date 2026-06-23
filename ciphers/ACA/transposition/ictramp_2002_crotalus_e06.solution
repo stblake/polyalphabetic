@@ -1,0 +1,10 @@
+# solution for ictramp_2002_crotalus_e06.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      myszkowski
+length:      95
+score:       3.24
+solve_time:  6.25s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/ictramp_2002_crotalus_e06.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EIYOVRFNWOOCOTTISAEBCLDOEEBEGGRBATGEAIOWYGEYHEEGAHVOYUUNRRGSITEYRDOTEEYTHUIAUNTORTUTRFOKEANUMOH
+plaintext:   YOGIBERRASAIDTHATYOUVEGOTTOBEVERYCAREFULIFYOUDONTKNOWWHEREYOUAREGOINGBECAUSEYOUMIGHTNOTGETTHERE

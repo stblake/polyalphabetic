@@ -1,0 +1,8 @@
+filename,type,source,year,name,con,author,detection,length
+gronsfeld_2000_lifer_e02.txt,Gronsfeld,Russ + digital con,2000,JF00,E02,LIFER,labeled,87
+gronsfeld_2000_lifer_e03.txt,Gronsfeld,Russ + digital con,2000,JA00,E03,LIFER,labeled,73
+gronsfeld_2001_apexdx_e04.txt,Gronsfeld,Russ + digital con,2001,JF01,E04,APEX DX,labeled,99
+gronsfeld_2001_lifer_e02.txt,Gronsfeld,Russ + digital con,2001,JA01,E02,LIFER,labeled,79
+gronsfeld_2002_lifer_e01.txt,Gronsfeld,Russ + digital con,2002,SO02,E01,LIFER,labeled,61
+gronsfeld_2002_oz_e03.txt,Gronsfeld,Russ + digital con,2002,MA02,E03,OZ,labeled,113
+gronsfeld_2003_oz_e01.txt,Gronsfeld,Russ + digital con,2003,JF03,E01,OZ,labeled,110

@@ -1,0 +1,10 @@
+# solution for myszkowski_2001_honeybee_e16.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Myszkowski
+solver:      myszkowski
+length:      184
+score:       2.96
+solve_time:  10.16s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/myszkowski_2001_honeybee_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  SFMLOLACLIDVRTTRAEEDOEEVDICASNESOPNCDIIUKSYISHUMWLTUICIEDPEAKSSORYWBLSEGNDSCSSLNWYESLTRTELUISOIEBGEPBEMRCERYOEATSARIXNIEOSRMEESUUAWEAWHWECTROSYBEHNIILYDELNTADELEINWRHMOAELOINUCTNLCRSTT
+plaintext:   MASSFTOMORROWEMOLOYEESWILLOPLYBEABLETOANCESSTHEBUILCINGUSINGINDDVIDUALSECURITYCARDSPICTIRESWILLBETAUENNEXTWEDNEKDAYANDEMPLOSEESWILLRECEYVETHEIRCARDIINTWOWEEKSCSARLESHURSTSHNMICROSYSTEU

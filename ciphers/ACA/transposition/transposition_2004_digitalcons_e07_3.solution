@@ -1,0 +1,10 @@
+# solution for transposition_2004_digitalcons_e07_3.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      81
+score:       3.13
+solve_time:  5.31s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2004_digitalcons_e07_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  SISMTOMEEMINAAENGASOVEJWDRVEEMBHGAEDTHDOEWEBAIOLAEHNVEDEUHVIFAOEHENIAADVRANASCREA
+plaintext:   EGBEHEADMIHAVEONELSOMETIMESTWOBEHEADEANDIHAVEMEAGAINANDIHAVEFOURCAESARANSWERJODVV

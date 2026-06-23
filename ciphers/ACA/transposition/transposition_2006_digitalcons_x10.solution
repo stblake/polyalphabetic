@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_x10.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      177
+score:       2.65
+solve_time:  8.92s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_x10.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  ENCEEGMOPONNDAUONNAUENASUDORLVPSORIYOSOJNOSHACNEAERCNEACQGACXCAUPANOAUPUIDSERLOCBHESVEEHESNTMAAASALIMEUELIMONAUERUUEOEREESOERIIMYYPQANAZSDANALHONOAEASSATDEPSAFOPEMLEOIACTIRLQCTI
+plaintext:   YEERUNADAOLOHCESEIRPPEARLDECONQUECOGERAMOONMAJOMCALESUBERQHGNEPELOAVAOONANCONOXAIALOSPICVAZEDEPAUSICESAUPHONASTIMRESINHODENEONARERSASAUCUAPALQUESAMUNINSETINDYECANTASESUEATILOMFY

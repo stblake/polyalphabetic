@@ -1,0 +1,10 @@
+# solution for ictramp_2002_apexdx_e04.txt
+status:      SOLVED (clean)
+true_type:   IC Tramp
+solver:      myszkowski
+length:      57
+score:       3.16
+solve_time:  4.30s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/ictramp_2002_apexdx_e04.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  TDKMENTLAFTERMCAOYNSCAULIEEJSSMEOYDSHNEHHYEANNSKAALMISRNA
+plaintext:   CATSANDMONKEYSMONKEYSANDCATSALLHUMANLIFEISTHEREHENRYJAMES

@@ -1,0 +1,10 @@
+# solution for amsco_2003_fizzy_xs2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Amsco
+solver:      myszkowski
+length:      69
+score:       2.75
+solve_time:  5.18s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/amsco_2003_fizzy_xs2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  MROYGEDDIAGTPEMRKMINLANYPNHUBIEEANEHELSWIUUGIEYTUKEKORGEGAGEIRUVKADKR
+plaintext:   VYPUTOUMARKEINTELOGYAPUKMANHGERIGHEDGEEKLADEDIMEINKUBERGYISARREWKINGU

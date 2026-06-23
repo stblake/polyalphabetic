@@ -1,0 +1,10 @@
+# solution for nihilisttramp_2000_walrus_e08.txt
+status:      SOLVED (clean)
+true_type:   Nihilist Tramp
+solver:      myszkowski
+length:      64
+score:       3.09
+solve_time:  5.48s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/nihilisttramp_2000_walrus_e08.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  OGTOGUYYWATONAWEGINNABATTRUOOUUTASYUORYIOSOKDDWATEDWLNRHNUONFOOS
+plaintext:   WEARGYASTONLYWOUNDDOWINGTOURTAINYOUSTURGANYAFOOTESDOUNOUTHOWABOK

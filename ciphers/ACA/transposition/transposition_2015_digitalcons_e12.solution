@@ -1,0 +1,10 @@
+# solution for transposition_2015_digitalcons_e12.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      68
+score:       3.36
+solve_time:  5.27s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2015_digitalcons_e12.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  EEFTAHFNOOHHSIIEOADRAHRBOMEDTORCNDEAHBIBRHOOEOWRTANERERREWEASNLRBANT
+plaintext:   BEWAREOFTHATMANBEHEFRIENDORBROTHERWHOSEHAIRISONECOLORANDBEARDANOTHER

@@ -1,0 +1,10 @@
+# solution for transposition_2011_digitalcons_e16.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      135
+score:       3.12
+solve_time:  5.71s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2011_digitalcons_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  WPETKRINIINEMONWDTYBETIOONTURHSSEGHEADSFHJUIEEIONLRKSPPTTYDNOEHODUEWEEFSNNPICTJAHOISOAERLEOLSCDWNETLVGIAKFTNEOEFEORWTSSRSIOTDVHEWTEHSXE
+plaintext:   KNOWTHESHIPYOUSAILONKNOWITSTIMBERSDEEPTHEFJORDWATERSWHEREYOUSAILSTEEPTHECLIFFSDEEPINTOTHEUNKNOWNCOASTGOESTHEWINDINGFJORDDENISELEVERTOVX

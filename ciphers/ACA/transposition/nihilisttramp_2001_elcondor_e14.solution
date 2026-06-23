@@ -1,0 +1,10 @@
+# solution for nihilisttramp_2001_elcondor_e14.txt
+status:      SOLVED (clean)
+true_type:   Nihilist Tramp
+solver:      nihilist
+length:      100
+score:       3.26
+solve_time:  6.47s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/nihilisttramp_2001_elcondor_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  XODSUOIHEHREEHTMPIVSOSHRIPHALIRWIIRYTWHTNESENYTURCVHSRKSLGRRTACEKRABDAEEAEHEIETEITVEAIODEAAMHTIOTRON
+plaintext:   NIKITAKHRUSHCHEVSAIDTHATPOLITICIANSARETHESAMETHEWORLDOVERTHEYPROMISEYOUABRIDGEWHERETHEREISNOTARIVERX

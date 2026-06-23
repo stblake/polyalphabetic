@@ -1,0 +1,10 @@
+# solution for transposition_2010_digitalcons_e14.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      130
+score:       3.17
+solve_time:  2.78s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2010_digitalcons_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  IRAOOSSZIBTTEACMDARVRBITOHUNSIIAQNEUBGUNERITLNAEESAGIGSENOFTOORNREIORLMOOFBTEIGFITTTVHCAHHELIAFOEELVEPEAATDRIYEUITAHNTSROSEACFMRSM
+plaintext:   OZAMBIQUEASONEOFTHEEARTHSMOSTVISIBLEGEOLOGICFEATURESASTRONAUTSINORBITHAVEDESCRIBEDTHEGREATRIFTVALLEYINAFRICARUNNINGFROMETHIOPIATOM

@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_e02.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      railfence
+length:      52
+score:       3.31
+solve_time:  0.11s  (CPU user+sys, single-threaded)
+command:     ./colossus -type railfence -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_e02.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 20 -nhillclimbs 3000
+ciphertext:  SSATWTILHEHETTNEWTONSFSLOSHOTDSCBENPIIATUFATRIEEOSFC
+plaintext:   HSTHESHORTESTDISTANCEBETWEENTWOPOINTSISAFISTFULLOFCA

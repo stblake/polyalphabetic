@@ -1,0 +1,10 @@
+# solution for playfair_2001_lifer_e19.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Playfair
+solver:      playfair
+length:      120  (cipher symbols)
+score:       -6.84
+solve_time:  12.73s  (CPU user+sys, single-threaded)
+command:     ./colossus -type playfair -cipher ciphers/ACA/playfair/playfair_2001_lifer_e19.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 20 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  PSSFABPFADBSOQADPOAXOECPHCSTMGASMGGZLNICFSQOQOADIMBTIUHSCIOPQUEPTHLUXFQFBAEOASOWNOFNNCXFBSFGFSNOSWYBGCMPOBQHZPCLPUFNPOAG
+plaintext:   GAAMPSAOSTSAINSTONBLIMPOCRADISPAISSKUTORMANINISTEFAVOKWARONONKOBLAUKLETISPMIPAMCUNOTUPLESAIAMAUNMSBEPROSEPTRUSHUOCOTONPB

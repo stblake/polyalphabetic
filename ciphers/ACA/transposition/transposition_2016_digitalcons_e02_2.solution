@@ -1,0 +1,10 @@
+# solution for transposition_2016_digitalcons_e02_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      myszkowski
+length:      64
+score:       3.18
+solve_time:  5.33s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2016_digitalcons_e02_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  FOHGBCSTNRAANINFHHIIENSEPEMODHBTRVOIUAWNEEHNTTIOCBSTOOGERWANUAUX
+plaintext:   FRENCHPROVERBHEWHOHASIMAGINATIONBUTNOEDUCATIONHASWINGSBUTNOFEETX

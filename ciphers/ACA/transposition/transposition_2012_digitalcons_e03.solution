@@ -1,0 +1,10 @@
+# solution for transposition_2012_digitalcons_e03.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      81
+score:       3.30
+solve_time:  5.37s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2012_digitalcons_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  CHWITEHMHNKAIOWFIDEERVGIESNUDLJTCIESEUTRUSNTRTGUHATWOLETOHOEROMDEWETUOTIMROENNSAA
+plaintext:   LDJUSTICEWHICHTHEMOREMANSNATURERUNSTOTHEMOREOUGHTLAWTOREVENGEISWEEDITOUTAKINDOFWI

@@ -1,0 +1,10 @@
+# solution for transposition_2012_digitalcons_e10_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      157
+score:       2.87
+solve_time:  7.79s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2012_digitalcons_e10_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EFFORTGLEEFULALKALIPURVEYACERBICHOSPICELENGTHTHURSDAYCLOSETEDCHIRPSYEOMANHUNDREDSECEDEDINJUREMIGHTIERJOKERCONFORMUNCOUTHHARBORFUGUEPROBLEMFIDDLECURTSYPLAYBOY
+plaintext:   EFFORTGLEEFULALKALIPURVEYACERBICHOSPICELENGTHTHURSDAYCLOSETEDCHIRPSYEOMANHUNDREDSECEDEDINJUREMIGHTIERJOKERCONFORMUNCOUTHHARBORFUGUEPROBLEMFIDDLECURTSYPLAYBOY

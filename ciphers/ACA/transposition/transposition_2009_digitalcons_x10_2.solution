@@ -1,0 +1,10 @@
+# solution for transposition_2009_digitalcons_x10_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      grille
+length:      144
+score:       2.74
+solve_time:  8.77s  (CPU user+sys, single-threaded)
+command:     ./colossus -type grille -cipher ciphers/ACA/transposition/transposition_2009_digitalcons_x10_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 300 -nhillclimbs 6000
+ciphertext:  IAOCDSEXRREUEDIOSOIESHDEEZEJCACNDEOSLGEERAITQALANNUNRBACFELSOROIDNNIAUEEARMECRRMOLUMDMECEUICLREEEITDCHIATLLDUIOTMECUAMONARPDOAAEMQABEAOTIEEOMDTA
+plaintext:   AREDOESHEJADSLEAFORECROLDMEELIMAQIMADERESIDECEQALNURBURERMEECHALLIEONEEDICXIONANCELSOINIAUMCUTDUTCAMPDOMABOTOSUEZCOGERITANDNAEMICREITDOUARAEATEO

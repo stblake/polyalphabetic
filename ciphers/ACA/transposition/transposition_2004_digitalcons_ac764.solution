@@ -1,0 +1,10 @@
+# solution for transposition_2004_digitalcons_ac764.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      154
+score:       3.24
+solve_time:  11.79s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2004_digitalcons_ac764.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  SIAHEMEDWSDHTIDORLHCHWOBGTYSRLAAIGAAOOHISHDEHFWSETOWYEIFGSLKDLFLGDNIHOIHESLESRNLEOTHDOYETKCRNATHHAEOUOEHAWAKESODWSMNNNNAPUDSWUYUTNSELDTROHHOWATADTNEIELDIE
+plaintext:   THETHINGSKIDSSAYWHENACHILDASKEDHERMOTHERSFRIENDHOWOLDSHEWASSHEWASTOLDTHEWOMANWASTHIRTYNINEANDHOLDINGAFTERALONGPAUSETHECHILDASKEDHOWOLDWOULDYOUBEIFYOULETGO

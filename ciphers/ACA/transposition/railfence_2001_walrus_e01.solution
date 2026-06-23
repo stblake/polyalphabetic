@@ -1,0 +1,10 @@
+# solution for railfence_2001_walrus_e01.txt
+status:      SOLVED (clean)
+true_type:   Railfence
+solver:      railfence
+length:      73
+score:       3.33
+solve_time:  0.12s  (CPU user+sys, single-threaded)
+command:     ./colossus -type railfence -cipher ciphers/ACA/transposition/railfence_2001_walrus_e01.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 20 -nhillclimbs 3000
+ciphertext:  ASEEYSHNPITDFPRASUETAOEHLHNIASPMRDSNWSIEAENSOOOOSPFELTSEEANHRFTMONABDWEAR
+plaintext:   APHILATELISTHASBEENDEFINEDASAPERSONWHOPAYSMOREFORUSEDSTAMPSTHANFORNEWONES

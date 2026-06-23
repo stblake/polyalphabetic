@@ -1,0 +1,25 @@
+filename,type,source,year,name,con,author,detection,length
+playfair_1999_lifer_e21.txt,Playfair,Russ + digital con,1999,ND99,E21,LIFER,labeled,116
+playfair_1999_matanza_e20.txt,Playfair,Russ + digital con,1999,SO99,E20,MATANZA,labeled,100
+playfair_2000_bozol_e17.txt,Playfair,Russ + digital con,2000,JA00,E17,BOZOL,labeled,106
+playfair_2000_erno_e20.txt,Playfair,Russ + digital con,2000,ND00,E20,ERNO,labeled,100
+playfair_2000_g4egg_e20.txt,Playfair,Russ + digital con,2000,MJ00,E20,G4EGG,labeled,92
+playfair_2000_kapitancrypto_cc14.txt,Playfair,Russ + digital con,2000,JF00,CC14,KAPITAN CRYPTO,labeled,154
+playfair_2000_oxymoron_e18.txt,Playfair,Russ + digital con,2000,SO00,E18,OXYMORON,labeled,88
+playfair_2000_revlosdalg_e21.txt,Playfair,Russ + digital con,2000,JF00,E21,REVLOS DALG,labeled,122
+playfair_2000_walrus_e19.txt,Playfair,Russ + digital con,2000,MA00,E19,WALRUS,labeled,96
+playfair_2001_cereeus_e18.txt,Playfair,Russ + digital con,2001,MA01,E18,CERE E. US,labeled,86
+playfair_2001_hano_e20.txt,Playfair,Russ + digital con,2001,JA01,E20,HANO,labeled,120
+playfair_2001_lifer_e10.txt,Playfair,Russ + digital con,2001,MJ01,E10,LIFER,labeled,84
+playfair_2001_lifer_e19.txt,Playfair,Russ + digital con,2001,SO01,E19,LIFER,labeled,120
+playfair_2001_lionel_e16.txt,Playfair,Russ + digital con,2001,ND01,E16,LIONEL,labeled,80
+playfair_2002_alchemyst_e17.txt,Playfair,Russ + digital con,2002,MA02,E17,ALCHEMYST,labeled,92
+playfair_2002_g4egg_e17.txt,Playfair,Russ + digital con,2002,JA02,E17,G4EGG,labeled,150
+playfair_2002_g4egg_e18.txt,Playfair,Russ + digital con,2002,ND02,E18,G4EGG,labeled,108
+playfair_2002_gman_e10.txt,Playfair,Russ + digital con,2002,MJ02,E10,G-MAN,labeled,102
+playfair_2002_gman_e20.txt,Playfair,Russ + digital con,2002,JF02,E20,G-MAN,labeled,112
+playfair_2002_linb_e20.txt,Playfair,Russ + digital con,2002,SO02,E20,LINB,labeled,90
+playfair_2003_crotalus_e24.txt,Playfair,Russ + digital con,2003,MA03,E24,CROTALUS,labeled,86
+playfair_2003_erno_e17.txt,Playfair,Russ + digital con,2003,JA03,E17,ERNO,labeled,136
+playfair_2003_erno_e22.txt,Playfair,Russ + digital con,2003,MJ03,E22,ERNO,labeled,98
+playfair_2003_lifer_e18.txt,Playfair,Russ + digital con,2003,ND03,E18,LIFER,labeled,90

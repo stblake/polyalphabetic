@@ -1,0 +1,10 @@
+# solution for transposition_2011_digitalcons_e11.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      redefence
+length:      39
+score:       3.55
+solve_time:  3.17s  (CPU user+sys, single-threaded)
+command:     ./colossus -type redefence -cipher ciphers/ACA/transposition/transposition_2011_digitalcons_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -maxcols 9 -nrestarts 10 -nhillclimbs 2500
+ciphertext:  FEALSADNDNMRISITADNARIIDEEAHOTLSAOOSDNE
+plaintext:   AFTERALLISSAIDANDDONEMOREISSAIDTHANDONE

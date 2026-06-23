@@ -1,0 +1,10 @@
+# solution for transposition_2010_digitalcons_e05.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      49
+score:       3.23
+solve_time:  3.50s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2010_digitalcons_e05.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  ISLENNOREWOMTAYHRTOTUAIRANBANANODHETYACWRRONCUTNA
+plaintext:   ELONSINTRUTHYOUCANNOTOWATERMONEHANDARABIANCARRYTW

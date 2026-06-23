@@ -1,0 +1,10 @@
+# solution for transposition_2015_digitalcons_nd2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   transposition
+solver:      myszkowski
+length:      82
+score:       3.04
+solve_time:  6.00s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/transposition_2015_digitalcons_nd2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  EEOUEADHRCAAAESOAOANTHYYTARRLMNNOEIIEAMLNTQOSIHUSENDBHICTPBWTRTTTCTWPECCANHNLIUYRL
+plaintext:   QRELLECROWASEATONICHHYOUTHISMUNNECTEPENINTANDAYBRAHALEINDOTHACCESTATTRIPAYBLOWRUMT

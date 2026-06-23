@@ -1,0 +1,10 @@
+# solution for transposition_2014_digitalcons_ac1083.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      transcol
+length:      116
+score:       3.33
+solve_time:  4.31s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/transposition_2014_digitalcons_ac1083.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  HTRLOILOOOBCRSEASAESTLLILNTNOFREYTBATRUARAAEISIBSITTTOEETEEINNFICSAATNAMCNEASNENREEOVOBORSITYEHBALDAEAROVNEEAVUTSHII
+plaintext:   CHOCOLATEEASTERBILBIESARESOLDASANALTERNATIVETOEASTERBUNNIESINAUSTRALIATORAISEMONEYFORTHECONSERVATIONOFTHENATIVEBILBY

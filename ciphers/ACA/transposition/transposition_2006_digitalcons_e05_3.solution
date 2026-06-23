@@ -1,0 +1,10 @@
+# solution for transposition_2006_digitalcons_e05_3.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      nihilist
+length:      64
+score:       3.27
+solve_time:  4.16s  (CPU user+sys, single-threaded)
+command:     ./colossus -type nihilist -cipher ciphers/ACA/transposition/transposition_2006_digitalcons_e05_3.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 400 -nhillclimbs 6000
+ciphertext:  TPNIRHMSBSENROITIEMHKTOJSYEEATTUUETHXNTHOLMRLEATREAOMYKAYAKWADES
+plaintext:   JUSTASTHEYPLEASEMENMAKETHEIROWNHISTORYBUTTHEYDONOTMAKEITKARLMARX

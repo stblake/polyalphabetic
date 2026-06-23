@@ -1,0 +1,10 @@
+# solution for trifid_1999_bozol_e07.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Trifid
+solver:      trifid
+length:      146  (cipher symbols)
+score:       -7.54
+solve_time:  51.97s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_1999_bozol_e07.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  OXEYMHIECKHEKEWM+DIREHRRKOJOABHOOSCYHHMWKYOCTDO+ERVRNXASEHLEXDRUNUHHQSRAMANHJJGKBTVTKYAHHQVPRUCMQC+MFHCPDIYEFEITWFBGIXDA+ARJGFWXKHJVWBRNRHJIEGRWQU
+plaintext:   MJHURZEIRDMHHESHUUKRSAREINKEANFATSANHLHRIGCLDUPPENERAFFELIABYKRUATENWONEYHYAOLAVAPETRCTEAJAGOLJTIOSSTMEIDEUDIPENOFUDOOFAJAMONDSACONOTHKOERTEENAFVK

@@ -1,0 +1,10 @@
+# solution for transposition_2009_digitalcons_e14_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      cadenus
+length:      150
+score:       3.32
+solve_time:  3.29s  (CPU user+sys, single-threaded)
+command:     ./colossus -type cadenus -cipher ciphers/ACA/transposition/transposition_2009_digitalcons_e14_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 200 -nhillclimbs 6000
+ciphertext:  NMUTARAAGSETSIPEEOHOEFONTMEHRDRAHIIHNMDRYANSFLTTEEONILHHOAUIHAUHASTWSIHIICWHMEFROHATEMMNRWTFAARTSQBBNTANRDAUGSADNNCHDOAEEDIEIESGHIHNENIIEROOIHGWKNTTKV
+plaintext:   FFINGTHEYSPLITTHEIRSIDESLAUGHINGANDEACHOFTHEMNOWISAMOTHERAUTHORISUNKNOWNANAMOEBANAMEDSAMANDHISBROTHERWEREHAVINGADRINKWITHEACHOTHERINTHEMIDSTOFTHEIRQUA

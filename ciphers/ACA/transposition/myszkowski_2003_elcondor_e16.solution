@@ -1,0 +1,10 @@
+# solution for myszkowski_2003_elcondor_e16.txt
+status:      SOLVED (clean)
+true_type:   Myszkowski
+solver:      myszkowski
+length:      143
+score:       3.07
+solve_time:  8.52s  (CPU user+sys, single-threaded)
+command:     ./colossus -type myszkowski -cipher ciphers/ACA/transposition/myszkowski_2003_elcondor_e16.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 25 -nhillclimbs 3500
+ciphertext:  HARRIRSLAEETDRVRTRNAAHVEYOCOUYMYINTDWBRXNASERHEBAJAEROUROZZRECTWHANIETHSOATCAALNEOUNGDPSIDDACEIBUOWROEAMEGUAWSEEDSWESLLDINITOSIEEDIDEYIREAFIEDC
+plaintext:   ERHEARDATTHEAMERICANBARGUADALAJARAWHENEVERISEEYOUYOUREDOINGCROSSWORDPUZZLESYESIMREALLYADDICTEDINFACTWHENIDIEIWANTTOBEBURIEDSIXDOWNTHREEACROSSOV

@@ -1,0 +1,10 @@
+# solution for bifid_2003_daedalus_e12.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Bifid
+solver:      bifid
+length:      135  (cipher symbols)
+score:       -7.29
+solve_time:  34.56s  (CPU user+sys, single-threaded)
+command:     ./colossus -type bifid -cipher ciphers/ACA/bifid/bifid_2003_daedalus_e12.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 12 -nhillclimbs 200000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  AHEIXHUNZUDFIAFGDQAEAFHBBTKNWBBREPNKCWDOCRBOGWUCEVOVDLUCKNKHXULNWORIENWOISCOHGOFUCUSZRVRKOGTNWSNSEWOHTEDEGOOCTXTNWTQSIHRQQNVIRKDBRUHQNT
+plaintext:   AHWIMAYBERINGMRFANREHAZEBONSEYAZICESCCIAMINMAHKAMCTUPNREIKEDSVAELSUNCNWSSUDOWAYFULLYBRLFINGASIINASSEADTREGUTWTOGSIDLETTREMCCIDEXCRUCAIC

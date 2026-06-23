@@ -1,0 +1,10 @@
+# solution for transposition_2008_digitalcons_x09.txt
+status:      PARTIAL (words recovered, blocks may be shuffled)
+true_type:   transposition
+solver:      transcol
+length:      61
+score:       3.10
+solve_time:  2.42s  (CPU user+sys, single-threaded)
+command:     ./colossus -type transcol -cipher ciphers/ACA/transposition/transposition_2008_digitalcons_x09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -mincols 2 -maxcols 15 -nrestarts 25 -nhillclimbs 6000
+ciphertext:  EIETONSADTPSHNEGEPEBEISIETAIDPNURLIAAELSRMUENCAETTEEATPNSISIA
+plaintext:   ARCOMEITTHEDEEDELANUTSPENITIPPLIESEAINEESPEENSATANIASAGISTBUR

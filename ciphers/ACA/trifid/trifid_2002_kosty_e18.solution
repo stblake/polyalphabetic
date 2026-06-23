@@ -1,0 +1,10 @@
+# solution for trifid_2002_kosty_e18.txt
+status:      SOLVED (clean)
+true_type:   Trifid
+solver:      trifid
+length:      158  (cipher symbols)
+score:       -4.88
+solve_time:  57.63s  (CPU user+sys, single-threaded)
+command:     ./colossus -type trifid -cipher ciphers/ACA/trifid/trifid_2002_kosty_e18.txt -ngramsize 5 -ngramfile english_quintgrams.txt -logprob -nrestarts 8 -nhillclimbs 300000 -nperiods 8 -inittemp 0.08 -backtrackprob 0.3 -seed 1234
+ciphertext:  CYRNXUJDQEWLTICQFCBPAEQAANLAHUADQIQQERJRNMUQNSW+ZEUDTIKUETUVEYXXZROZKINDAAXCJCCCZW+IEEIQMTRZTAGEIIVAEVJTVXGZSPCBUIUCEKADECB+XJCZQJCZJIDPRERTEHD+SQTGCNPECDMVJI
+plaintext:   GAILBORDENWASAFARMERCATTLERANCHERNEWSPAPERPUBLISHERTEACHERSURVEYORANDINVENTORBUTHISGREATESTACHIEVEMENTWASWHENHEPERFECTEDTHEPROCESSOFMANUFACTURINGCONDENSEDMILK

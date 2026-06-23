@@ -1,0 +1,10 @@
+# solution for cctramp_2001_apexdx_e01.txt
+status:      PARTIAL (words recovered, blocks may be shuffled)
+true_type:   CC Tramp
+solver:      swagman
+length:      56
+score:       3.15
+solve_time:  2.43s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/cctramp_2001_apexdx_e01.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  ULYEOTJUNOTLCTEEYOAETOMTAOFPUEMBOONPOFEHFMHEHISRCTOOMHAR
+plaintext:   FONETHERATHEMEMBYOFPOTATNOTECOMECOYOUTEROLOPHISHUMALOFJU

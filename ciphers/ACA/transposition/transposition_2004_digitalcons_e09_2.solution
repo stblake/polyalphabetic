@@ -1,0 +1,10 @@
+# solution for transposition_2004_digitalcons_e09_2.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      swagman
+length:      100
+score:       3.26
+solve_time:  4.29s  (CPU user+sys, single-threaded)
+command:     ./colossus -type swagman -cipher ciphers/ACA/transposition/transposition_2004_digitalcons_e09_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 150 -nhillclimbs 4000
+ciphertext:  FRTELAARSRTETNOIMGSOUNNAAUTWBAMGTEEATAEHWONZROEEREWSVEBAEIENRANTLTLTDYEGCISAOOHRMTMOEDSEHHSAAWANTXRH
+plaintext:   FROMAUTHORWILLIAMHARLANGUAGENOBETTERTHANTSTONWEAREVERYGOODATRATSATMAZESANDSOMEWHEREINBETWEENATCHESSX

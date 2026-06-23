@@ -1,0 +1,10 @@
+# solution for transposition_2012_digitalcons_tg1.txt
+status:      SOLVED (clean)
+true_type:   transposition
+solver:      route
+length:      49
+score:       3.12
+solve_time:  0.11s  (CPU user+sys, single-threaded)
+command:     ./colossus -type route -cipher ciphers/ACA/transposition/transposition_2012_digitalcons_tg1.txt -ngramsize 4 -ngramfile english_quadgrams.txt -seed 1234 -nrestarts 10 -nhillclimbs 1000
+ciphertext:  PATIOFURNITUREMAYSTAINORNATELYSCULPTUREDTILEDMALL
+plaintext:   PATIOFURNITUREMAYSTAINORNATELYSCULPTUREDTILEDMALL
