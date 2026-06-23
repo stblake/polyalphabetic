@@ -79,6 +79,7 @@ fast | cipher_vigenere       | vig  | cipher_vigenere.txt  | -nrestarts 200 -nhi
 fast | cipher_beaufort       | beau | cipher_beaufort.txt  | -nrestarts 600 -nhillclimbs 1500
 fast | porta_aca             | porta| porta_aca.txt        | -cyclewordlen 11 -stochasticcycle -nrestarts 400 -nhillclimbs 800
 fast | porta_aca_longer      | porta| porta_aca_longer.txt | -maxcyclewordlen 15 -stochasticcycle -nrestarts 500 -nhillclimbs 800
+fast | cipher_gronsfeld      | gron | cipher_gronsfeld.txt | -nrestarts 200 -nhillclimbs 500
 # --- Quagmire I-IV (Kryptos K2 plaintext) ---
 fast | cipher_quagmire_1_longer | q1 | cipher_quagmire_1_longer.txt | -plaintextkeywordlen 5 -cyclewordlen 7 -nrestarts 300 -nhillclimbs 1500
 fast | cipher_quagmire_2_longer | q2 | cipher_quagmire_2_longer.txt | -ciphertextkeywordlen 6 -cyclewordlen 7 -nrestarts 300 -nhillclimbs 1500

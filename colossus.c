@@ -597,6 +597,8 @@ int main(int argc, char **argv) {
 
     if (cfg.cipher_type == VIGENERE) {
         printf("\nAttacking a Vigenere cipher.\n\n");
+    } else if (cfg.cipher_type == GRONSFELD) {
+        printf("\nAttacking a Gronsfeld cipher (Vigenere with a numeric key, shifts 0-9).\n\n");
     } else if (cfg.cipher_type == QUAGMIRE_1) {
         printf("\nAttacking a Quagmire I cipher.\n\n");
     } else if (cfg.cipher_type == QUAGMIRE_2) {

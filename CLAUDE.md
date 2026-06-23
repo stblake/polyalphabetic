@@ -12,7 +12,7 @@ folder holds unrelated experiment runs, logs, and candidate dumps; ignore it.)
 ## What this is
 
 Colossus is a polyalphabetic substitution cipher solver in C by Sam Blake (started 14 July 2023).
-It attacks **Vigenère, Beaufort, Porta, Quagmire I–IV, and Autokey** ciphers (plus
+It attacks **Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, and Autokey** ciphers (plus
 their variants and Beaufort/Porta autokey tableaus), optionally composed with a
 transposition stage. The engine is a **stochastic, slippery, shotgun-restarted hill
 climber with backtracking**. Cipher conventions follow the American Cryptogram
@@ -38,7 +38,7 @@ redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/
 indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h hill_solver.c/.h   # each: a CipherModel + solve_<type>()
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
-vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
+vigenere.c gronsfeld.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
 playfair.c           # Playfair primitives: grid build / prepare / encrypt / decrypt (5x5 keyed grid)
 bifid.c              # Bifid primitives: square build / encrypt / decrypt (side-generic keyed Polybius square)
 trifid.c             # Trifid primitives: cube build / encrypt / decrypt (side-generic keyed 3x3x3 cube)
@@ -55,6 +55,7 @@ tools/playfair_gen.c         # standalone Playfair test-data generator (make pla
 tools/bifid_gen.c            # standalone Bifid test-data generator (make bifid_gen)
 tools/trifid_gen.c           # standalone Trifid test-data generator (make trifid_gen)
 tools/hill_gen.c             # standalone Hill test-data generator (make hill_gen)
+tools/gronsfeld_gen.c        # standalone Gronsfeld test-data generator (make gronsfeld_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -98,7 +99,12 @@ random lengths/periods incl. incomplete blocks, and the period-1 identity), and
 GYBNQKURP, ACT→POH and CAT→FIN — the modular inverse over all residues mod 26, the
 matrix inverse by M·inv==I and inv(inv)==M plus singular rejection, encrypt/decrypt
 round-trips over random invertible keys for block sizes k=2..5 × random lengths incl.
-non-multiples of k, and the k=1 edge cases).
+non-multiples of k, and the k=1 edge cases), and
+`tests/test_gronsfeld.c` (the Gronsfeld primitives: a known-answer vector pinning the
+numeric-key convention — HELLOWORLD + key 12345 → IGOPTXQUPI — plus the zero-shift
+identity and mod-26 wrap, encrypt/decrypt round-trips over random digit keys × random
+lengths, exact agreement with `vigenere_*` fed the same digits as its cycleword, and the
+keylen-1 / over-long-key edge cases).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -106,14 +112,17 @@ prints recovery vs ciphertext length to characterize the short-text cliff),
 `tests/test_bifid_solver.c` (Bifid: registry validation, the period-estimator top-K hit
 rate, a capability floor with the period *estimated* end-to-end, and the length cliff),
 `tests/test_trifid_solver.c` (Trifid: the same four checks over the 27-symbol cube),
-and `tests/test_hill_solver.c` (Hill: registry validation, block-size *selection* with
-k swept, a k=2 and a k=3 capability floor, and the k=2 length cliff).
+`tests/test_hill_solver.c` (Hill: registry validation, block-size *selection* with
+k swept, a k=2 and a k=3 capability floor, and the k=2 length cliff), and
+`tests/test_gronsfeld_solver.c` (Gronsfeld: confirms it has *no* registry entry and rides
+the polyalpha defaults, a capability floor with the period *estimated* end-to-end and again
+pinned, and the length cliff).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-35 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+36 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, and a Hill cipher) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
@@ -148,7 +157,7 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
 `transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31`,
-`trifid`/`tf`/`tri`/`32`, `hill`/`33` (full list in
+`trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34` (full list in
 `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -308,6 +317,23 @@ ciphertext-only solve (`tests/test_hill_solver.c` characterizes the k=2/k=3 capa
 The primitives (`hill.c`) are **generic in `k`** (the determinant/inverse use cofactor
 expansion, fine for `k <= HILL_MAX_K = 5`). Generate test ciphers with `tools/hill_gen.c`
 (`make hill_gen`).
+
+The **Gronsfeld** type (`gronsfeld`/`gron`/`34`) is a **Vigenère cipher with a numeric
+key**: the per-column shift is a key digit `0..9` (`C = P + d`, `P = C − d`, mod 26), so
+it is exactly Vigenère restricted to the 10 smallest shifts. Unlike Hill/Bifid/… it is
+**not** a separate `CipherModel` — it is a type *inside* the shared `POLYALPHA_MODEL`
+(`polyalpha_solver.c`), wired to behave like `VIGENERE` (straight pt/ct alphabets, only the
+cycleword is searched) with one change: the **cycleword/shift domain is bounded to `0..9`**
+(`GRONSFELD_DIGITS`) in the seed, perturb, and — crucially — the `derive_optimal_cycleword`
+column search (`smax` in `optimal_cycleword.c`). So it reuses the whole polyalpha pipeline
+(IoC period estimation, the deterministic optimal-cycleword frequency attack, crib
+handling); the digit bound is a strong prior that makes recovery faster and reliable from
+shorter text than an unconstrained Vigenère solve. The cycleword *is* the key, so the
+decrypt path calls a tight direct primitive (`gronsfeld_decrypt`, `gronsfeld.c`) rather
+than the Quagmire indirection, and the report prints the recovered key as digits. It rides
+the polyalphabetic search defaults (no registry entry) and the default reward-only quadgram
+table (no `-logprob` needed, like Vigenère). Generate test ciphers with
+`tools/gronsfeld_gen.c` (`make gronsfeld_gen`; the key arg is a digit string, e.g. `31415926`).
 
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /

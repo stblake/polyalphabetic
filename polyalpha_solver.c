@@ -61,7 +61,8 @@ static int polyalpha_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap)
     int pt_max = cfg->plaintext_max_keyword_len;
     int ct_max = cfg->ciphertext_max_keyword_len;
 
-    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == BEAUFORT ||
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == GRONSFELD ||
+        cfg->cipher_type == BEAUFORT ||
         cfg->cipher_type == PORTA ||
         (cfg->cipher_type >= AUTOKEY_0 && cfg->cipher_type <= AUTOKEY_2) ||
         cfg->cipher_type == QUAGMIRE_1 || cfg->cipher_type == QUAGMIRE_2 ||
@@ -69,7 +70,8 @@ static int polyalpha_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap)
         min_kw = 1;
     }
 
-    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == AUTOKEY_0 ||
+    if (cfg->cipher_type == VIGENERE || cfg->cipher_type == GRONSFELD ||
+        cfg->cipher_type == AUTOKEY_0 ||
         cfg->cipher_type == AUTOKEY_BEAU || cfg->cipher_type == AUTOKEY_PORTA) {
         pt_max = 2; ct_max = 2;
         cfg->plaintext_keyword_len = 0;
@@ -102,6 +104,7 @@ static int polyalpha_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap)
                 if (cfg->cipher_type == QUAGMIRE_3 && j != k) continue;
                 if (cfg->cipher_type == BEAUFORT && ! (j == 1 && k == 1)) continue;
                 if (cfg->cipher_type == VIGENERE && ! (j == 1 && k == 1)) continue;
+                if (cfg->cipher_type == GRONSFELD && ! (j == 1 && k == 1)) continue;
                 if (cfg->cipher_type == PORTA && ! (j == 1 && k == 1)) continue;
                 if (cfg->cipher_type == AUTOKEY_0 && ! (j == 1 && k == 1)) continue;
                 if (cfg->cipher_type == AUTOKEY_1 && k != 1) continue;
@@ -155,6 +158,13 @@ static void polyalpha_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverS
             straight_alphabet(current_plaintext_keyword_state, g_alpha);
             straight_alphabet(current_ciphertext_keyword_state, g_alpha);
             random_cycleword(current_cycleword_state, g_alpha, cycleword_len);
+            break ;
+        case GRONSFELD:
+            // Gronsfeld = Vigenere with straight alphabets, but the shifts are
+            // numeric key digits, so the cycleword domain is 0..9 (not 0..25).
+            straight_alphabet(current_plaintext_keyword_state, g_alpha);
+            straight_alphabet(current_ciphertext_keyword_state, g_alpha);
+            random_cycleword(current_cycleword_state, GRONSFELD_DIGITS, cycleword_len);
             break ;
         case QUAGMIRE_1:
             if (cfg->user_plaintext_keyword_present) {
@@ -298,9 +308,11 @@ static void polyalpha_perturb(const SolverCtx *ctx, const SolverConfig *cc, Solv
     bool contradiction;
 
     if (perturbate_keyword_p ||
-            cfg->cipher_type == VIGENERE || is_autokey || frand() < cfg->keyword_permutation_probability) {
+            cfg->cipher_type == VIGENERE || cfg->cipher_type == GRONSFELD ||
+            is_autokey || frand() < cfg->keyword_permutation_probability) {
         switch (cfg->cipher_type) {
             case VIGENERE:
+            case GRONSFELD:
             case PORTA:
             case BEAUFORT:
             case AUTOKEY_0:
@@ -385,7 +397,7 @@ static void polyalpha_perturb(const SolverCtx *ctx, const SolverConfig *cc, Solv
     }
 
     if (cfg->optimal_cycleword && ! is_autokey) {
-        if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != PORTA) {
+        if (!did_perturb_keyword && cfg->cipher_type != BEAUFORT && cfg->cipher_type != VIGENERE && cfg->cipher_type != GRONSFELD && cfg->cipher_type != PORTA) {
             if (cfg->cipher_type == QUAGMIRE_3 && !(cfg->user_plaintext_keyword_present || cfg->user_ciphertext_keyword_present)) {
                  perturbate_keyword(local_plaintext_keyword_state, g_alpha, plaintext_keyword_len);
                  vec_copy(local_plaintext_keyword_state, local_ciphertext_keyword_state, g_alpha);
@@ -422,14 +434,17 @@ static void polyalpha_perturb(const SolverCtx *ctx, const SolverConfig *cc, Solv
             local_cycleword_state, cycleword_len, ctx->hist_by_col);
 
     } else {
-        if (cfg->cipher_type == VIGENERE || cfg->cipher_type == PORTA || is_autokey) {
-             perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
+        // Gronsfeld shifts are key digits, so its cycleword domain is 0..9 (not 0..25).
+        int cw_max = (cfg->cipher_type == GRONSFELD) ? GRONSFELD_DIGITS : g_alpha;
+        if (cfg->cipher_type == VIGENERE || cfg->cipher_type == GRONSFELD ||
+            cfg->cipher_type == PORTA || is_autokey) {
+             perturbate_cycleword(local_cycleword_state, cw_max, cycleword_len);
         }
         else if (!did_perturb_keyword) {
-            perturbate_cycleword(local_cycleword_state, g_alpha, cycleword_len);
+            perturbate_cycleword(local_cycleword_state, cw_max, cycleword_len);
         }
 
-        if (cfg->cipher_type != VIGENERE && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) {
+        if (cfg->cipher_type != VIGENERE && cfg->cipher_type != GRONSFELD && cfg->cipher_type != BEAUFORT && cfg->cipher_type != PORTA && ! is_autokey) {
             perturbate_keyword_p = false;
 
             if (did_perturb_keyword) {
@@ -627,6 +642,12 @@ void report_solution(ColossusConfig *cfg, char *cribtext_str,
 
     print_text(res->cycleword, res->cycleword_len);
     printf("\n");
+    if (cfg->cipher_type == GRONSFELD) {
+        // The Gronsfeld key is numeric: show the recovered per-column shifts as digits.
+        printf("key (numeric): ");
+        for (int i = 0; i < res->cycleword_len; i++) printf("%d", res->cycleword[i]);
+        printf("\n");
+    }
     print_text(res->decrypted, cipher_len);
     printf("\n");
     printf("%s\n", cribtext_str);
@@ -911,9 +932,13 @@ void decrypt_state(ColossusConfig *cfg, int cipher_indices[], int cipher_len,
         autokey_decrypt(cfg, decrypted, cipher_indices, cipher_len, 
             plaintext_keyword_state, ciphertext_keyword_state,
             cycleword_state, cycleword_len);
-    } else if (cfg->cipher_type == VIGENERE) { 
-        vigenere_decrypt(decrypted, cipher_indices, cipher_len, 
+    } else if (cfg->cipher_type == VIGENERE) {
+        vigenere_decrypt(decrypted, cipher_indices, cipher_len,
                          cycleword_state, cycleword_len, cfg->variant);
+    } else if (cfg->cipher_type == GRONSFELD) {
+        // Gronsfeld = Vigenere with numeric key digits carried in the cycleword lane.
+        gronsfeld_decrypt(decrypted, cipher_indices, cipher_len,
+                          cycleword_state, cycleword_len);
     } else {
         // Quagmire I-IV
         quagmire_decrypt(decrypted, cipher_indices, cipher_len, 

@@ -66,9 +66,14 @@ void derive_optimal_cycleword(
     for (i = 0; i < g_alpha; i++) ct_key_lookup[ciphertext_keyword_indices[i]] = i;
 
     // Quagmire I-IV are handled by a factored fast path (below); the cached 26x26
-    // weight table is only built for the keyword-free ciphers.
+    // weight table is only built for the keyword-free ciphers. Gronsfeld has straight
+    // alphabets like Vigenere, so it takes the keyword-free path too.
     int is_quag = !(cfg->cipher_type == PORTA || cfg->cipher_type == BEAUFORT ||
-                    cfg->cipher_type == VIGENERE);
+                    cfg->cipher_type == VIGENERE || cfg->cipher_type == GRONSFELD);
+
+    // Gronsfeld shifts are key digits 0..9, so its per-column shift search is bounded
+    // to that domain (vs the full 0..25); every other type sweeps the whole alphabet.
+    int smax = (cfg->cipher_type == GRONSFELD) ? GRONSFELD_DIGITS : g_alpha;
 
     // Quagmire factoring.
     // ===================
@@ -201,7 +206,7 @@ void derive_optimal_cycleword(
                 }
             }
         } else {
-            for (s = 0; s < g_alpha; s++) {
+            for (s = 0; s < smax; s++) {
                 double score = 0.0;
                 const double *ws = weight[s];
                 for (int k = 0; k < n_nz; k++) score += nz_n[k] * ws[nz_c[k]];

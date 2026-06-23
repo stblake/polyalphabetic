@@ -7,7 +7,7 @@ CC=gcc -Wall -O3 -funroll-loops
 # CC=gcc -Wall -lm -g -O0
 
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c hill.c
+PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c gronsfeld.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c hill.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
 SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c trifid_solver.c hill_solver.c
@@ -30,6 +30,8 @@ test:
 	./tests/test_transpositions
 	$(CC) tests/test_ciphers.c utils.c quagmire.c vigenere.c porta.c beaufort.c autokey.c -o tests/test_ciphers
 	./tests/test_ciphers
+	$(CC) tests/test_gronsfeld.c utils.c gronsfeld.c vigenere.c quagmire.c -o tests/test_gronsfeld
+	./tests/test_gronsfeld
 	$(CC) tests/test_optimal_cycleword.c utils.c quagmire.c vigenere.c porta.c beaufort.c optimal_cycleword.c -o tests/test_optimal_cycleword
 	./tests/test_optimal_cycleword
 	$(CC) tests/test_playfair.c utils.c playfair.c -o tests/test_playfair
@@ -47,6 +49,8 @@ test:
 testopt:
 	$(CC) -DCOLOSSUS_NO_MAIN tests/test_solver.c $(SOLVER_SRC) -o tests/test_solver
 	./tests/test_solver
+	$(CC) -DCOLOSSUS_NO_MAIN tests/test_gronsfeld_solver.c $(SOLVER_SRC) -o tests/test_gronsfeld_solver
+	./tests/test_gronsfeld_solver
 	$(CC) -DCOLOSSUS_NO_MAIN tests/test_playfair_solver.c $(SOLVER_SRC) -o tests/test_playfair_solver
 	./tests/test_playfair_solver
 	$(CC) -DCOLOSSUS_NO_MAIN tests/test_bifid_solver.c $(SOLVER_SRC) -o tests/test_bifid_solver
@@ -85,6 +89,11 @@ trifid_gen:
 hill_gen:
 	$(CC) tools/hill_gen.c hill.c utils.c -o tools/hill_gen
 
+# Standalone test-data generator for Gronsfeld ciphers. Reuses the real cipher code
+# (gronsfeld.c + utils.c) so the generator and solver can never drift in convention.
+gronsfeld_gen:
+	$(CC) tools/gronsfeld_gen.c gronsfeld.c utils.c -o tools/gronsfeld_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen
 

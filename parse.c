@@ -120,6 +120,9 @@ int parse_cipher_type(const char *arg) {
     // Hill (polygraphic substitution by a k x k matrix mod 26)
     if (str_eq(arg, "hill")) return HILL;
 
+    // Gronsfeld (Vigenere with a numeric key: per-column shifts 0..9)
+    if (str_eq(arg, "gronsfeld") || str_eq(arg, "gron")) return GRONSFELD;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

@@ -50,6 +50,9 @@
 #define BIFID          31   // Bifid (Delastelle): fractionation over a keyed Polybius square
 #define TRIFID         32   // Trifid (Delastelle): fractionation over a 3x3x3 keyed cube
 #define HILL           33   // Hill (polygraphic substitution by a k x k matrix mod 26)
+#define GRONSFELD      34   // Gronsfeld (Vigenere with a numeric key: per-column shifts 0..9)
+
+#define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
 #define HILL_MAX_K   5          // largest Hill block size (matrix dimension) supported
 #define HILL_MAX_KEY (HILL_MAX_K * HILL_MAX_K)  // largest k*k matrix (=25), fits the key lane
@@ -452,10 +455,16 @@ void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], 
 void porta_encrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 
 // Vigenere cipher
-void vigenere_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
+void vigenere_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant);
-void vigenere_encrypt(int encrypted[], int plaintext_indices[], int cipher_len, 
+void vigenere_encrypt(int encrypted[], int plaintext_indices[], int cipher_len,
     int cycleword_indices[], int cycleword_len, bool variant);
+
+// Gronsfeld cipher (Vigenere with a numeric key; key_digits[] are per-column shifts 0..9)
+void gronsfeld_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
+    int key_digits[], int key_len);
+void gronsfeld_encrypt(int encrypted[], int plaintext_indices[], int plaintext_len,
+    int key_digits[], int key_len);
 
 // Beaufort cipher
 void beaufort_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 
