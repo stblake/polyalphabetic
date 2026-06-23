@@ -293,8 +293,13 @@ encryption key. The block size `k` has no IoC-style estimator, so the solver sim
 required) and the n-gram score picks the winner — a wrong `k` decrypts to gibberish. The
 attack is a matrix anneal: ~85% change one element to a different random value (the
 dominant fine move), ~10% randomize a whole row, ~5% add a random multiple of one row to
-another mod 26 (a coarse jump); no anti-collapse penalty (a matrix is a bijection iff
-invertible). Like the other near-the-limit types it effectively needs `-logprob`. **The
+another mod 26 (a coarse jump). **A singular decryption matrix (det not coprime to 26) is
+penalised** (`HILL_SINGULAR_PENALTY`, via the decrypt hook's `score_adjust`): unlike
+Playfair/Bifid/Trifid a Hill matrix is a bijection *only* when invertible, and a singular
+one folds the ciphertext onto a sub-lattice, decrypting to a low-entropy repetitive string
+(the zero matrix → all `A`s) that out-scores real plaintext on n-grams and would otherwise
+attract the climb into a collapse. Like the other near-the-limit types it effectively needs
+`-logprob`. **The
 search lever is restarts, not iterations**: the matrices are small (k=2 is only 26⁴ keys),
 greedy climbs converge fast, and the landscape is rugged, so the schedule favours **many
 short restarts**. k=2 and k=3 are reliably breakable ciphertext-only; k≥4 is exercised

@@ -16,16 +16,29 @@
 // For each k the engine hill-climbs / anneals the matrix. The crucial trick: the state
 // carried in st->key IS the DECRYPTION matrix, applied straight to the ciphertext
 // (decrypted = D * cipher mod 26), so the hot path never inverts a matrix. The true
-// plaintext came from an invertible encryption key K, so the climb converges on D = K^-1;
-// a singular D simply scores as gibberish and is out-competed. The matrix is inverted
-// only once, at report time, to display the recovered encryption key (cosmetic -- the
-// graded output is the recovered plaintext).
+// plaintext came from an invertible encryption key K, so the climb converges on D = K^-1.
+// The matrix is inverted only once, at report time, to display the recovered encryption
+// key (cosmetic -- the graded output is the recovered plaintext).
 //
-// A matrix is a bijection iff it is invertible mod 26, so -- like Playfair/Bifid/Trifid --
-// no anti-collapse penalty is needed and score_adjust stays 0. Like those types, Hill
+// A matrix is a bijection iff it is invertible mod 26. A SINGULAR D is NOT a bijection:
+// it folds the ciphertext onto a sub-lattice and decrypts to a low-entropy repetitive
+// string (the zero matrix -> all A's) that OUT-scores real plaintext on n-grams, so the
+// climb is attracted into that collapse rather than out-competing it. The decrypt hook
+// therefore penalises singular candidates via score_adjust (HILL_SINGULAR_PENALTY) -- the
+// Hill analogue of the homophonic anti-collapse term. Like Playfair/Bifid/Trifid, Hill
 // effectively needs the discriminating -logprob (mean log-probability) fitness.
 
 #define HILL_DEFAULT_MAX_K 5
+
+// A singular decryption matrix (det not coprime to 26) is NOT a bijection: it folds the
+// ciphertext onto a sub-lattice and decrypts to a low-entropy, repetitive plaintext (the
+// zero matrix -> all A's; a rank-deficient matrix -> NANANA...) that out-scores real
+// plaintext on raw n-grams. The climb is therefore attracted into the collapse basin
+// rather than repelled from it. Real Hill decryption matrices are invertible, so any
+// singular candidate is penalised decisively below the worst plausible plaintext score
+// (mean log-prob lives in ~[-8,-2]); the row-add perturbation preserves the determinant,
+// so the search still moves freely within the invertible subset.
+#define HILL_SINGULAR_PENALTY (-1000.0)
 
 typedef struct {
     int k_list[HILL_MAX_K];   // candidate block sizes (config order)
@@ -91,7 +104,8 @@ static void hill_copy(const SolverConfig *cc, const SolverState *src, SolverStat
 static void hill_decrypt_hook(const SolverCtx *ctx, const SolverConfig *cc,
                               SolverState *st, int *out, double *score_adjust) {
     hill_mat_mul_blocks(st->key, cc->period, ctx->cipher, ctx->cipher_len, out);
-    *score_adjust = 0.0;
+    int det = hill_det_mod(st->key, cc->period);
+    *score_adjust = (hill_mod_inverse(det, ALPHABET_SIZE) == 0) ? HILL_SINGULAR_PENALTY : 0.0;
 }
 
 // Render a k x k matrix as an indented box of mod-26 integers.
