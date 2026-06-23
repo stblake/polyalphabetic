@@ -1,0 +1,10 @@
+# solution for vigautokey_2001_alchemyst_e15.txt
+status:      SOLVED (clean)
+true_type:   Vig Autokey
+solver:      auto
+length:      55  (cipher letters)
+score:       3.30
+solve_time:  45.17s  (CPU user+sys, single-threaded)
+command:     ./colossus -type auto -cipher ciphers/ACA/autokey/vigautokey_2001_alchemyst_e15.txt -ngramsize 4 -ngramfile english_quadgrams.txt -maxcyclewordlen 15 -nrestarts 5000 -nhillclimbs 800 -seed 1234
+ciphertext:  RSXUCNAXSMQROPECGHVSRBFTVECNOPAEOCAPMHGZRVIVPHLNVPARHTU
+plaintext:   GERMANPROVERBANOLDERRORISALWAYSMOREPOPULARTHANANEWTRUTH

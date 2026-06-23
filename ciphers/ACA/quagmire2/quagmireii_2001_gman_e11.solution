@@ -1,0 +1,10 @@
+# solution for quagmireii_2001_gman_e11.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire II
+solver:      q2
+length:      140  (cipher letters)
+score:       2.66
+solve_time:  252.75s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q2 -cipher ciphers/ACA/quagmire2/quagmireii_2001_gman_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  YHMISDGDHABHBZNFDHJSPQUORIUNMFKPKMRDJKBYPOXSPEPJAJDGLILJSZFGSKHKGYYYIAHLKJJYOSSUCHVODVXDJHYUROKHHFFBSHNZQAKJYZPDYMGDHNUUASJMTHKVECZNTTLOJBOY
+plaintext:   AFLYINTIEJAYSOESIERLOCKHNMMDSWASTHEBRITISHERUEVARENTPFTHEJAPAOESEJINROLISHAITWATAPOPULARNEANROFQUJCKLYLOVOOGAROUNDTIEDNGRISHSESONTOEBSIGHTON

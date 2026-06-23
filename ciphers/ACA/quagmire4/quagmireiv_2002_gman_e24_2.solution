@@ -1,0 +1,10 @@
+# solution for quagmireiv_2002_gman_e24_2.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire IV
+solver:      q4
+length:      156  (cipher letters)
+score:       2.65
+solve_time:  412.87s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q4 -cipher ciphers/ACA/quagmire4/quagmireiv_2002_gman_e24_2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 300 -nhillclimbs 1500 -seed 1234
+ciphertext:  WMVNLFNBILCNYWJKTUPOZBRHCXKKCNLQVMCZJNJNQVOUEZCNLKPVZDHUIDTYCDEKTUNDIOPKLQNYCTPOZKTYYPSSOXZDMYRNTZJLMMZULTZLRUNLKIYTUYTVZPIPRJZWIBHLRQQYWFDQVMPYCVKKDFWMMYWI
+plaintext:   JRCELACMBECTSCEBWAOANOABANCICTEANTTHEDGETORITTCTEDORACZITTBSASTIAERORNOTVEALIKNASIAMSEKADEASYLAROLYELATRVYANIIARYDUCKSAFTERDIOAXTONEMERSENGANTOFTWEKWASRESEL

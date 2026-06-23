@@ -1,0 +1,10 @@
+# solution for vigenere_2003_aurion_x11.txt
+status:      XENOCRYPT (foreign plaintext -- English coverage N/A)
+true_type:   Vigenere
+solver:      vig
+length:      87  (cipher letters)
+score:       2.87
+solve_time:  1.53s  (CPU user+sys, single-threaded)
+command:     ./colossus -type vig -cipher ciphers/ACA/vigenere/vigenere_2003_aurion_x11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 500 -nhillclimbs 1200 -seed 1234
+ciphertext:  JEBCGYPUPHMPZBKHWAILPOGDBXVGJINEGSMKMJMDLZORJCPNFKWOMPTNKWOMPZBKIOMTZMKWWCHOXHXRMTZNILA
+plaintext:   DAFIERSCHESARGEDAGGESWYAHINLDERKELPSEGSODEINNINGISOLSALSESSSNSESALSERRESAIFHAPPOSERSCHE

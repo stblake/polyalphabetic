@@ -1,0 +1,10 @@
+# solution for vigenere_2001_bozol_e03.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Vigenere
+solver:      vig
+length:      131  (cipher letters)
+score:       2.80
+solve_time:  2.31s  (CPU user+sys, single-threaded)
+command:     ./colossus -type vig -cipher ciphers/ACA/vigenere/vigenere_2001_bozol_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 500 -nhillclimbs 1200 -seed 1234
+ciphertext:  ZHKGDIRLLHAGVAEWKIOFANNEVXDWVIAYIUVDMNVFFAGJAKYWECFSJAQDVHAFIKNFCYFAVSXCLTFWBSXAPUFVCLLSEINKSAYDEUEWLIAZFHGJWFIALFQSVOICEIOFISYWECF
+plaintext:   INSOVIETUNIONARETOWNSNAMEDLENINGRADLENINOGORSKLENINABADLENINAKANLENINSKKUZNETSKIYANDULYANOVSKALLNAMEDINHONOROFVIULYANOVKNOWNASLENIN

@@ -1,0 +1,10 @@
+# solution for vigenere_2001_brasspounder_e09.txt
+status:      SOLVED (clean)
+true_type:   Vigenere
+solver:      vig
+length:      120  (cipher letters)
+score:       3.27
+solve_time:  2.15s  (CPU user+sys, single-threaded)
+command:     ./colossus -type vig -cipher ciphers/ACA/vigenere/vigenere_2001_brasspounder_e09.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 500 -nhillclimbs 1200 -seed 1234
+ciphertext:  HEBBKVOBSUSRXLPNFSRRMHUEKPRVERRCWCSTTRNECDPFBXIRFEAUKPWEJNHDIJLIEEOWEGUMHMLPGVCNXWRQJFLYYRJFACYPZLJCVKRNZPCNXRFLUEYVECAF
+plaintext:   GEORGEWASHINGTONSINAUGURALADDRESSLASTEDALLOFONEANDAHALFMINUTESTHERESNOTMUCHYOUCANSAYIFYOUAREAPOLITICIANWHOCANNOTTELLALIE

@@ -1,0 +1,10 @@
+# solution for porta_2002_marshen_e06.txt
+status:      SOLVED (clean)
+true_type:   Porta
+solver:      porta
+length:      89  (cipher letters)
+score:       3.32
+solve_time:  0.85s  (CPU user+sys, single-threaded)
+command:     ./colossus -type porta -cipher ciphers/ACA/porta/porta_2002_marshen_e06.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 600 -nhillclimbs 1200 -seed 1234
+ciphertext:  PVKRGFVRRJUPJINOUEWXKJPTWXINJMPNASTNLOMOJTLNFDZLTLNHSLMMJJPTQOWKLJERWJUPJVROVCMKENLWTYNDY
+plaintext:   ALTHOUGHITMAYSEEMTHATTHEHARDROADWILLNEVERENDONENEVERKNOWSTHEBEAUTYTHATMAYLIEAROUNDTHEBEND

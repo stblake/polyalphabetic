@@ -1,0 +1,10 @@
+# solution for quagmireiii_2002_gman_x10.txt
+status:      XENOCRYPT (foreign plaintext -- English coverage N/A)
+true_type:   Quagmire III
+solver:      q3
+length:      0  (cipher letters)
+score:       n/a
+solve_time:  0.06s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q3 -cipher ciphers/ACA/quagmire3/quagmireiii_2002_gman_x10.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  
+plaintext:   

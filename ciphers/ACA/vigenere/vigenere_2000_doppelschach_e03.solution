@@ -1,0 +1,10 @@
+# solution for vigenere_2000_doppelschach_e03.txt
+status:      SOLVED (clean)
+true_type:   Vigenere
+solver:      vig
+length:      58  (cipher letters)
+score:       3.26
+solve_time:  1.53s  (CPU user+sys, single-threaded)
+command:     ./colossus -type vig -cipher ciphers/ACA/vigenere/vigenere_2000_doppelschach_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 500 -nhillclimbs 1200 -seed 1234
+ciphertext:  PBZRREWWUIOYIEZSDMJVGSERHSMEITWXGIVUSOEEIHMVCEUPQRQUVEPVPD
+plaintext:   ABRACEOFFIGHTERBOMBERSWASSENTTOGRINDDOWNTHEENEMYBRIDGEHEAD

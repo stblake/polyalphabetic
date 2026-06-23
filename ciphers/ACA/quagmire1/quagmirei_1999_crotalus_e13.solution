@@ -1,0 +1,10 @@
+# solution for quagmirei_1999_crotalus_e13.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire I
+solver:      q1
+length:      98  (cipher letters)
+score:       2.88
+solve_time:  149.57s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q1 -cipher ciphers/ACA/quagmire1/quagmirei_1999_crotalus_e13.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  HAUQUZBYNOEMDMEHFEOXTKYJEBUQBVMPGNEHBYWEKPDQQWYVWQBHFVMPIZVPJPZZXADMREGOVRUJISBYFNMGVUXZEGFKQFVDAM
+plaintext:   DATURENUMEHESTSONTANNANTSNOLISEREHEROTHEATERPSOUTPOFTRARYRRFEGEITSNASTENRFAREHINKHENETUITETTEUOLAC

@@ -1,0 +1,10 @@
+# solution for quagmirei_2002_capybara_e11.txt
+status:      SOLVED (clean)
+true_type:   Quagmire I
+solver:      q1
+length:      122  (cipher letters)
+score:       3.17
+solve_time:  103.71s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q1 -cipher ciphers/ACA/quagmire1/quagmirei_2002_capybara_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  CNZELQZWLEACYWPSYAUAYQRSSMSHZIMNXACMRWZIBFYZLEIPOYPXXYPHQKFLFHQWZPTJAAKROVFYCGGQEVEOBNVCFPGQKRMFBDGJMXMZXQIWVIJHZRWEXEPQGQ
+plaintext:   MAGESTICKRAYBOLFFAMILIESHAWEFLOURISHEDSINCETHEIRRECENTREINTRODUCTIONINYELLOBSTONEPARJACCORDINKTONATIONALBILDLIFEFEDERATION

@@ -1,0 +1,10 @@
+# solution for quagmirei_2002_elcondor_e14.txt
+status:      SOLVED (clean)
+true_type:   Quagmire I
+solver:      q1
+length:      158  (cipher letters)
+score:       3.22
+solve_time:  258.55s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q1 -cipher ciphers/ACA/quagmire1/quagmirei_2002_elcondor_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  CGPSRMCBDDBZWVZKRRECQWTREMPEFHBVUPTPXGFCHXVITBIPSIIWGFRJADBPBRYFHKGREOGZDUULXBBDIPPJVNPYDSPUNFJBYPHCIPNDHEXDDQQKPRKTZOHEQYPHDMEHMOYFGVZOPDDNKYJDRKHRMERIPREKDS
+plaintext:   THEPROBLEMSOFTHEWORLDCANNOTPOSSIBLYBESOLVEDBYSKEPTICSORCYNICSWHOSEHORIZONSARELIMITEDBYTHEOBVIOUSREALITIESWENEEDMENWHOCANDREAMOFTHINGSTHATNEVERWEREJOHNFKENNEDY

@@ -1,0 +1,10 @@
+# solution for quagmirei_2003_gman_e14.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire I
+solver:      q1
+length:      169  (cipher letters)
+score:       2.35
+solve_time:  139.91s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q1 -cipher ciphers/ACA/quagmire1/quagmirei_2003_gman_e14.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  HSPMACQQFPNHBMOLOXRHBPTMUZXLATRJKDYOAXTEYFCXNXCFUCWFGZRJSPTVCJBZSOCKCQMXGKNOUYPZESUMFCLOMASEFXSLZFIMOEDANVXDGOADFZZRKGOHNLLACMZOOKGOHATQFXABWHHONVYJCJCJCKFXTOLEXARNWXDGH
+plaintext:   UGFSCARUINSTCMANUEZALFFRENDLWMPOFNUELCIRSIAETHEIGNAJTTJOIVUMHIEFPIWEAMSHDELTEEXTPHYSEENERGPRMTHULEGAECOAPOTCOUINIRBYSTAYTURIEARTPSTAYEXWEIWTITOINRBSADELUORLEANDEESRSOASO

@@ -1,0 +1,5 @@
+filename,type,source,year,name,con,author,detection,length
+autokey_2001_damac_ac639.txt,Autokey,Russ + digital con,2001,JF01,AC639,DAMAC,labeled,164
+varautokey_2000_lionel_e18.txt,Var Autokey,Russ + digital con,2000,ND00,E18,LIONEL,labeled,43
+vigautokey_2001_alchemyst_e15.txt,Vig Autokey,Russ + digital con,2001,SO01,E15,ALCHEMYST,labeled,55
+vigautokey_2003_quince_e17.txt,Vig Autokey,Russ + digital con,2003,SO03,E17,QUINCE,labeled,43

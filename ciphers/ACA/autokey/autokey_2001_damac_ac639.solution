@@ -1,0 +1,10 @@
+# solution for autokey_2001_damac_ac639.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Autokey
+solver:      auto
+length:      164  (cipher letters)
+score:       2.20
+solve_time:  131.22s  (CPU user+sys, single-threaded)
+command:     ./colossus -type auto -cipher ciphers/ACA/autokey/autokey_2001_damac_ac639.txt -ngramsize 4 -ngramfile english_quadgrams.txt -maxcyclewordlen 15 -nrestarts 5000 -nhillclimbs 800 -seed 1234
+ciphertext:  OYJZQMLNJHLLHUKWFXEPKALDAIOALEOBPIMEEUNRAQOMKYAOQTWPAKOXNZVGTTGAGANNSWIOZHDAVJPQAUAKIPELYSFCDGSPLZPMYGVDSAWSHDEAHHMLNEXJNDEQDJSNEAOEDRZAARRAEKNLWNJMDOMOVFADWTLQCMMG
+plaintext:   VEKPOCHERJOIPALBBNPBITHMRUGLLTNACTLWLNBAGKDBRLAMXIAENJORDWUPITUDYAJAJIRLDNOSCPMSALABAYTILENAOUAPAZOMANNSONWENDPAITALARFVAHADAUSFLADEMMEATROAKSIAWKFARKMVERATELLUSHMP

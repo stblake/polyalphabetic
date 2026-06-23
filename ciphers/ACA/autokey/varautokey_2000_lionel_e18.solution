@@ -1,0 +1,10 @@
+# solution for varautokey_2000_lionel_e18.txt
+status:      SOLVED (clean)
+true_type:   Var Autokey
+solver:      auto
+length:      43  (cipher letters)
+score:       3.56
+solve_time:  36.45s  (CPU user+sys, single-threaded)
+command:     ./colossus -type auto -cipher ciphers/ACA/autokey/varautokey_2000_lionel_e18.txt -ngramsize 4 -ngramfile english_quadgrams.txt -maxcyclewordlen 15 -nrestarts 5000 -nhillclimbs 800 -variant -seed 1234
+ciphertext:  BXEZXPZWPHSGFALAULXBNEQPKIODCTUAKTOCFGEEMKR
+plaintext:   DISTANCEHASTHESAMEEFFECTONTHEMINDASONTHEEYE

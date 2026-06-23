@@ -1,0 +1,10 @@
+# solution for porta_2001_brasspounder_e01.txt
+status:      SOLVED (clean)
+true_type:   Porta
+solver:      porta
+length:      120  (cipher letters)
+score:       3.29
+solve_time:  3.13s  (CPU user+sys, single-threaded)
+command:     ./colossus -type porta -cipher ciphers/ACA/porta/porta_2001_brasspounder_e01.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 600 -nhillclimbs 1200 -seed 1234
+ciphertext:  ATNVZKIXIBFOCPOXHRIWAZNPMHIFJGWXVZUJRLONRUKNFPEDXZYIKFBODZJRAVITEONNUZNPRXINRKELTNUNVCFTVHWKZGDDTBZVVLIMSQFGCQWXMHRYKFOD
+plaintext:   THEMISSIONOFTHEINFRAREDASTRONOMICALSATELLITEWHOSEACRONYMWASIRASEXCEEDEDALLREASONABLEEXPECTATIONSANDMETSOMEOPTIMISTICONES

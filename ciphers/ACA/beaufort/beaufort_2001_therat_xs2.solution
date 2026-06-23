@@ -1,0 +1,10 @@
+# solution for beaufort_2001_therat_xs2.txt
+status:      XENOCRYPT (foreign plaintext -- English coverage N/A)
+true_type:   Beaufort
+solver:      beau
+length:      118  (cipher letters)
+score:       2.70
+solve_time:  1.87s  (CPU user+sys, single-threaded)
+command:     ./colossus -type beau -cipher ciphers/ACA/beaufort/beaufort_2001_therat_xs2.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 500 -nhillclimbs 1200 -seed 1234
+ciphertext:  PHDGWSSTWLVQSCHEXFPOKOOJBVNQPKDQWSOZBXDJQETEDQZHUYGYZDWFPUUEKWQXGBUAMMTVLGWSLTWHABTKTGYUMSMHWRQWAGAGYUKMHNBXVVSQAGIELG
+plaintext:   WHICHIGOSANNIGEKODOMOTACHINSWEISHIKINOFUKESKISETEJINJAEDWURETEIKIKODOWSTACHINOSEICHYSINORIMASUSHACLINOTORUNONIISLIDESU

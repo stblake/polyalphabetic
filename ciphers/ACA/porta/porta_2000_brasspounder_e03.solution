@@ -1,0 +1,10 @@
+# solution for porta_2000_brasspounder_e03.txt
+status:      SOLVED (clean)
+true_type:   Porta
+solver:      porta
+length:      120  (cipher letters)
+score:       3.19
+solve_time:  1.18s  (CPU user+sys, single-threaded)
+command:     ./colossus -type porta -cipher ciphers/ACA/porta/porta_2000_brasspounder_e03.txt -ngramsize 4 -ngramfile english_quadgrams.txt -stochasticcycle -maxcyclewordlen 15 -nrestarts 600 -nhillclimbs 1200 -seed 1234
+ciphertext:  QEDANEYCSKLVLNBYNCLEDXZSBJPNUDOAPKKESUDABQYWCMLRXNMTLCKULAFEKZMTUEXBDKUMNYDAFGBNHYQENRDSWNSLMHFFKVPIDWXSZKAMZQXLPGAITGDD
+plaintext:   JUSTASHYDROGRAPHERSUSEMESSAGESINBOTTLESTOCHARTOCEANCURRENTSSODOMETEOROLOGISTSUSEWEATHERBALLOONSTOMAPTHEFLOWOFAIRCURRENTS

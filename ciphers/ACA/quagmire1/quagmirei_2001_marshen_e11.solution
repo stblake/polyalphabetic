@@ -1,0 +1,10 @@
+# solution for quagmirei_2001_marshen_e11.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire I
+solver:      q1
+length:      108  (cipher letters)
+score:       2.74
+solve_time:  201.36s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q1 -cipher ciphers/ACA/quagmire1/quagmirei_2001_marshen_e11.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  CJQEKIRBCJNWGXHFTNXXOKIWWWZWXFWQHJGJVVVHQXTUADPFOMPZKWSFAIOGVZMJFRFKKWITRWAVNTJBUMGGCJANGOTWAVYHGVDBGTXFRIOJ
+plaintext:   HAULORHOINSTEDDOSDHOETSHASITHERROAESRINKSTARIBEOLHTBONDEDITYGIVEIOCTONSATSNSRAIDTHEPASESBEATIFTBNEVEDDVETITO

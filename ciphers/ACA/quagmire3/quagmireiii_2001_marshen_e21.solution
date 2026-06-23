@@ -1,0 +1,10 @@
+# solution for quagmireiii_2001_marshen_e21.txt
+status:      UNSOLVED (best attempt shown)
+true_type:   Quagmire III
+solver:      q3
+length:      177  (cipher letters)
+score:       2.51
+solve_time:  135.67s  (CPU user+sys, single-threaded)
+command:     ./colossus -type q3 -cipher ciphers/ACA/quagmire3/quagmireiii_2001_marshen_e21.txt -ngramsize 4 -ngramfile english_quadgrams.txt -nrestarts 600 -nhillclimbs 2000 -seed 1234
+ciphertext:  KQOSTGGFENCONDNDYMDLAUZHHQDJRZGTTZPOLRRYBABOSRCYDGECNUBJSBBHLXBBEORGESRRIZDVAUQOXGJOELZHVGBORIZRECEKFCGBTABPEJQDUOGOPKZDLFRACRDDZVJEDRCJYOBCRVJCYWRBALFOUCYTECACYAFTTZGBHQKONJSGP
+plaintext:   OCSNTISTITFENETTSNIBASERTEBDRAMBEGRELAIOFNEESHSZCANANSVEMUEYLCUCITTHERIYLIBIAMEPBAVEENERUMEERNIAIUNTFESHENEFEOETATPEPLEMPAMPCHYTREVMDAYESBEARSHESOTRANUJASUSEINESLOSTUSHTENENOKIY
