@@ -10,8 +10,11 @@ tests/test_bifid
 tests/test_bifid_solver
 tests/test_trifid
 tests/test_trifid_solver
+tests/test_hill
+tests/test_hill_solver
 tools/homophonic_gen
 tools/playfair_gen
 tools/bifid_gen
 tools/trifid_gen
+tools/hill_gen
 *.o

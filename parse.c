@@ -117,6 +117,9 @@ int parse_cipher_type(const char *arg) {
     // Trifid (Delastelle fractionation over a 3x3x3 keyed cube)
     if (str_eq(arg, "trifid") || str_eq(arg, "tf") || str_eq(arg, "tri")) return TRIFID;
 
+    // Hill (polygraphic substitution by a k x k matrix mod 26)
+    if (str_eq(arg, "hill")) return HILL;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

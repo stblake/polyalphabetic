@@ -104,6 +104,8 @@ slow | playfair_pride | playfair | playfair_pride.txt | -logprob -nrestarts 6 -n
 slow | bifid_pride | bifid | bifid_pride.txt | -logprob -period 7 -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # --- Trifid (fractionation over a 3x3x3 keyed cube; 27-symbol alphabet A..Z + '+') ---
 slow | trifid_pride | trifid | trifid_pride.txt | -logprob -period 7 -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
+# --- Hill (polygraphic substitution by a k x k matrix mod 26; full 26-letter alphabet) ---
+fast | hill_k2 | hill | hill_k2.txt | -logprob -period 2 -nrestarts 20 -nhillclimbs 40000 -inittemp 0.10 -backtrackprob 0.25
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

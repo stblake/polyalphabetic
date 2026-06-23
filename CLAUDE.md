@@ -35,13 +35,14 @@ polyalpha_solver.c/.h    # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/
 transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h   # transposition solvers
 railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
 redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
-indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h   # each: a CipherModel + solve_<type>()
+indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h hill_solver.c/.h   # each: a CipherModel + solve_<type>()
 parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
 perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
 vigenere.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
 playfair.c           # Playfair primitives: grid build / prepare / encrypt / decrypt (5x5 keyed grid)
 bifid.c              # Bifid primitives: square build / encrypt / decrypt (side-generic keyed Polybius square)
 trifid.c             # Trifid primitives: cube build / encrypt / decrypt (side-generic keyed 3x3x3 cube)
+hill.c               # Hill primitives: matrix multiply / encrypt / decrypt / det+inverse mod 26 (generic k x k)
 transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
 dict.c               # dictionary load + word-finding (scores plaintext readability)
 utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
@@ -53,6 +54,7 @@ tools/homophonic_gen.c       # standalone homophonic-cipher test-data generator 
 tools/playfair_gen.c         # standalone Playfair test-data generator (make playfair_gen)
 tools/bifid_gen.c            # standalone Bifid test-data generator (make bifid_gen)
 tools/trifid_gen.c           # standalone Trifid test-data generator (make trifid_gen)
+tools/hill_gen.c             # standalone Hill test-data generator (make hill_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -91,22 +93,29 @@ lengths/periods incl. incomplete blocks, and the period-1 identity), and
 `tests/test_trifid.c` (the Trifid primitives: the Wikipedia known-answer vector — two
 groups, AIDET→FMJFV and OILEC→OISSU, over the 27-symbol cube — the keyed-cube build,
 encrypt/decrypt round-trips over random 3x3x3 cubes and side-generic 2x2x2/4x4x4 cubes ×
-random lengths/periods incl. incomplete blocks, and the period-1 identity).
+random lengths/periods incl. incomplete blocks, and the period-1 identity), and
+`tests/test_hill.c` (the Hill primitives: the Wikipedia known-answer vector — key
+GYBNQKURP, ACT→POH and CAT→FIN — the modular inverse over all residues mod 26, the
+matrix inverse by M·inv==I and inv(inv)==M plus singular rejection, encrypt/decrypt
+round-trips over random invertible keys for block sizes k=2..5 × random lengths incl.
+non-multiples of k, and the k=1 edge cases).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
 prints recovery vs ciphertext length to characterize the short-text cliff),
 `tests/test_bifid_solver.c` (Bifid: registry validation, the period-estimator top-K hit
 rate, a capability floor with the period *estimated* end-to-end, and the length cliff),
-and `tests/test_trifid_solver.c` (Trifid: the same four checks over the 27-symbol cube).
+`tests/test_trifid_solver.c` (Trifid: the same four checks over the 27-symbol cube),
+and `tests/test_hill_solver.c` (Hill: registry validation, block-size *selection* with
+k swept, a k=2 and a k=3 capability floor, and the k=2 length cliff).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-34 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+35 end-to-end cases (Vigenère, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
-cipher, a Bifid cipher, and a Trifid cipher) that each
+cipher, a Bifid cipher, a Trifid cipher, and a Hill cipher) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -116,7 +125,7 @@ bit-identical refactor keeps every score at 100% and any behavioural regression 
 immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 20-case fast tier in ~45s (use while iterating),
+`./run_tests.sh --fast` runs the 21-case fast tier in ~50s (use while iterating),
 `--slow` the 14 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid and ~18s Trifid solves), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
@@ -139,7 +148,7 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `porta`/`6`, `auto`/`7`, `auto1`..`auto4`/`8`..`11`, `autobeau`, `autoporta`,
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
 `transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31`,
-`trifid`/`tf`/`tri`/`32` (full list in
+`trifid`/`tf`/`tri`/`32`, `hill`/`33` (full list in
 `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -270,6 +279,31 @@ Bifid it effectively needs `-logprob` and recovers reliably from ~450+ character
 `tests/test_trifid_solver.c`). Generate test ciphers with `tools/trifid_gen.c`
 (`make trifid_gen`).
 
+The **Hill** type (`solve_hill()`, `HILL_MODEL`, `SHAPE_ANNEAL`) is a **polygraphic
+substitution**: a block of `k` plaintext letters (a column vector) is multiplied by a
+`k×k` key matrix **mod 26**, so it runs on the **full 26-letter alphabet unchanged**
+(`ALPHABET_SIZE` is already the mod base — no `init_alphabet` forcing). The crucial design
+choice: the state carried in the `key` lane **is the decryption matrix `D`**, applied
+straight to the ciphertext (`plain = D·cipher mod 26`), so the hot path never inverts a
+matrix; the true plaintext came from an invertible encryption key `K`, so the climb
+converges on `D = K⁻¹`, and the matrix is inverted **only at report time**
+(`hill_mat_inverse`, via a cofactor determinant + adjugate) to display the recovered
+encryption key. The block size `k` has no IoC-style estimator, so the solver simply
+**sweeps `k = 2..5`** (one engine config each, `-period` pins one; `cipher_len >= 2*k`
+required) and the n-gram score picks the winner — a wrong `k` decrypts to gibberish. The
+attack is a matrix anneal: ~85% change one element to a different random value (the
+dominant fine move), ~10% randomize a whole row, ~5% add a random multiple of one row to
+another mod 26 (a coarse jump); no anti-collapse penalty (a matrix is a bijection iff
+invertible). Like the other near-the-limit types it effectively needs `-logprob`. **The
+search lever is restarts, not iterations**: the matrices are small (k=2 is only 26⁴ keys),
+greedy climbs converge fast, and the landscape is rugged, so the schedule favours **many
+short restarts**. k=2 and k=3 are reliably breakable ciphertext-only; k≥4 is exercised
+only by the primitive round-trip/inverse tests (`tests/test_hill.c`), not asserted as a
+ciphertext-only solve (`tests/test_hill_solver.c` characterizes the k=2/k=3 capability).
+The primitives (`hill.c`) are **generic in `k`** (the determinant/inverse use cofactor
+expansion, fine for `k <= HILL_MAX_K = 5`). Generate test ciphers with `tools/hill_gen.c`
+(`make hill_gen`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -280,8 +314,10 @@ needs its own schedule. A small compiled-in registry (`g_search_defaults[]` in
 Types with no entry keep the global defaults bit-for-bit (so the regression suite is
 unaffected) — currently Playfair (`SHAPE_ANNEAL`, `6x400000`, `inittemp 0.08`,
 `backtrack 0.30`), Bifid (`SHAPE_ANNEAL`, `4x200000` per period, `inittemp 0.08`,
-`backtrack 0.30`) and Trifid (`SHAPE_ANNEAL`, `6x300000` per period, `inittemp 0.08`,
-`backtrack 0.30` — a larger budget for the 27-cell cube) have tuned entries. This is the mechanism for moving the magic
+`backtrack 0.30`), Trifid (`SHAPE_ANNEAL`, `6x300000` per period, `inittemp 0.08`,
+`backtrack 0.30` — a larger budget for the 27-cell cube) and Hill (`SHAPE_ANNEAL`,
+`250x8000` per swept block size, `inittemp 0.10`, `backtrack 0.25` — many short restarts,
+since the small matrix climbs converge fast) have tuned entries. This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
 

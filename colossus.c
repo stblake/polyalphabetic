@@ -217,6 +217,7 @@
 #include "playfair_solver.h"
 #include "bifid_solver.h"
 #include "trifid_solver.h"
+#include "hill_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -660,6 +661,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Bifid cipher (fractionation over a keyed Polybius square).\n\n");
     } else if (cfg.cipher_type == TRIFID) {
         printf("\nAttacking a Trifid cipher (fractionation over a keyed 3x3x3 cube).\n\n");
+    } else if (cfg.cipher_type == HILL) {
+        printf("\nAttacking a Hill cipher (polygraphic substitution by a k x k matrix mod 26).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -965,6 +968,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == TRIFID) {
         solve_trifid(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == HILL) {
+        solve_hill(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

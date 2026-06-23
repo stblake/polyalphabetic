@@ -49,6 +49,10 @@
 #define PLAYFAIR       30   // Playfair (digraphic substitution over a 5x5 keyed grid)
 #define BIFID          31   // Bifid (Delastelle): fractionation over a keyed Polybius square
 #define TRIFID         32   // Trifid (Delastelle): fractionation over a 3x3x3 keyed cube
+#define HILL           33   // Hill (polygraphic substitution by a k x k matrix mod 26)
+
+#define HILL_MAX_K   5          // largest Hill block size (matrix dimension) supported
+#define HILL_MAX_KEY (HILL_MAX_K * HILL_MAX_K)  // largest k*k matrix (=25), fits the key lane
 
 #define PLAYFAIR_SIDE 5         // Playfair grid side (the classic 5x5)
 #define PLAYFAIR_GRID 25        // Playfair grid size (PLAYFAIR_SIDE * PLAYFAIR_SIDE)
@@ -578,6 +582,24 @@ void trifid_build_inverse(const int cube[], int pos[], int n);
 void trifid_encrypt(const int plain[], int len, const int cube[], int side, int period, int out[]);
 void trifid_decrypt(const int cipher[], int len, const int cube[], int side, int period, int out[]);
 void trifid_cube_from_keyword(const int keyword[], int kwlen, int cube[], int n);
+
+
+// Hill cipher (hill.c). A polygraphic substitution: a block of k plaintext letters
+// (a column vector p) is enciphered c = K*p mod 26 with a k x k key matrix K (row-major
+// in mat[]); deciphering is p = K^-1*c mod 26, which exists iff gcd(det K, 26) == 1. The
+// mod base is ALPHABET_SIZE (26), so -type hill keeps the full 26-letter alphabet. The
+// one hot-path primitive is hill_mat_mul_blocks (the solver hill-climbs the DECRYPTION
+// matrix and applies it straight to the ciphertext); a trailing partial block (len % k)
+// is copied through unchanged. The determinant / inverse / keyword build serve the
+// generator, the unit tests, and the report hook (inverting the recovered decryption
+// matrix to display the encryption key).
+void hill_mat_mul_blocks(const int mat[], int k, const int in[], int len, int out[]);
+void hill_encrypt(const int plain[], int len, const int key[], int k, int out[]);
+void hill_decrypt(const int cipher[], int len, const int key[], int k, int out[]);
+int  hill_det_mod(const int mat[], int k);
+int  hill_mod_inverse(int a, int m);
+int  hill_mat_inverse(const int mat[], int k, int out[]);
+void hill_matrix_from_keyword(const int keyword[], int kwlen, int mat[], int k);
 
 
 // hist_by_col, when non-NULL, is a caller-supplied per-column ciphertext
