@@ -13,7 +13,7 @@
 //  identically) that the solver's grid recovery is unique only up to.
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

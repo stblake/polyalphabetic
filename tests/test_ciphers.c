@@ -11,7 +11,7 @@
 //  in the modular arithmetic is caught, not just a self-consistent round-trip).
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

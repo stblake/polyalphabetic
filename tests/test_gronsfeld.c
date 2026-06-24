@@ -13,7 +13,7 @@
 //  (which is precisely the claim that Gronsfeld == digit-restricted Vigenere).
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

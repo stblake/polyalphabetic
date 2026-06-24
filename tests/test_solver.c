@@ -19,9 +19,9 @@
 //  found in the cwd.
 //
 
-#include "../colossus.h"
-#include "../scoring.h"          // load_ngrams, crib_score (moved out of colossus.h)
-#include "../polyalpha_solver.h" // constrain_cycleword
+#include "colossus.h"
+#include "scoring.h"          // load_ngrams, crib_score (moved out of colossus.h)
+#include "polyalpha_solver.h" // constrain_cycleword
 
 static int failures = 0;
 static int checks = 0;

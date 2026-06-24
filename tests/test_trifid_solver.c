@@ -24,10 +24,10 @@
 //  g_ngram_logprob and loads the quadgram table in that mode.
 //
 
-#include "../colossus.h"
-#include "../engine.h"        // apply_cipher_defaults
-#include "../scoring.h"       // load_ngrams
-#include "../trifid_solver.h" // trifid_estimate_periods
+#include "colossus.h"
+#include "engine.h"        // apply_cipher_defaults
+#include "scoring.h"       // load_ngrams
+#include "trifid_solver.h" // trifid_estimate_periods
 
 static int failures = 0;
 static int checks = 0;

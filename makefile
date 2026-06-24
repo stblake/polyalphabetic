@@ -6,17 +6,29 @@ CC=gcc -Wall -O3 -funroll-loops
 
 # CC=gcc -Wall -lm -g -O0
 
+# Sources live under src/<cipher-class>/. All local #includes are flat
+# (#include "foo.h"), so the compiler finds every header via these -I paths
+# regardless of which subdirectory it lives in.
+SRC=src
+INCLUDES=-I$(SRC)/core -I$(SRC)/polyalphabetic -I$(SRC)/transposition -I$(SRC)/polygraphic -I$(SRC)/substitution
+
+CORE=$(SRC)/core
+POLY=$(SRC)/polyalphabetic
+TRANS=$(SRC)/transposition
+GRAPH=$(SRC)/polygraphic
+SUBST=$(SRC)/substitution
+
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=utils.c parse.c dict.c transpositions.c perioc.c quagmire.c vigenere.c gronsfeld.c porta.c beaufort.c autokey.c optimal_cycleword.c playfair.c bifid.c trifid.c hill.c phillips.c
+PRIMITIVES=$(CORE)/utils.c $(CORE)/parse.c $(CORE)/dict.c $(TRANS)/transpositions.c $(CORE)/perioc.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/gronsfeld.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c $(CORE)/optimal_cycleword.c $(GRAPH)/playfair.c $(GRAPH)/bifid.c $(GRAPH)/trifid.c $(GRAPH)/hill.c $(GRAPH)/phillips.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
-SOLVERS=engine.c scoring.c trans_common.c polyalpha_solver.c transmatrix_solver.c permutation_solver.c columnar_solver.c railfence_solver.c route_solver.c amsco_solver.c myszkowski_solver.c redefence_solver.c cadenus_solver.c nihilist_solver.c swagman_solver.c grille_solver.c indep_solver.c homophonic_solver.c playfair_solver.c bifid_solver.c trifid_solver.c hill_solver.c phillips_solver.c
+SOLVERS=$(CORE)/engine.c $(CORE)/scoring.c $(TRANS)/trans_common.c $(POLY)/polyalpha_solver.c $(TRANS)/transmatrix_solver.c $(TRANS)/permutation_solver.c $(TRANS)/columnar_solver.c $(TRANS)/railfence_solver.c $(TRANS)/route_solver.c $(TRANS)/amsco_solver.c $(TRANS)/myszkowski_solver.c $(TRANS)/redefence_solver.c $(TRANS)/cadenus_solver.c $(TRANS)/nihilist_solver.c $(TRANS)/swagman_solver.c $(TRANS)/grille_solver.c $(SUBST)/indep_solver.c $(SUBST)/homophonic_solver.c $(GRAPH)/playfair_solver.c $(GRAPH)/bifid_solver.c $(GRAPH)/trifid_solver.c $(GRAPH)/hill_solver.c $(GRAPH)/phillips_solver.c
 
 # The full solver translation-unit set (everything but the test harnesses).
-SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) colossus.c
+SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) $(CORE)/colossus.c
 
 all:
-	$(CC) $(SOLVER_SRC) -o colossus
+	$(CC) $(INCLUDES) $(SOLVER_SRC) -o colossus
 	cp colossus ..
 	cp colossus ../quagmire
 
@@ -26,42 +38,42 @@ all:
 #   test_optimal_cycleword : deterministic optimal-cycleword recovery
 #   test_playfair         : the Playfair primitives (grid build / encrypt / decrypt / prepare)
 test:
-	$(CC) tests/test_transpositions.c utils.c transpositions.c -o tests/test_transpositions
+	$(CC) $(INCLUDES) tests/test_transpositions.c $(CORE)/utils.c $(TRANS)/transpositions.c -o tests/test_transpositions
 	./tests/test_transpositions
-	$(CC) tests/test_ciphers.c utils.c quagmire.c vigenere.c porta.c beaufort.c autokey.c -o tests/test_ciphers
+	$(CC) $(INCLUDES) tests/test_ciphers.c $(CORE)/utils.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c -o tests/test_ciphers
 	./tests/test_ciphers
-	$(CC) tests/test_gronsfeld.c utils.c gronsfeld.c vigenere.c quagmire.c -o tests/test_gronsfeld
+	$(CC) $(INCLUDES) tests/test_gronsfeld.c $(CORE)/utils.c $(POLY)/gronsfeld.c $(POLY)/vigenere.c $(POLY)/quagmire.c -o tests/test_gronsfeld
 	./tests/test_gronsfeld
-	$(CC) tests/test_optimal_cycleword.c utils.c quagmire.c vigenere.c porta.c beaufort.c optimal_cycleword.c -o tests/test_optimal_cycleword
+	$(CC) $(INCLUDES) tests/test_optimal_cycleword.c $(CORE)/utils.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/porta.c $(POLY)/beaufort.c $(CORE)/optimal_cycleword.c -o tests/test_optimal_cycleword
 	./tests/test_optimal_cycleword
-	$(CC) tests/test_playfair.c utils.c playfair.c -o tests/test_playfair
+	$(CC) $(INCLUDES) tests/test_playfair.c $(CORE)/utils.c $(GRAPH)/playfair.c -o tests/test_playfair
 	./tests/test_playfair
-	$(CC) tests/test_bifid.c utils.c bifid.c -o tests/test_bifid
+	$(CC) $(INCLUDES) tests/test_bifid.c $(CORE)/utils.c $(GRAPH)/bifid.c -o tests/test_bifid
 	./tests/test_bifid
-	$(CC) tests/test_trifid.c utils.c trifid.c -o tests/test_trifid
+	$(CC) $(INCLUDES) tests/test_trifid.c $(CORE)/utils.c $(GRAPH)/trifid.c -o tests/test_trifid
 	./tests/test_trifid
-	$(CC) tests/test_hill.c utils.c hill.c -o tests/test_hill
+	$(CC) $(INCLUDES) tests/test_hill.c $(CORE)/utils.c $(GRAPH)/hill.c -o tests/test_hill
 	./tests/test_hill
-	$(CC) tests/test_phillips.c utils.c phillips.c -o tests/test_phillips
+	$(CC) $(INCLUDES) tests/test_phillips.c $(CORE)/utils.c $(GRAPH)/phillips.c -o tests/test_phillips
 	./tests/test_phillips
 
 # Slow optimizer regression suite (~30s): planted-cipher recovery through the
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
 # `make test` so the fast primitive checks stay in the quick edit/build loop.
 testopt:
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_solver.c $(SOLVER_SRC) -o tests/test_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_solver.c $(SOLVER_SRC) -o tests/test_solver
 	./tests/test_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_gronsfeld_solver.c $(SOLVER_SRC) -o tests/test_gronsfeld_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_gronsfeld_solver.c $(SOLVER_SRC) -o tests/test_gronsfeld_solver
 	./tests/test_gronsfeld_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_playfair_solver.c $(SOLVER_SRC) -o tests/test_playfair_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_playfair_solver.c $(SOLVER_SRC) -o tests/test_playfair_solver
 	./tests/test_playfair_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_bifid_solver.c $(SOLVER_SRC) -o tests/test_bifid_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_bifid_solver.c $(SOLVER_SRC) -o tests/test_bifid_solver
 	./tests/test_bifid_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_trifid_solver.c $(SOLVER_SRC) -o tests/test_trifid_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_trifid_solver.c $(SOLVER_SRC) -o tests/test_trifid_solver
 	./tests/test_trifid_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_hill_solver.c $(SOLVER_SRC) -o tests/test_hill_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_hill_solver.c $(SOLVER_SRC) -o tests/test_hill_solver
 	./tests/test_hill_solver
-	$(CC) -DCOLOSSUS_NO_MAIN tests/test_phillips_solver.c $(SOLVER_SRC) -o tests/test_phillips_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_phillips_solver.c $(SOLVER_SRC) -o tests/test_phillips_solver
 	./tests/test_phillips_solver
 
 # Everything.
@@ -71,38 +83,37 @@ testall: test testopt
 # build). Emits a comma-separated homophonic ciphertext + its plaintext solution;
 # used to mint ciphers/tests/homophonic_test.*.
 homophonic_gen:
-	$(CC) tools/homophonic_gen.c -o tools/homophonic_gen
+	$(CC) $(INCLUDES) tools/homophonic_gen.c -o tools/homophonic_gen
 
 # Standalone test-data generator for Playfair ciphers. Reuses the real cipher code
 # (playfair.c + utils.c) so the generator and solver can never drift in convention.
 playfair_gen:
-	$(CC) tools/playfair_gen.c playfair.c utils.c -o tools/playfair_gen
+	$(CC) $(INCLUDES) tools/playfair_gen.c $(GRAPH)/playfair.c $(CORE)/utils.c -o tools/playfair_gen
 
 # Standalone test-data generator for Bifid ciphers. Reuses the real cipher code
 # (bifid.c + utils.c) so the generator and solver can never drift in convention.
 bifid_gen:
-	$(CC) tools/bifid_gen.c bifid.c utils.c -o tools/bifid_gen
+	$(CC) $(INCLUDES) tools/bifid_gen.c $(GRAPH)/bifid.c $(CORE)/utils.c -o tools/bifid_gen
 
 # Standalone test-data generator for Trifid ciphers. Reuses the real cipher code
 # (trifid.c + utils.c) so the generator and solver can never drift in convention.
 trifid_gen:
-	$(CC) tools/trifid_gen.c trifid.c utils.c -o tools/trifid_gen
+	$(CC) $(INCLUDES) tools/trifid_gen.c $(GRAPH)/trifid.c $(CORE)/utils.c -o tools/trifid_gen
 
 # Standalone test-data generator for Hill ciphers. Reuses the real cipher code
 # (hill.c + utils.c) so the generator and solver can never drift in convention.
 hill_gen:
-	$(CC) tools/hill_gen.c hill.c utils.c -o tools/hill_gen
+	$(CC) $(INCLUDES) tools/hill_gen.c $(GRAPH)/hill.c $(CORE)/utils.c -o tools/hill_gen
 
 # Standalone test-data generator for Gronsfeld ciphers. Reuses the real cipher code
 # (gronsfeld.c + utils.c) so the generator and solver can never drift in convention.
 gronsfeld_gen:
-	$(CC) tools/gronsfeld_gen.c gronsfeld.c utils.c -o tools/gronsfeld_gen
+	$(CC) $(INCLUDES) tools/gronsfeld_gen.c $(POLY)/gronsfeld.c $(CORE)/utils.c -o tools/gronsfeld_gen
 
 # Standalone test-data generator for Phillips ciphers. Reuses the real cipher code
 # (phillips.c + utils.c) so the generator and solver can never drift in convention.
 phillips_gen:
-	$(CC) tools/phillips_gen.c phillips.c utils.c -o tools/phillips_gen
+	$(CC) $(INCLUDES) tools/phillips_gen.c $(GRAPH)/phillips.c $(CORE)/utils.c -o tools/phillips_gen
 
 clean:
 	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen
-

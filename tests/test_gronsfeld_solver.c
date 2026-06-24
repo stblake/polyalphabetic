@@ -24,9 +24,9 @@
 //  Run from the source directory so the n-gram table is found in the cwd.
 //
 
-#include "../colossus.h"
-#include "../engine.h"        // apply_cipher_defaults
-#include "../scoring.h"       // load_ngrams
+#include "colossus.h"
+#include "engine.h"        // apply_cipher_defaults
+#include "scoring.h"       // load_ngrams
 
 static int failures = 0;
 static int checks = 0;

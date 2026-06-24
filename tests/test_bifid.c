@@ -14,7 +14,7 @@
 //  cell) round-trip exercises the side-generic path that the 5x5 default does not.
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

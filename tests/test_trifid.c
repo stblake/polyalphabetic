@@ -15,7 +15,7 @@
 //  trips exercise the side-generic path that the 3x3x3 default does not.
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

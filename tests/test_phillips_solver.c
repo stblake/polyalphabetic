@@ -25,9 +25,9 @@
 //  so this enables g_ngram_logprob and loads the quadgram table in that mode.
 //
 
-#include "../colossus.h"
-#include "../engine.h"   // apply_cipher_defaults
-#include "../scoring.h"  // load_ngrams
+#include "colossus.h"
+#include "engine.h"   // apply_cipher_defaults
+#include "scoring.h"  // load_ngrams
 
 static int failures = 0;
 static int checks = 0;

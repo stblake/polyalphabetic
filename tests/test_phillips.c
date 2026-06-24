@@ -17,7 +17,7 @@
 //  (#1==#5, #2==#8 encipher identically), and that the 8 derived squares are distinct grids.
 //
 
-#include "../colossus.h"
+#include "colossus.h"
 
 static int failures = 0;
 static int checks = 0;

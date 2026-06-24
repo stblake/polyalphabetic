@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
-#include "../colossus.h"
+#include "colossus.h"
 
 #define MAXLEN (1 << 20)
 

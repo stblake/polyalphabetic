@@ -19,34 +19,52 @@ climber with backtracking**. Cipher conventions follow the American Cryptogram
 Association (https://www.cryptogram.org/resource-area/cipher-types/). It exists to
 crack the Kryptos sculpture's K1–K4. See `README.md` for the author's full writeup.
 
-## Layout (flat — sources at the repo root)
+## Layout (sources under `src/<cipher-class>/`)
+
+The C sources are grouped by cipher class under `src/`; everything else (build,
+tests, tools, data, ciphers) stays at the repo root. All local `#include`s are
+**flat** (`#include "foo.h"`, no directory prefix) — the makefile resolves them
+with one `-I` per `src/` subdir (the `INCLUDES` variable), so a header is found
+regardless of which subdirectory it lives in. Add a new `src/` subdir → add it
+to `INCLUDES`.
 
 ```
-colossus.c     # main(): arg parsing, init_config(), solve_cipher() dispatcher
-colossus.h     # shared CORE header: config/ctx/model structs, constants, cipher-type codes,
-               #   globals, inline RNG, and the cipher-PRIMITIVE prototypes
-engine.c/.h          # cipher-agnostic search engine: run_solver(), run_one_config(),
-                     #   make_solver_ctx(), the SearchDefaults registry + apply_cipher_defaults()
-scoring.c/.h         # state_score / ngram_score / crib_score, load_ngrams, keyword/cycleword RNG
-trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
-                     #   TransKeyOps seed/move, perm_move/seed, sweep no-ops, exact_isqrt
-polyalpha_solver.c/.h    # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/cycleword helpers
+src/core/        # cipher-agnostic engine + shared infrastructure
+  colossus.c       # main(): arg parsing, init_config(), solve_cipher() dispatcher
+  colossus.h       # shared CORE header: config/ctx/model structs, constants, cipher-type
+                   #   codes, globals, inline RNG, and the cipher-PRIMITIVE prototypes
+  engine.c/.h      # cipher-agnostic search engine: run_solver(), run_one_config(),
+                   #   make_solver_ctx(), the SearchDefaults registry + apply_cipher_defaults()
+  scoring.c/.h     # state_score / ngram_score / crib_score, load_ngrams, keyword/cycleword RNG
+  parse.c          # parse_cipher_type(): string/int aliases -> cipher-type code
+  perioc.c         # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
+  optimal_cycleword.c  # derive_optimal_cycleword(): deterministic per-column frequency attack
+  dict.c           # dictionary load + word-finding (scores plaintext readability)
+  utils.c          # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
+
+src/polyalphabetic/   # Vigenère family — searched inside POLYALPHA_MODEL
+  polyalpha_solver.c/.h  # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/cycleword helpers
                          #   + solve_polyalpha(); solve_cipher() dispatches the polyalpha types here
-transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h   # transposition solvers
-railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
-redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
-indep_solver.c/.h homophonic_solver.c/.h playfair_solver.c/.h bifid_solver.c/.h trifid_solver.c/.h hill_solver.c/.h phillips_solver.c/.h   # each: a CipherModel + solve_<type>()
-parse.c              # parse_cipher_type(): string/int aliases -> cipher-type code
-perioc.c             # estimate_cycleword_lengths(): IoC period estimation (Z-score + threshold)
-vigenere.c gronsfeld.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
-playfair.c           # Playfair primitives: grid build / prepare / encrypt / decrypt (5x5 keyed grid)
-bifid.c              # Bifid primitives: square build / encrypt / decrypt (side-generic keyed Polybius square)
-trifid.c             # Trifid primitives: cube build / encrypt / decrypt (side-generic keyed 3x3x3 cube)
-hill.c               # Hill primitives: matrix multiply / encrypt / decrypt / det+inverse mod 26 (generic k x k)
-phillips.c           # Phillips primitives: derive 8 squares from a base / encrypt / decrypt (side-generic, 3 variants)
-transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
-dict.c               # dictionary load + word-finding (scores plaintext readability)
-utils.c              # ord/print, decode_cipher/print_cipher (symbol I/O), IoC, chi-squared, etc.
+  vigenere.c gronsfeld.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
+
+src/transposition/    # pure-transposition solvers + shared helpers
+  trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
+                       #   TransKeyOps seed/move, perm_move/seed, sweep no-ops, exact_isqrt
+  transpositions.c     # transperoffset() (periodic decimation), transmatrix() (K3-style double rotation)
+  transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h
+  railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
+  redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
+
+src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a CipherModel solver
+  playfair.c playfair_solver.c/.h   # Playfair: 5x5 keyed grid; grid build / prepare / encrypt / decrypt
+  bifid.c    bifid_solver.c/.h      # Bifid: side-generic keyed Polybius square build / encrypt / decrypt
+  trifid.c   trifid_solver.c/.h     # Trifid: side-generic keyed 3x3x3 cube build / encrypt / decrypt
+  hill.c     hill_solver.c/.h       # Hill: matrix multiply / encrypt / decrypt / det+inverse mod 26 (generic k x k)
+  phillips.c phillips_solver.c/.h   # Phillips: derive 8 squares from a base / encrypt / decrypt (side-generic, 3 variants)
+
+src/substitution/     # monoalphabetic / homophonic substitution solvers
+  indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
+
 makefile
 README.md  LICENSE
 example.sh           # canonical usage example
@@ -77,11 +95,13 @@ Two caveats:
 - `make` also runs `cp colossus ..` (and `../quagmire`), copying the binary
   *outside* this directory. That predates the isolation of this repo; the in-tree
   `./colossus` is the one that matters here.
-- The translation-unit list lives in makefile variables: `PRIMITIVES` (the cipher
-  decrypt math + utils), `SOLVERS` (the engine/scoring/trans_common core + the
-  per-cipher-type solver modules), and `SOLVER_SRC = $(PRIMITIVES) $(SOLVERS) colossus.c`
-  (used by both `all` and the `testopt` harnesses). Add a new solver module to
-  `SOLVERS`.
+- The translation-unit list lives in makefile variables, each path prefixed with the
+  source-class dir vars (`$(CORE)`, `$(POLY)`, `$(TRANS)`, `$(GRAPH)`, `$(SUBST)`):
+  `PRIMITIVES` (the cipher decrypt math + utils), `SOLVERS` (the engine/scoring/trans_common
+  core + the per-cipher-type solver modules), and
+  `SOLVER_SRC = $(PRIMITIVES) $(SOLVERS) $(CORE)/colossus.c` (used by both `all` and the
+  `testopt` harnesses). Every compile also passes `$(INCLUDES)` (one `-I` per `src/` subdir).
+  Add a new solver module to `SOLVERS` with its `src/<class>/` prefix.
 
 `make test` builds and runs the framework-free unit tests in
 `tests/test_transpositions.c` (the transposition primitives, including the columnar
