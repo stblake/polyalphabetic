@@ -20,3 +20,7 @@ tools/hill_gen
 *.o
 __pycache__/
 *.pyc
+
+# Licensed ACA cipher corpus — kept in a separate PRIVATE repo (not redistributable).
+# Present on disk for local benchmarks; managed by its own git repo at ciphers/ACA/.git
+ciphers/ACA/
