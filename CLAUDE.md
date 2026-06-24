@@ -61,6 +61,8 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
   trifid.c   trifid_solver.c/.h     # Trifid: side-generic keyed 3x3x3 cube build / encrypt / decrypt
   hill.c     hill_solver.c/.h       # Hill: matrix multiply / encrypt / decrypt / det+inverse mod 26 (generic k x k)
   phillips.c phillips_solver.c/.h   # Phillips: derive 8 squares from a base / encrypt / decrypt (side-generic, 3 variants)
+  twosquare.c twosquare_solver.c/.h # Two-Square: two keyed squares, rectangle rule; horizontal (ACA) + vertical (self-inverse), one solver
+  foursquare.c foursquare_solver.c/.h # Four-Square: 2 keyed + 2 fixed-standard squares / encrypt / decrypt (side-generic)
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -76,6 +78,8 @@ tools/trifid_gen.c           # standalone Trifid test-data generator (make trifi
 tools/hill_gen.c             # standalone Hill test-data generator (make hill_gen)
 tools/gronsfeld_gen.c        # standalone Gronsfeld test-data generator (make gronsfeld_gen)
 tools/phillips_gen.c         # standalone Phillips test-data generator (make phillips_gen)
+tools/twosquare_gen.c        # standalone Two-Square test-data generator (make twosquare_gen)
+tools/foursquare_gen.c       # standalone Four-Square test-data generator (make foursquare_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -133,7 +137,17 @@ assertion pinning `phillips_build_squares`' 8-square Row table cell-for-cell aga
 ACA's printed squares #1–#8, encrypt/decrypt round-trips over random base squares × random
 lengths for ALL THREE variants and a side-generic 6x6, and the documented structural facts
 — the column-rotation symmetry, its row-rotation dual, the #1≡#5 / #2≡#8 cyclic equivalences,
-and that the 8 derived squares are distinct grids).
+and that the 8 derived squares are distinct grids), and
+`tests/test_twosquare.c` (the Two-Square primitives: the ACA worked-example known-answer
+vector for the horizontal type — the two printed squares, `anothe…px` → `IRRTEHMKGIMEQGRUNMMZSV`
+— and the Wikipedia worked-example for the vertical type — EXAMPLE/KEYWORD → `HEDLXW…` — plus
+encrypt/decrypt round-trips over random squares × random lengths for BOTH arrangements and a
+side-generic 6x6, the vertical type asserted SELF-INVERSE, and the documented transparencies
+asserted directly — horizontal same-row → reversed pair, vertical same-column → unchanged), and
+`tests/test_foursquare.c` (the Four-Square primitives: the Wikipedia worked-example known-answer
+vector — keyed squares EXAMPLE/KEYWORD over the fixed standard squares, `HELP…` → `FYGMKY…` —
+encrypt/decrypt round-trips over random keyed squares × random lengths and a side-generic 6x6,
+and a degenerate identity-square check pinning the exact coordinate algebra).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -149,16 +163,25 @@ pinned, and the length cliff), and
 `tests/test_phillips_solver.c` (Phillips: registry validation for all three variant types
 plus a non-registry type left untouched, a ~760-char capability floor for EACH variant — Row
 through the registry default, Column/Row-Column at an explicit budget — and a Row length
-cliff showing recovery from ~200 characters).
+cliff showing recovery from ~200 characters),
+`tests/test_twosquare_solver.c` (Two-Square: registry validation for both arrangements plus a
+non-registry type left untouched, a ~900-char capability floor — horizontal through the
+registry default, vertical at an explicit budget — a horizontal length cliff, and the
+extra-thorough additions: a transparency-rate measurement (~20% same-row digraphs) and a
+multi-keyword sweep reporting mean/worst recovery), and
+`tests/test_foursquare_solver.c` (Four-Square: registry validation, a ~900-char capability
+floor with a PER-SQUARE recovery breakdown — even positions decrypt through the upper-right
+square, odd through the lower-left — a length cliff, and a multi-keyword sweep).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-39 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+42 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
-cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, and the three Phillips
-variants — Row / Column / Row-Column) that each
+cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
+variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical) and a
+Four-Square cipher) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -169,8 +192,9 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 21-case fast tier in ~50s (use while iterating),
-`--slow` the 17 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid and the
-three ~13s Phillips solves), no flag runs both.
+`--slow` the 20 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+three ~13s Phillips solves, the two ~10s Two-Square solves and the ~17s Four-Square),
+no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -193,7 +217,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `transmatrix`/`14`, `transperoffset`/`15`, `transposition`/`16`, `transcol`/`17`,
 `transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31`,
 `trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34`,
-`phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37` (full list in
+`phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37`,
+`twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40` (full list in
 `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -395,6 +420,32 @@ for 6–8). The primitives (`phillips.c`) are **side-generic** (`2·side−2` sq
 Generate test ciphers with `tools/phillips_gen.c` (`make phillips_gen`; the variant arg is
 `row`/`col`/`rowcol`).
 
+The **Two-Square** (`solve_twosquare()`, `TWOSQUARE_MODEL`) and **Four-Square**
+(`solve_foursquare()`, `FOURSQUARE_MODEL`) types are digraphic substitutions over **two keyed
+5x5 squares** (`SHAPE_ANNEAL`). They run on the same 25-letter (J→I) grid as Playfair
+(`init_alphabet("J")` before `load_ngrams`), but the state is a **pair** of squares packed
+back-to-back in the `key` lane (sq1 = `key[0..24]`, sq2 = `key[25..49]`) — **50 cells, double
+Playfair's**. For each plaintext digraph the two letters span a rectangle and the cipher pair is
+the rectangle's other two corners (`twosquare.c` / `foursquare.c`; verified cell-for-cell against
+the ACA Two-Square and Wikipedia Four-Square worked examples). The attack is the **same SA square
+break as Playfair** — cell-swap-dominated moves plus row/column swaps and reflections, no
+anti-collapse penalty (every square is a bijection) — but each move perturbs **one of the two
+squares** (chosen uniformly) and there is **no period to estimate** (a single engine config). The
+only prep is padding an odd plaintext with one `X` (no doubled-letter handling, unlike Playfair).
+The larger 50-cell state needs more text and a bigger budget; like the other square types it
+effectively needs `-logprob`. **Two-Square has two arrangements** sharing the solver/primitive,
+selected by `cfg->cipher_type`: `twosquare` (the ACA **horizontal**, squares side by side — a
+same-ROW digraph maps to the reversed pair) and `twosquare-v` (**vertical**, squares stacked — a
+same-COLUMN digraph maps to itself, and the whole cipher is **self-inverse** so decrypt ==
+encrypt). About **20% of digraphs are such transparencies**, a documented weakness that leaks
+plaintext and makes Two-Square recover from short text. **Four-Square** keeps the upper-left and
+lower-right squares as the **fixed standard alphabet** (`foursquare_standard_square()`); only the
+upper-right (UR) and lower-left (LL) squares are keyed, and the two are independent — making it
+the hardest of the family (its report breaks recovery down per-square: even cipher positions
+decrypt through UR, odd through LL). The primitives are **side-generic** (`side`/`n = side*side`).
+Generate test ciphers with `tools/twosquare_gen.c` / `tools/foursquare_gen.c`
+(`make twosquare_gen foursquare_gen`; the Two-Square variant arg is `h`/`v`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -408,9 +459,13 @@ unaffected) — currently Playfair (`SHAPE_ANNEAL`, `6x400000`, `inittemp 0.08`,
 `backtrack 0.30`), Trifid (`SHAPE_ANNEAL`, `6x300000` per period, `inittemp 0.08`,
 `backtrack 0.30` — a larger budget for the 27-cell cube), Hill (`SHAPE_ANNEAL`,
 `250x8000` per swept block size, `inittemp 0.10`, `backtrack 0.25` — many short restarts,
-since the small matrix climbs converge fast) and Phillips and its two variants
+since the small matrix climbs converge fast), Phillips and its two variants
 (`SHAPE_ANNEAL`, `4x250000`, `inittemp 0.08`, `backtrack 0.30` — a single config, leaner
-than Playfair since monographic Phillips recovers from shorter text) have tuned entries.
+than Playfair since monographic Phillips recovers from shorter text), Two-Square and its
+vertical variant (`SHAPE_ANNEAL`, `8x600000`, `inittemp 0.08`, `backtrack 0.30`) and
+Four-Square (`SHAPE_ANNEAL`, `12x700000` — the biggest budget, for its two independent
+keyed squares) have tuned entries (the two/four-square budgets are larger than Playfair's
+for the 50-cell two-square state).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

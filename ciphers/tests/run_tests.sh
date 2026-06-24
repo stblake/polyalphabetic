@@ -111,6 +111,10 @@ fast | hill_k2 | hill | hill_k2.txt | -logprob -period 2 -nrestarts 20 -nhillcli
 slow | phillips_pride    | phillips    | phillips_pride.txt    | -logprob -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 slow | phillips_c_pride  | phillips-c  | phillips_c_pride.txt  | -logprob -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 slow | phillips_rc_pride | phillips-rc | phillips_rc_pride.txt | -logprob -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
+# --- Two-Square / Four-Square (digraphic over two keyed 5x5 squares; 25-letter, J->I) ---
+slow | twosquare_pride    | twosquare    | twosquare_pride.txt    | -logprob -nrestarts 4 -nhillclimbs 250000 -inittemp 0.08 -backtrackprob 0.3
+slow | twosquare_v_pride  | twosquare-v  | twosquare_v_pride.txt  | -logprob -nrestarts 4 -nhillclimbs 250000 -inittemp 0.08 -backtrackprob 0.3
+slow | foursquare_pride   | foursquare   | foursquare_pride.txt   | -logprob -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

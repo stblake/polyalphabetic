@@ -54,6 +54,9 @@
 #define PHILLIPS       35   // Phillips ("Row" type): 8 keyed-square substitution, period 40
 #define PHILLIPS_C     36   // Phillips-C: the column-shift dual of the Row square generation
 #define PHILLIPS_RC    37   // Phillips-RC: rows for squares 2-5, columns for squares 6-8
+#define TWO_SQUARE     38   // Two-Square horizontal (ACA): two keyed 5x5 squares side by side
+#define TWO_SQUARE_V   39   // Two-Square vertical (Wikipedia): two keyed squares stacked (self-inverse)
+#define FOUR_SQUARE    40   // Four-Square: two keyed ciphertext squares + two standard plaintext squares
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -62,6 +65,12 @@
 
 #define PLAYFAIR_SIDE 5         // Playfair grid side (the classic 5x5)
 #define PLAYFAIR_GRID 25        // Playfair grid size (PLAYFAIR_SIDE * PLAYFAIR_SIDE)
+
+#define TWO_SQ_HORIZONTAL 0     // Two-Square arrangement: squares side by side (ACA)
+#define TWO_SQ_VERTICAL   1     // Two-Square arrangement: squares stacked (Wikipedia, self-inverse)
+#define SQUARE_SIDE 5           // Two/Four-Square square side (the classic 5x5)
+#define SQUARE_GRID 25          // one square's cell count (SQUARE_SIDE * SQUARE_SIDE)
+#define SQUARE_MAX_GRID 36      // largest single square (6x6) the side-generic primitives handle
 
 #define BIFID_MAX_SIDE 6        // largest Bifid square side supported (6x6, 36 cells)
 #define BIFID_MAX_GRID 36       // BIFID_MAX_SIDE * BIFID_MAX_SIDE
@@ -600,6 +609,39 @@ void phillips_build_squares(const int base[], int side, int variant, int squares
 void phillips_encrypt(const int plain[], int len, const int base[], int side, int variant, int out[]);
 void phillips_decrypt(const int cipher[], int len, const int base[], int side, int variant, int out[]);
 void phillips_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
+
+
+// Two-Square cipher (twosquare.c). A digraphic substitution over TWO keyed side x side
+// Polybius squares (each a permutation of the active n = side*side letter alphabet in
+// 0..n-1 indices: sq[p] is the letter at cell p, row p/side col p%side). For each
+// plaintext digraph (a, b): a is located in square 1, b in square 2, and the cipher pair
+// is the opposite corners of the rectangle they span. `variant` is the arrangement:
+//   TWO_SQ_HORIZONTAL (ACA): squares side by side -- out = (sq2[r1][c2], sq1[r2][c1]);
+//     a same-row digraph maps to the reversed pair (a "transparency").
+//   TWO_SQ_VERTICAL (Wikipedia): squares stacked -- out = (sq1[r1][c2], sq2[r2][c1]),
+//     which is self-inverse (decrypt == encrypt); a same-column digraph maps to itself.
+// No doubled-letter handling and no padding beyond an even length (an odd trailing letter
+// passes through). The solver needs only twosquare_decrypt(); encrypt + the shared
+// playfair_grid_from_keyword serve the generator and the unit tests.
+void twosquare_encrypt(const int plain[], int len, const int sq1[], const int sq2[],
+                       int side, int variant, int out[]);
+void twosquare_decrypt(const int cipher[], int len, const int sq1[], const int sq2[],
+                       int side, int variant, int out[]);
+
+
+// Four-Square cipher (foursquare.c). A digraphic substitution over a 2x2 layout of four
+// side x side squares: the upper-left and lower-right are the FIXED standard square (cell
+// p holds letter p), the upper-right (ur) and lower-left (ll) are the keyed unknowns (each
+// a permutation of 0..n-1). For each plaintext digraph (p1, p2): p1 sits at (r1,c1) of the
+// standard UL, p2 at (r2,c2) of the standard LR, and the cipher pair is (ur[r1][c2],
+// ll[r2][c1]); decryption is the inverse (find c1 in ur, c2 in ll, read the standard
+// corners). An odd trailing letter passes through. The solver needs only foursquare_decrypt();
+// encrypt + standard_square serve the generator and the unit tests.
+void foursquare_standard_square(int sq[], int n);
+void foursquare_encrypt(const int plain[], int len, const int ur[], const int ll[],
+                        int side, int out[]);
+void foursquare_decrypt(const int cipher[], int len, const int ur[], const int ll[],
+                        int side, int out[]);
 
 
 // Trifid cipher (trifid.c). The 3D generalization of Bifid: side-generic over a

@@ -1,5 +1,5 @@
 # Colossus — a Classical Cipher Solver
-A prototype slippery stochastic shotgun-restarted hill climber with backtracking for a wide range of classical ciphers. It attacks the **polyalphabetic** family — Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I, II, III, IV, and Autokey (including variants and the Beaufort/Porta autokey tableaus) — together with **monographic and polygraphic substitution** ciphers (homophonic substitution, Playfair, Bifid, Trifid, Hill, and Phillips) and a portfolio of **pure transposition** ciphers (matrix/route/columnar/rail-fence/AMSCO/Myszkowski/Redefence/Cadenus/Nihilist/Swagman/turning-grille), optionally composed with a transposition stage.
+A prototype slippery stochastic shotgun-restarted hill climber with backtracking for a wide range of classical ciphers. It attacks the **polyalphabetic** family — Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I, II, III, IV, and Autokey (including variants and the Beaufort/Porta autokey tableaus) — together with **monographic and polygraphic substitution** ciphers (homophonic substitution, Playfair, Bifid, Trifid, Hill, Phillips, Two-Square, and Four-Square) and a portfolio of **pure transposition** ciphers (matrix/route/columnar/rail-fence/AMSCO/Myszkowski/Redefence/Cadenus/Nihilist/Swagman/turning-grille), optionally composed with a transposition stage.
 
 Cipher conventions follow the [American Cryptogram Association](https://www.cryptogram.org/resource-area/cipher-types/). The solver exists to crack the Kryptos sculpture's K1–K4.
 
@@ -605,6 +605,28 @@ recovered 5x5 grid (row major):
 ```
 
 Because the only unknown is that base square, the attack is **identical to Playfair's** (cell-swap-dominated anneal + row/column swaps and reflections) — but *monographic* (no digraph prep) and with **no period to estimate** (block size 5 and the 8-square cycle are fixed). Carrying more signal per character than digraphic Playfair, it recovers reliably from only **~200 characters**. Three variants choose how the 8 squares are built, all sharing the solver: `phillips` (the ACA-standard **Row** type), `phillips-c` (**Column**), and `phillips-rc` (**Row-Column**). Like the other square types it effectively needs `-logprob`. Test ciphers can be minted with the standalone generator (`make phillips_gen`, then `./tools/phillips_gen plaintext.txt KEYWORD row > cipher.txt 2> solution.txt`; the variant arg is `row`/`col`/`rowcol`).
+
+## Two-Square and Four-Square
+
+The **Two-Square** and **Four-Square** ciphers are digraphic substitutions over **two keyed 5×5 squares** (50 unknown cells — double Playfair's). Plaintext is split into digraphs; each digraph's two letters define a rectangle across the squares, and the cipher pair is the rectangle's other two corners. Both run on the 25-letter (J→I) grid and pad an odd-length plaintext with a single `X` (there is no doubled-letter handling).
+
+- **Two-Square** (`twosquare`/`ts`, vertical variant `twosquare-v`/`tsv`): both squares are keyed and unknown. The **horizontal** arrangement (the ACA standard, squares side by side) reverses same-row digraphs; the **vertical** arrangement (squares stacked) leaves same-column digraphs unchanged and is **self-inverse**. About 20% of digraphs are such "transparencies" — a weakness that leaks plaintext and makes the cipher recover from short text.
+- **Four-Square** (`foursquare`/`fs`): the upper-left and lower-right squares are the **fixed standard alphabet**; only the upper-right and lower-left squares are keyed. Its two independent keyed squares make it the hardest of the family.
+
+```bash
+$ ./colossus -type foursquare -cipher cipher.txt -ngramsize 4 -ngramfile english_quadgrams.txt -logprob -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
+```
+
+```
+Result Score: -4.31 | Words: 0 | UR=KRYPTOSABCDEFGHILMNQUVWXZ | LL=PALIMSESTBCDFGHKNOQRUVWXYZ
+...
+recovered upper-right square (row major):
+    K R Y P T
+    O S A B C
+    ...
+```
+
+The attack is the same **simulated-annealing square break as Playfair** (cell-swap-dominated moves + row/column swaps and reflections, no anti-collapse penalty — every square is a bijection), but each move perturbs **one of the two squares** and the larger 50-cell state needs more text and a bigger budget. Like the other square types it effectively needs `-logprob`; recovery is reliable from a few hundred characters (Two-Square's transparencies make it recover sooner; Four-Square needs the most). Test ciphers can be minted with the standalone generators (`make twosquare_gen foursquare_gen`, then e.g. `./tools/twosquare_gen plaintext.txt KEY1 KEY2 h > cipher.txt 2> solution.txt` — the 4th arg is `h`/`v` for horizontal/vertical — or `./tools/foursquare_gen plaintext.txt URKEY LLKEY > cipher.txt 2> solution.txt`).
 
 ## Transposition ciphers
 

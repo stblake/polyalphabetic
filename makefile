@@ -19,10 +19,10 @@ GRAPH=$(SRC)/polygraphic
 SUBST=$(SRC)/substitution
 
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=$(CORE)/utils.c $(CORE)/parse.c $(CORE)/dict.c $(TRANS)/transpositions.c $(CORE)/perioc.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/gronsfeld.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c $(CORE)/optimal_cycleword.c $(GRAPH)/playfair.c $(GRAPH)/bifid.c $(GRAPH)/trifid.c $(GRAPH)/hill.c $(GRAPH)/phillips.c
+PRIMITIVES=$(CORE)/utils.c $(CORE)/parse.c $(CORE)/dict.c $(TRANS)/transpositions.c $(CORE)/perioc.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/gronsfeld.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c $(CORE)/optimal_cycleword.c $(GRAPH)/playfair.c $(GRAPH)/bifid.c $(GRAPH)/trifid.c $(GRAPH)/hill.c $(GRAPH)/phillips.c $(GRAPH)/twosquare.c $(GRAPH)/foursquare.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
-SOLVERS=$(CORE)/engine.c $(CORE)/scoring.c $(TRANS)/trans_common.c $(POLY)/polyalpha_solver.c $(TRANS)/transmatrix_solver.c $(TRANS)/permutation_solver.c $(TRANS)/columnar_solver.c $(TRANS)/railfence_solver.c $(TRANS)/route_solver.c $(TRANS)/amsco_solver.c $(TRANS)/myszkowski_solver.c $(TRANS)/redefence_solver.c $(TRANS)/cadenus_solver.c $(TRANS)/nihilist_solver.c $(TRANS)/swagman_solver.c $(TRANS)/grille_solver.c $(SUBST)/indep_solver.c $(SUBST)/homophonic_solver.c $(GRAPH)/playfair_solver.c $(GRAPH)/bifid_solver.c $(GRAPH)/trifid_solver.c $(GRAPH)/hill_solver.c $(GRAPH)/phillips_solver.c
+SOLVERS=$(CORE)/engine.c $(CORE)/scoring.c $(TRANS)/trans_common.c $(POLY)/polyalpha_solver.c $(TRANS)/transmatrix_solver.c $(TRANS)/permutation_solver.c $(TRANS)/columnar_solver.c $(TRANS)/railfence_solver.c $(TRANS)/route_solver.c $(TRANS)/amsco_solver.c $(TRANS)/myszkowski_solver.c $(TRANS)/redefence_solver.c $(TRANS)/cadenus_solver.c $(TRANS)/nihilist_solver.c $(TRANS)/swagman_solver.c $(TRANS)/grille_solver.c $(SUBST)/indep_solver.c $(SUBST)/homophonic_solver.c $(GRAPH)/playfair_solver.c $(GRAPH)/bifid_solver.c $(GRAPH)/trifid_solver.c $(GRAPH)/hill_solver.c $(GRAPH)/phillips_solver.c $(GRAPH)/twosquare_solver.c $(GRAPH)/foursquare_solver.c
 
 # The full solver translation-unit set (everything but the test harnesses).
 SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) $(CORE)/colossus.c
@@ -56,6 +56,10 @@ test:
 	./tests/test_hill
 	$(CC) $(INCLUDES) tests/test_phillips.c $(CORE)/utils.c $(GRAPH)/phillips.c -o tests/test_phillips
 	./tests/test_phillips
+	$(CC) $(INCLUDES) tests/test_twosquare.c $(CORE)/utils.c $(GRAPH)/twosquare.c $(GRAPH)/playfair.c -o tests/test_twosquare
+	./tests/test_twosquare
+	$(CC) $(INCLUDES) tests/test_foursquare.c $(CORE)/utils.c $(GRAPH)/foursquare.c -o tests/test_foursquare
+	./tests/test_foursquare
 
 # Slow optimizer regression suite (~30s): planted-cipher recovery through the
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
@@ -75,6 +79,10 @@ testopt:
 	./tests/test_hill_solver
 	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_phillips_solver.c $(SOLVER_SRC) -o tests/test_phillips_solver
 	./tests/test_phillips_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_twosquare_solver.c $(SOLVER_SRC) -o tests/test_twosquare_solver
+	./tests/test_twosquare_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_foursquare_solver.c $(SOLVER_SRC) -o tests/test_foursquare_solver
+	./tests/test_foursquare_solver
 
 # Everything.
 testall: test testopt
@@ -115,5 +123,14 @@ gronsfeld_gen:
 phillips_gen:
 	$(CC) $(INCLUDES) tools/phillips_gen.c $(GRAPH)/phillips.c $(CORE)/utils.c -o tools/phillips_gen
 
+# Standalone test-data generators for Two-Square / Four-Square ciphers. Reuse the real
+# cipher code (twosquare.c / foursquare.c + playfair.c keyword build + utils.c) so the
+# generators and the solver can never drift in convention.
+twosquare_gen:
+	$(CC) $(INCLUDES) tools/twosquare_gen.c $(GRAPH)/twosquare.c $(GRAPH)/playfair.c $(CORE)/utils.c -o tools/twosquare_gen
+
+foursquare_gen:
+	$(CC) $(INCLUDES) tools/foursquare_gen.c $(GRAPH)/foursquare.c $(GRAPH)/playfair.c $(CORE)/utils.c -o tools/foursquare_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tests/test_twosquare tests/test_twosquare_solver tests/test_foursquare tests/test_foursquare_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen tools/twosquare_gen tools/foursquare_gen

@@ -387,6 +387,30 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 20, .s_n_hill_climbs = 250000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Two-Square / Four-Square: the same digraphic square-anneal as Playfair, but the state
+    // is a PAIR of 5x5 squares (50 cells, double Playfair's 25), so the landscape is larger
+    // and rougher and the budget is bigger (more restarts and longer climbs). One config
+    // (no period to estimate). Same small-scale temperature (mean log-probability) and
+    // backtracking. Both two-square arrangements share the profile; Four-Square's two
+    // independent keyed squares make it the hardest of the three, so it gets the most.
+    { .cipher_type = TWO_SQUARE, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 600000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 500000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = TWO_SQUARE_V, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 600000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 500000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = FOUR_SQUARE, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 12, .a_n_hill_climbs = 700000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 40, .s_n_hill_climbs = 600000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

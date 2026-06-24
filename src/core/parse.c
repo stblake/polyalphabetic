@@ -131,6 +131,18 @@ int parse_cipher_type(const char *arg) {
         str_eq(arg, "phillipsrowcolumn")) return PHILLIPS_RC;
     if (str_eq(arg, "phillips") || str_eq(arg, "phil")) return PHILLIPS;
 
+    // Two-Square (two keyed 5x5 squares). Test the vertical variant before the bare
+    // "twosquare"/"ts" so the longer aliases win; the bare name is the ACA horizontal type.
+    if (str_eq(arg, "twosquare-v") || str_eq(arg, "twosquarev") || str_eq(arg, "two-square-v") ||
+        str_eq(arg, "2square-v") || str_eq(arg, "2sq-v") || str_eq(arg, "tsv") ||
+        str_eq(arg, "twosquarevertical")) return TWO_SQUARE_V;
+    if (str_eq(arg, "twosquare") || str_eq(arg, "two-square") || str_eq(arg, "2square") ||
+        str_eq(arg, "2sq") || str_eq(arg, "ts")) return TWO_SQUARE;
+
+    // Four-Square (two keyed ciphertext squares + two standard plaintext squares)
+    if (str_eq(arg, "foursquare") || str_eq(arg, "four-square") || str_eq(arg, "4square") ||
+        str_eq(arg, "4sq") || str_eq(arg, "fs")) return FOUR_SQUARE;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }
