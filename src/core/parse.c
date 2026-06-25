@@ -154,6 +154,10 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "foursquare") || str_eq(arg, "four-square") || str_eq(arg, "4square") ||
         str_eq(arg, "4sq") || str_eq(arg, "fs")) return FOUR_SQUARE;
 
+    // ADFGVX / ADFGX (keyed-square fractionation + keyed columnar transposition)
+    if (str_eq(arg, "adfgvx") || str_eq(arg, "adfg")) return ADFGVX;
+    if (str_eq(arg, "adfgx")) return ADFGX;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

@@ -224,6 +224,7 @@
 #include "foursquare_solver.h"
 #include "trifid_solver.h"
 #include "hill_solver.h"
+#include "adfgvx_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -717,6 +718,10 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Two-Square cipher (digraphic substitution over two keyed 5x5 squares).\n\n");
     } else if (cfg.cipher_type == FOUR_SQUARE) {
         printf("\nAttacking a Four-Square cipher (digraphic substitution over four 5x5 squares).\n\n");
+    } else if (cfg.cipher_type == ADFGX) {
+        printf("\nAttacking an ADFGX cipher (5x5 keyed-square fractionation + keyed columnar transposition).\n\n");
+    } else if (cfg.cipher_type == ADFGVX) {
+        printf("\nAttacking an ADFGVX cipher (6x6 keyed-square fractionation + keyed columnar transposition).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -800,6 +805,21 @@ int main(int argc, char **argv) {
         init_alphabet_trifid();
         printf("-type trifid: alphabet forced to %d symbols (A..Z + '%c'): %s\n",
             g_alpha, TRIFID_EXTRA_CHAR, g_idx_to_char_arr);
+    }
+
+    // ADFGX runs on the same 5x5 (25-letter, J->I) square as Playfair/Bifid; ADFGVX on a
+    // 6x6 (36-symbol, A..Z + 0..9) square. Force the alphabet here -- before load_ngrams,
+    // so the n-gram table is built over the same symbols and the ciphertext labels decode
+    // -- unless the user already shrank/changed it.
+    if (cfg.cipher_type == ADFGX && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type adfgx: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+    if (cfg.cipher_type == ADFGVX && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet_adfgvx();
+        printf("-type adfgvx: alphabet forced to %d symbols (A..Z + 0..9): %s\n",
+            g_alpha, g_idx_to_char_arr);
     }
 
     // --- Resource Loading ---
@@ -1090,6 +1110,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == FOUR_SQUARE) {
         solve_foursquare(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == ADFGX || cfg->cipher_type == ADFGVX) {
+        solve_adfgvx(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

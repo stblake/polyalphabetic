@@ -70,6 +70,8 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
   phillips.c phillips_solver.c/.h   # Phillips: derive 8 squares from a base / encrypt / decrypt (side-generic, 3 variants)
   twosquare.c twosquare_solver.c/.h # Two-Square: two keyed squares, rectangle rule; horizontal (ACA) + vertical (self-inverse), one solver
   foursquare.c foursquare_solver.c/.h # Four-Square: 2 keyed + 2 fixed-standard squares / encrypt / decrypt (side-generic)
+  adfgvx.c   adfgvx_solver.c/.h     # ADFGVX/ADFGX: keyed-square fractionation (reuses bifid square build/inverse) +
+                                     #   keyed columnar (reuses decrypt_columnar); coordinate-space, side-generic 5x5/6x6
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -154,7 +156,12 @@ asserted directly — horizontal same-row → reversed pair, vertical same-colum
 `tests/test_foursquare.c` (the Four-Square primitives: the Wikipedia worked-example known-answer
 vector — keyed squares EXAMPLE/KEYWORD over the fixed standard squares, `HELP…` → `FYGMKY…` —
 encrypt/decrypt round-trips over random keyed squares × random lengths and a side-generic 6x6,
-and a degenerate identity-square check pinning the exact coordinate algebra).
+and a degenerate identity-square check pinning the exact coordinate algebra), and
+`tests/test_adfgvx.c` (the ADFGVX/ADFGX primitives: a HAND-COMPUTED known-answer vector pinning
+the whole convention end to end — identity 5x5 square, `ATTACK` + keyword `KEY` → `AGADAGAFGGAX`
+— the label tables, the K=1 (identity-columnar) edge case, and encrypt/decrypt round-trips over
+random squares × random column counts × random lengths incl. ragged grids and both read
+directions, for both the 5x5 (ADFGX) and the side-generic 6x6 (ADFGVX, 36 cells) squares).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -178,17 +185,22 @@ extra-thorough additions: a transparency-rate measurement (~20% same-row digraph
 multi-keyword sweep reporting mean/worst recovery), and
 `tests/test_foursquare_solver.c` (Four-Square: registry validation, a ~900-char capability
 floor with a PER-SQUARE recovery breakdown — even positions decrypt through the upper-right
-square, odd through the lower-left — a length cliff, and a multi-keyword sweep).
+square, odd through the lower-left — a length cliff, and a multi-keyword sweep), and
+`tests/test_adfgvx_solver.c` (ADFGX/ADFGVX: registry validation for both types plus a
+non-registry type left untouched; an ADFGX capability floor with the column count K pinned;
+a BLIND K-selection test — K swept, the solver must report the true K, exercising the IoC
+decoupling term; an ADFGX length cliff; an ADFGX multi-keyword sweep (mean/worst); and an
+ADFGVX 6x6/36-symbol capability floor over the digit-bearing alphabet).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-42 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+43 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
-variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical) and a
-Four-Square cipher) that each
+variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
+Four-Square cipher, and an ADFGX cipher (`adfgx_decl`, K pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -199,9 +211,9 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 21-case fast tier in ~50s (use while iterating),
-`--slow` the 20 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
-three ~13s Phillips solves, the two ~10s Two-Square solves and the ~17s Four-Square),
-no flag runs both.
+`--slow` the 21 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square and the
+~10s ADFGX), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -226,7 +238,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34`,
 `phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37`,
 `twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40`,
-`transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`
+`transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`,
+`adfgx`/`44`, `adfgvx`/`adfg`/`45`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -494,6 +507,39 @@ decrypt through UR, odd through LL). The primitives are **side-generic** (`side`
 Generate test ciphers with `tools/twosquare_gen.c` / `tools/foursquare_gen.c`
 (`make twosquare_gen foursquare_gen`; the Two-Square variant arg is `h`/`v`).
 
+The **ADFGVX** (`adfgvx`/`adfg`/`45`) and **ADFGX** (`adfgx`/`44`) types (`solve_adfgvx()`,
+`ADFGVX_MODEL`, `SHAPE_ANNEAL`) are the classic WWI cipher: a **keyed Polybius-square
+fractionation composed with a keyed columnar transposition** — the first
+*fractionation-then-transposition* type, and the hardest of the polygraphic family because
+the square and the column order must be recovered **jointly**. Each plaintext symbol becomes
+its two cell coordinates, each a label from `{A,D,F,G,X}` (ADFGX, 5x5, 25 letters J→I) or
+`{A,D,F,G,V,X}` (ADFGVX, 6x6, **36 symbols** A..Z + 0..9), so the ciphertext is **2N labels**
+for an N-symbol plaintext; that 2N coordinate stream is then columnar-transposed under a
+keyword of length K. ADFGX runs on the same 25-letter J→I alphabet as Playfair/Bifid;
+ADFGVX forces a **36-symbol alphabet** (`init_alphabet_adfgvx()`, A..Z + digits, with the
+digits at negligible monogram weight like the Trifid `+`), which is why `MAX_ALPHABET_SIZE`
+is **36** (the largest runtime alphabet, sizing only the runtime alphabet maps + the IoC
+scratch; the n-gram table is then base-36 — quadgrams 36⁴≈6.7M floats are fine, but **avoid
+quintgrams** at base 36, ~240MB). The primitive (`adfgvx.c`) works in **coordinate space**
+(the solver maps the label characters to coordinates 0..side-1 up front) and is **side-generic**,
+reusing `bifid_grid_from_keyword`/`bifid_build_inverse` for the square and the exposed
+`decrypt_columnar` for the transposition stage — so it adds almost no new cipher math.
+The state carries the square (`key[0..n-1]`, a permutation) **and** the column order
+(`key[n..n+K-1]`); one engine config is enumerated per column count K in `-mincols..-maxcols`,
+the square move set is Bifid's, the column-order move set the columnar solver's, and a move
+perturbs one or the other. **The key to making the coupled search tractable** is a
+**structural IoC reward folded into `score_adjust`**: after undoing the *correct* columnar
+the paired cell ids are a monoalphabetic image of the plaintext, so the decrypt's Index of
+Coincidence is English (~0.066) — and that IoC depends ONLY on the column order, not the
+square (a square just relabels cells). The reward therefore gives the column-order search a
+gradient independent of the square, decoupling the two halves (the climb locks the column
+order by IoC, then the n-gram score recovers the square). Like the other near-the-limit
+square types it effectively needs `-logprob`; ADFGX recovers reliably from ~200+ characters,
+ADFGVX (the 36-cell square) needs more text and a bigger budget. Cribs are not used (the crib
+positions are over the ciphertext, which is 2x the plaintext). Generate test ciphers with
+`tools/adfgvx_gen.c` (`make adfgvx_gen`; args are a square keyword, a transposition keyword,
+and `adfgx`/`adfgvx`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -512,8 +558,11 @@ since the small matrix climbs converge fast), Phillips and its two variants
 than Playfair since monographic Phillips recovers from shorter text), Two-Square and its
 vertical variant (`SHAPE_ANNEAL`, `8x600000`, `inittemp 0.08`, `backtrack 0.30`) and
 Four-Square (`SHAPE_ANNEAL`, `12x700000` — the biggest budget, for its two independent
-keyed squares) have tuned entries (the two/four-square budgets are larger than Playfair's
-for the 50-cell two-square state).
+keyed squares), ADFGX (`SHAPE_ANNEAL`, `12x600000` per swept column count K) and ADFGVX
+(`SHAPE_ANNEAL`, `16x800000` per K — more, for the 36-cell square; both anneal at
+`inittemp 0.08`, `backtrack 0.30`) have tuned entries (the two/four-square budgets are
+larger than Playfair's for the 50-cell two-square state; the ADFGVX budgets are the largest,
+for the coupled square+columnar search).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

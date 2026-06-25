@@ -60,8 +60,13 @@
 #define TRANSCOL_L     41   // columnar with a within-column row permutation L (exact seam best-L)
 #define TRANSROUTECOL  42   // two-stage chain: fixed read-route global + searched column key (seam best-L)
 #define TRANSTILE      43   // sub-grid / tile (h x w) transposition: uniform tile cell permutation
+#define ADFGX          44   // ADFGX: 5x5 keyed-square fractionation + keyed columnar transposition
+#define ADFGVX         45   // ADFGVX: 6x6 (36-symbol) keyed-square fractionation + keyed columnar
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
+
+#define ADFGX_SIDE  5           // ADFGX Polybius square side (5x5, 25 letters, J->I)
+#define ADFGVX_SIDE 6           // ADFGVX Polybius square side (6x6, 36 symbols A..Z + 0..9)
 
 #define HILL_MAX_K   5          // largest Hill block size (matrix dimension) supported
 #define HILL_MAX_KEY (HILL_MAX_K * HILL_MAX_K)  // largest k*k matrix (=25), fits the key lane
@@ -98,8 +103,9 @@ enum { PHILLIPS_ROW, PHILLIPS_COL, PHILLIPS_ROWCOL };
                                 // primitives ((x + ALPHABET_SIZE) % ALPHABET_SIZE), so it
                                 // must stay 26 -- do not repurpose it as a max-alphabet.
 #define DEFAULT_ALPHABET_SIZE 26 // the standard full A..Z alphabet size (init_alphabet(NULL))
-#define MAX_ALPHABET_SIZE 27    // largest RUNTIME alphabet g_alpha can take: the Trifid
-                                // 27-symbol cube (A..Z + '+'). Sizes only the runtime
+#define MAX_ALPHABET_SIZE 36    // largest RUNTIME alphabet g_alpha can take: the ADFGVX
+                                // 6x6 square (A..Z + 0..9, 36 symbols); the Trifid 27-symbol
+                                // cube (A..Z + '+') also fits. Sizes only the runtime
                                 // alphabet maps (g_idx_to_char_arr, g_monograms) and the
                                 // ciphertext-facing IoC scratch -- everything that may be
                                 // indexed by a live symbol id in [0, g_alpha). All other
@@ -625,6 +631,24 @@ void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int 
 void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
 
 
+// ADFGVX / ADFGX cipher (adfgvx.c). Fractionation over a keyed side x side Polybius
+// square (built/inverted with the shared bifid helpers) composed with a keyed columnar
+// transposition. Works in COORDINATE space: a length-2N ciphertext stream of
+// coordinates 0..side-1 (the solver maps the label characters A/D/F/G/(V/)X to
+// coordinates up front). adfgvx_encrypt maps N plaintext symbols (0..side*side-1) to a
+// 2N coordinate stream; adfgvx_decrypt inverts (undo columnar via decrypt_columnar,
+// then pair consecutive coordinates and look up the square). `order[0..K-1]` is the
+// columnar read order, `dir` the column read direction (COL_READ_TB / COL_READ_BT).
+// adfgvx_labels(side) returns the label string ("ADFGX" for side 5, "ADFGVX" for 6).
+extern const char ADFGX_LABELS[];
+extern const char ADFGVX_LABELS[];
+const char *adfgvx_labels(int side);
+void adfgvx_encrypt(const int plain[], int n, const int square[], int side, int K,
+                    const int order[], int dir, int out[]);
+void adfgvx_decrypt(const int cipher[], int len2, const int square[], int side, int K,
+                    const int order[], int dir, int out[]);
+
+
 // Phillips cipher (phillips.c). A periodic monographic substitution over `nsq = 2*side-2`
 // keyed Polybius squares derived from one base square (a permutation of the active
 // n = side*side letter alphabet, carried in 0..n-1 indices: base[p] is the letter at cell
@@ -797,6 +821,12 @@ void init_alphabet(const char *excluded);          // (re)build the maps; NULL =
 // non-letter in g_char_to_idx (so '+' decodes from the ciphertext) and gives it a
 // negligible English monogram weight (the cube attack uses no monogram penalty).
 void init_alphabet_trifid(void);
+// Build the 36-symbol ADFGVX alphabet: A..Z (0..25) plus the digits 0..9 (26..35), so a
+// 6x6 Polybius square has exactly 36 cells. Like init_alphabet_trifid this registers the
+// non-letter digits in g_char_to_idx (so a digit-bearing plaintext decodes) and gives
+// them a negligible English monogram weight (the square attack uses no monogram penalty,
+// and the A..Z n-gram table never indexes a digit). ADFGX uses init_alphabet("J") (25).
+void init_alphabet_adfgvx(void);
 
 static inline int index_to_char(int idx) {
     return (idx >= 0) ? (unsigned char) g_idx_to_char_arr[idx] : (-(idx + 1));

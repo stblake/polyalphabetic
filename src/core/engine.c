@@ -411,6 +411,25 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 40, .s_n_hill_climbs = 600000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // ADFGX / ADFGVX: a COUPLED search -- a keyed Polybius square AND a keyed columnar
+    // column order, jointly annealed (per swept column count K). The square anneal is
+    // Bifid's; the column-order moves ride a structural IoC reward (independent of the
+    // square) folded into score_adjust, which decouples the two halves. The landscape is
+    // the hardest of the polygraphic family, so the budget is the largest. ADFGVX's
+    // 36-cell square (vs ADFGX's 25) gets more. Same small-scale temperature (mean
+    // log-probability) and backtracking as the other square types.
+    { .cipher_type = ADFGX, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 12, .a_n_hill_climbs = 600000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 40, .s_n_hill_climbs = 500000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = ADFGVX, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 16, .a_n_hill_climbs = 800000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 50, .s_n_hill_climbs = 700000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

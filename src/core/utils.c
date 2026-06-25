@@ -57,6 +57,24 @@ void init_alphabet_trifid(void) {
     g_alpha = pos + 1;                                    // 27
 }
 
+// ADFGVX 36-symbol alphabet: the full A..Z (0..25) plus the digits '0'..'9' at indices
+// 26..35, so the 6x6 Polybius square has exactly 36 cells. The digits are registered in
+// g_char_to_idx (so a digit in the plaintext decodes, unlike a sentinel) and given a
+// negligible monogram weight -- the square attack is a bijection and uses no monogram
+// penalty, and a digit never occurs in the A..Z n-gram table the score consults.
+void init_alphabet_adfgvx(void) {
+    init_alphabet(NULL);                                  // A..Z -> 0..25, g_alpha = 26
+    int pos = g_alpha;                                    // == DEFAULT_ALPHABET_SIZE (26)
+    for (char d = '0'; d <= '9'; d++) {
+        g_idx_to_char_arr[pos] = d;
+        g_char_to_idx[(unsigned char) d] = pos;
+        g_monograms[pos] = 1e-6;                          // negligible (unused by ADFGVX)
+        pos++;
+    }
+    g_idx_to_char_arr[pos] = '\0';
+    g_alpha = pos;                                        // 36
+}
+
 int gcd(int a, int b) {
     while (b) { a %= b; int t = a; a = b; b = t; }
     return a;
