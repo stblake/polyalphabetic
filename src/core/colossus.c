@@ -203,6 +203,9 @@
 #include "transmatrix_solver.h"
 #include "permutation_solver.h"
 #include "columnar_solver.h"
+#include "columnar_track_solver.h"
+#include "route_chain_solver.h"
+#include "tile_solver.h"
 #include "railfence_solver.h"
 #include "route_solver.h"
 #include "amsco_solver.h"
@@ -291,6 +294,10 @@ void init_config(ColossusConfig *cfg) {
     cfg->min_cols = 2;
     cfg->max_cols = 30;
     cfg->read_direction = COL_READ_TB; // canonical only; bottom-to-top is opt-in
+    cfg->read_row_direction = ROW_READ_LR; // canonical only; right-to-left is opt-in (transcol-L/chain)
+    cfg->crib_anchored = false;        // -cribanchored: structural crib constraint, off by default
+    cfg->weight_word = 0.0;            // dictionary word-fraction reward off => bit-identical scoring
+    cfg->tile_h = 2; cfg->tile_w = 2;  // default sub-grid tile shape for TRANSTILE
 
     cfg->delimiter = 0;                 // 0 => per-character / 0..25 letter decode (ord())
     cfg->delimiter_present = false;
@@ -577,6 +584,35 @@ int main(int argc, char **argv) {
                 return 0;
             }
             printf("-readdir %s\n", dir_arg);
+        } else if (strcmp(argv[i], "-readrowdir") == 0) {
+            // Row read direction for transcol-L / transroutecol (default lr).
+            char *dir_arg = argv[++i];
+            if (strcasecmp(dir_arg, "lr") == 0 || strcasecmp(dir_arg, "leftright") == 0 || strcmp(dir_arg, "0") == 0) {
+                cfg.read_row_direction = ROW_READ_LR;
+            } else if (strcasecmp(dir_arg, "rl") == 0 || strcasecmp(dir_arg, "rightleft") == 0 || strcmp(dir_arg, "1") == 0) {
+                cfg.read_row_direction = ROW_READ_RL;
+            } else if (strcasecmp(dir_arg, "both") == 0 || strcmp(dir_arg, "2") == 0) {
+                cfg.read_row_direction = ROW_READ_BOTH;
+            } else {
+                printf("\n\nERROR: Invalid direction '%s' for -readrowdir. Use 'lr', 'rl' or 'both'.\n\n", dir_arg);
+                return 0;
+            }
+            printf("-readrowdir %s\n", dir_arg);
+        } else if (strcmp(argv[i], "-cribanchored") == 0) {
+            // Use the crib as a STRUCTURAL constraint on the transposition column
+            // order (transcol / transcol-L), not just a score term (see Rec 3).
+            cfg.crib_anchored = true;
+            printf("-cribanchored\n");
+        } else if (strcmp(argv[i], "-weightword") == 0) {
+            // Optional dictionary word-fraction reward for the space-preserving
+            // transposition solvers (default 0 => scoring is bit-identical).
+            cfg.weight_word = atof(argv[++i]);
+            printf("-weightword %.4f\n", cfg.weight_word);
+        } else if (strcmp(argv[i], "-tile") == 0) {
+            // Sub-grid tile shape h x w for TRANSTILE (e.g. -tile 2 2).
+            cfg.tile_h = atoi(argv[++i]);
+            cfg.tile_w = atoi(argv[++i]);
+            printf("-tile %dx%d\n", cfg.tile_h, cfg.tile_w);
         } else if (strcmp(argv[i], "-period") == 0) {
             // Bifid/Trifid: pin the fractionation period (block size) vs estimating it.
             cfg.period_present = true;
@@ -638,6 +674,12 @@ int main(int argc, char **argv) {
         printf("\nAttacking a columnar transposition cipher (column-order hill climber).\n\n");
     } else if (cfg.cipher_type == TRANSCOL2) {
         printf("\nAttacking a double columnar transposition cipher (column-order hill climber).\n\n");
+    } else if (cfg.cipher_type == TRANSCOL_L) {
+        printf("\nAttacking a columnar transposition with a within-column track permutation (exact seam best-L).\n\n");
+    } else if (cfg.cipher_type == TRANSROUTECOL) {
+        printf("\nAttacking a route + column-key two-stage transposition chain (seam best-L reading).\n\n");
+    } else if (cfg.cipher_type == TRANSTILE) {
+        printf("\nAttacking a sub-grid / tile transposition (uniform h x w tile cell permutation).\n\n");
     } else if (cfg.cipher_type == RAILFENCE) {
         printf("\nAttacking a rail fence transposition cipher (rail-count + phase enumeration).\n\n");
     } else if (cfg.cipher_type == ROUTE) {
@@ -836,9 +878,18 @@ int main(int argc, char **argv) {
         }
         single_ciphertext_buffer[ci] = '\0';
         // Trim trailing whitespace so a stray space at the end of the line does not
-        // become an extra cipher position.
-        while (ci > 0 && isspace((unsigned char) single_ciphertext_buffer[ci - 1]))
-            single_ciphertext_buffer[--ci] = '\0';
+        // become an extra cipher position. EXCEPTION: the pure-transposition types
+        // carry spaces/periods as genuine grid cells, so a trailing space is a real
+        // position (e.g. the last column of a columnar grid may end in a space). For
+        // those, trimming would shorten the grid and misalign a full-length crib, so
+        // it is skipped. (All existing transposition test ciphers are trailing-space
+        // free, so this is bit-identical for them.)
+        int t = cfg.cipher_type;
+        bool space_significant = (t >= TRANSMATRIX && t <= GRILLE) ||
+                                 (t >= TRANSCOL_L && t <= TRANSTILE);
+        if (!space_significant)
+            while (ci > 0 && isspace((unsigned char) single_ciphertext_buffer[ci - 1]))
+                single_ciphertext_buffer[--ci] = '\0';
         fclose(fp_cipher);
 
         if (cfg.verbose) printf("ciphertext = \n\'%s\'\n\n", single_ciphertext_buffer);
@@ -927,6 +978,21 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     }
     if (cfg->cipher_type == TRANSCOL || cfg->cipher_type == TRANSCOL2) {
         solve_columnar(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == TRANSCOL_L) {
+        solve_columnar_track(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == TRANSROUTECOL) {
+        solve_route_chain(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
+        return ;
+    }
+    if (cfg->cipher_type == TRANSTILE) {
+        solve_tile(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs);
         return ;
     }

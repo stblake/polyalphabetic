@@ -1,4 +1,5 @@
 #include "trans_common.h"
+#include "scoring.h"
 
 // =====================================================================
 //  Shared reporting for the dedicated transposition solvers
@@ -153,6 +154,112 @@ int exact_isqrt(int x) {
     for (int d = -1; d <= 1; d++)
         if ((n + d) >= 0 && (n + d) * (n + d) == x) return n + d;
     return -1;
+}
+
+
+// =====================================================================
+//  Held-Karp exact maximum-weight Hamiltonian path (see trans_common.h)
+// =====================================================================
+//
+// Standard subset-DP: dp[mask][i] is the best score of a path visiting exactly the
+// nodes in `mask` and ending at node i; the answer is max_i dp[full][i], with the
+// order recovered by parent pointers. Single-threaded program => the DP tables are
+// file-static scratch (not stack), sized to the 2^R cap. O(R^2 * 2^R).
+#define HK_NEG (-1e300)
+static double hk_dp[1 << HELD_KARP_MAX_NODES][HELD_KARP_MAX_NODES];
+static int    hk_par[1 << HELD_KARP_MAX_NODES][HELD_KARP_MAX_NODES];
+
+double held_karp_best_path(int R, const double *indiv, const double *delta, int *order_out) {
+    if (R < 1) return 0.0;
+    if (R == 1) { order_out[0] = 0; return indiv[0]; }
+    if (R > HELD_KARP_MAX_NODES) {       // too large: identity order, identity-path score
+        double s = indiv[0];
+        order_out[0] = 0;
+        for (int i = 1; i < R; i++) { order_out[i] = i; s += indiv[i] + delta[(i - 1) * R + i]; }
+        return s;
+    }
+
+    int size = 1 << R;
+    for (int mask = 0; mask < size; mask++)
+        for (int i = 0; i < R; i++) { hk_dp[mask][i] = HK_NEG; hk_par[mask][i] = -1; }
+    for (int i = 0; i < R; i++) hk_dp[1 << i][i] = indiv[i];
+
+    for (int mask = 0; mask < size; mask++) {
+        for (int i = 0; i < R; i++) {
+            double base = hk_dp[mask][i];
+            if (base == HK_NEG || !((mask >> i) & 1)) continue;
+            const double *di = &delta[i * R];
+            for (int j = 0; j < R; j++) {
+                if ((mask >> j) & 1) continue;
+                int nm = mask | (1 << j);
+                double v = base + di[j] + indiv[j];
+                if (v > hk_dp[nm][j]) { hk_dp[nm][j] = v; hk_par[nm][j] = i; }
+            }
+        }
+    }
+
+    int full = size - 1, bi = 0;
+    double best = HK_NEG;
+    for (int i = 0; i < R; i++)
+        if (hk_dp[full][i] > best) { best = hk_dp[full][i]; bi = i; }
+
+    // Walk parents back, then reverse into order_out.
+    int tmp[HELD_KARP_MAX_NODES], n = 0, mask = full, i = bi;
+    while (i != -1) { tmp[n++] = i; int pi = hk_par[mask][i]; mask ^= (1 << i); i = pi; }
+    for (int k = 0; k < n; k++) order_out[k] = tmp[n - 1 - k];
+    return best;
+}
+
+// Cached word-set keyed on the loaded dictionary pointer (single-threaded program).
+static WordSet *g_trans_ws = NULL;
+static char   **g_trans_ws_dict = NULL;
+WordSet *trans_word_set(SharedData *shared) {
+    if (!shared || shared->dict == NULL || shared->n_dict_words <= 0) return NULL;
+    if (g_trans_ws && g_trans_ws_dict == shared->dict) return g_trans_ws;
+    if (g_trans_ws) word_set_free(g_trans_ws);
+    g_trans_ws = word_set_build(shared->dict, shared->n_dict_words);
+    g_trans_ws_dict = shared->dict;
+    return g_trans_ws;
+}
+
+// Per-row additive objective: raw within-word n-gram sum + optional dictionary
+// word-coverage reward (both additive across a join, so the seam stays exact).
+static double row_objective(const int *t, int len, const float *ngram_data, int ngram_size,
+                            const WordSet *ws, double wword) {
+    double s = ngram_sum_raw(t, len, ngram_data, ngram_size);
+    if (ws && wword != 0.0) s += wword * word_coverage(t, len, ws);
+    return s;
+}
+
+double seam_best_row_order(int R, int *const rows[], const int rowlen[],
+    const float *ngram_data, int ngram_size, const WordSet *ws, double wword,
+    double *indiv_buf, double *delta_buf, int *order_out) {
+
+    if (R < 1) return 0.0;
+    if (R > HELD_KARP_MAX_NODES) {        // best-L not attempted above the cap
+        for (int i = 0; i < R; i++) order_out[i] = i;
+        double s = 0.0;
+        for (int i = 0; i < R; i++) s += row_objective(rows[i], rowlen[i], ngram_data, ngram_size, ws, wword);
+        return s;
+    }
+
+    for (int a = 0; a < R; a++)
+        indiv_buf[a] = row_objective(rows[a], rowlen[a], ngram_data, ngram_size, ws, wword);
+
+    // seam delta[a][b] = obj(row_a ++ row_b) - indiv[a] - indiv[b]; the join
+    // creates exactly the windows / boundary tokens that straddle the a->b boundary.
+    static int joinbuf[2 * MAX_CIPHER_LENGTH];
+    for (int a = 0; a < R; a++) {
+        for (int b = 0; b < R; b++) {
+            if (a == b) { delta_buf[a * R + b] = 0.0; continue; }
+            int n = 0;
+            for (int k = 0; k < rowlen[a]; k++) joinbuf[n++] = rows[a][k];
+            for (int k = 0; k < rowlen[b]; k++) joinbuf[n++] = rows[b][k];
+            double j = row_objective(joinbuf, n, ngram_data, ngram_size, ws, wword);
+            delta_buf[a * R + b] = j - indiv_buf[a] - indiv_buf[b];
+        }
+    }
+    return held_karp_best_path(R, indiv_buf, delta_buf, order_out);
 }
 
 

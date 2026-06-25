@@ -119,6 +119,8 @@ slow | foursquare_pride   | foursquare   | foursquare_pride.txt   | -logprob -nr
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000
 slow | transcol_single     | transcol      | transcol_single_tb.txt  | -nrestarts 40 -nhillclimbs 8000
+fast | transcol_l_test     | transcol-l    | transcol_l_test.txt     | -logprob -mincols 10 -maxcols 10 -nrestarts 50 -nhillclimbs 15000
+fast | transtile_test      | transtile     | transtile_test.txt      | -logprob -tile 2 2 -mincols 8 -maxcols 8 -nrestarts 60 -nhillclimbs 15000
 fast | railfence_aca       | railfence     | railfence_aca.txt       | -maxcols 12
 fast | route_ragged        | route         | route_ragged.txt        |
 slow | amsco_aca           | amsco         | amsco_aca.txt           | -mincols 4 -maxcols 12 -nrestarts 60 -nhillclimbs 6000

@@ -115,6 +115,73 @@ void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int ou
 }
 
 
+// Columnar transposition with a uniform within-column row permutation L (the
+// "track order"). The grid is refilled from the K columns exactly as
+// decrypt_columnar (column read per `dir`), but the recovered plaintext reads the
+// R grid rows in the order L[0..R-1] -- output row i is grid row L[i] -- each row
+// left-to-right (row_rev == 0) or right-to-left (row_rev == 1). Because a single
+// permutation is applied inside every column, it is equivalent to permuting whole
+// grid rows, so the tracked read needs a COMPLETE grid (len % K == 0, R = len/K);
+// a ragged grid falls back to plain decrypt_columnar (L/row_rev ignored). With
+// L == identity and row_rev == 0 this is exactly decrypt_columnar on a complete
+// grid. out[] must not alias cipher[].
+void decrypt_columnar_tracked(int cipher[], int len, int K, int order[], int dir,
+                              int L[], int row_rev, int out[]) {
+    if (K <= 1 || K > len || len % K != 0) {        // tracked read needs a complete grid
+        decrypt_columnar(cipher, len, K, order, dir, out);
+        return;
+    }
+    int R = len / K;
+    int grid[MAX_CIPHER_LENGTH];
+    int pos = 0;
+    for (int j = 0; j < K; j++) {
+        int c = order[j];
+        if (dir == COL_READ_BT) for (int r = R - 1; r >= 0; r--) grid[r * K + c] = cipher[pos++];
+        else                    for (int r = 0; r < R; r++)     grid[r * K + c] = cipher[pos++];
+    }
+    int o = 0;
+    for (int i = 0; i < R; i++) {
+        int r = L[i];
+        if (row_rev) for (int c = K - 1; c >= 0; c--) out[o++] = grid[r * K + c];
+        else         for (int c = 0; c < K; c++)     out[o++] = grid[r * K + c];
+    }
+}
+
+
+// Sub-grid / tile transposition. The ciphertext is W columns each R tall, laid out
+// contiguously (block c = cipher[c*R .. c*R+R-1]); the global key `order` permutes
+// the columns into an R x W grid (G[r][c] = block order[c], row r). Within that grid
+// every complete h x w tile (tiled from the origin) had the SAME cell permutation
+// `perm` (length h*w, cell s at tile offset (s/w, s%w)) applied; leftover rows
+// (R % h) and columns (W % w) pass through untouched. Decryption undoes the tile
+// permutation (grid cell at tile offset s takes the value at offset perm[s]) and
+// reads the grid row-major. Complete grid only (len % W == 0, R = len/W); a ragged
+// or degenerate W is the identity. out[] must not alias cipher[].
+void decrypt_tile(int cipher[], int len, int W, int order[], int h, int w,
+                  int perm[], int out[]) {
+    if (W <= 1 || W > len || len % W != 0 || h < 1 || w < 1) {
+        for (int i = 0; i < len; i++) out[i] = cipher[i];
+        return;
+    }
+    int R = len / W;
+    int G[MAX_CIPHER_LENGTH], P[MAX_CIPHER_LENGTH];
+    for (int c = 0; c < W; c++)
+        for (int r = 0; r < R; r++) G[r * W + c] = cipher[order[c] * R + r];
+    for (int i = 0; i < len; i++) P[i] = G[i];           // leftover cells pass through
+    int m = h * w;
+    for (int ti = 0; ti < R / h; ti++)
+        for (int tj = 0; tj < W / w; tj++) {
+            int r0 = ti * h, c0 = tj * w;
+            for (int s = 0; s < m; s++) {
+                int dr = s / w, dc = s % w;
+                int sr = perm[s] / w, sc = perm[s] % w;
+                P[(r0 + dr) * W + (c0 + dc)] = G[(r0 + sr) * W + (c0 + sc)];
+            }
+        }
+    for (int i = 0; i < len; i++) out[i] = P[i];
+}
+
+
 // Apply a ciphertext->plaintext position map. pt_of_ct[k] is the plaintext
 // position that received ciphertext position k, so standard decryption scatters
 // the ciphertext (out[pt_of_ct[k]] = cipher[k]) while -variant (encryption swapped

@@ -57,6 +57,9 @@
 #define TWO_SQUARE     38   // Two-Square horizontal (ACA): two keyed 5x5 squares side by side
 #define TWO_SQUARE_V   39   // Two-Square vertical (Wikipedia): two keyed squares stacked (self-inverse)
 #define FOUR_SQUARE    40   // Four-Square: two keyed ciphertext squares + two standard plaintext squares
+#define TRANSCOL_L     41   // columnar with a within-column row permutation L (exact seam best-L)
+#define TRANSROUTECOL  42   // two-stage chain: fixed read-route global + searched column key (seam best-L)
+#define TRANSTILE      43   // sub-grid / tile (h x w) transposition: uniform tile cell permutation
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -117,6 +120,13 @@ enum { PHILLIPS_ROW, PHILLIPS_COL, PHILLIPS_ROWCOL };
 #define COL_READ_TB   0        // read each column top-to-bottom (canonical)
 #define COL_READ_BT   1        // read each column bottom-to-top
 #define COL_READ_BOTH 2        // search both directions
+
+// Columnar ROW read direction (cfg->read_row_direction), used by the track-perm
+// columnar / chain solvers (transcol-L, transroutecol). Default LR is the
+// canonical row read, so every other solver is unaffected.
+#define ROW_READ_LR   0        // read each grid row left-to-right (canonical)
+#define ROW_READ_RL   1        // read each grid row right-to-left
+#define ROW_READ_BOTH 2        // search both row directions
 
 // Optimization method (cfg->method): which acceptance strategy the engine uses.
 // METHOD_DEFAULT keeps each cipher model's built-in SearchShape; the others force
@@ -244,6 +254,10 @@ typedef struct {
     int min_cols;        // smallest column count to search
     int max_cols;        // largest column count to search
     int read_direction;  // COL_READ_TB / COL_READ_BT / COL_READ_BOTH
+    int read_row_direction; // ROW_READ_LR / ROW_READ_RL / ROW_READ_BOTH (transcol-L / chain)
+    bool crib_anchored;  // -cribanchored: pin crib-implied positions in the transposition search
+    float weight_word;   // optional dictionary word-fraction reward (default 0 => unused)
+    int tile_h, tile_w;  // sub-grid tile shape for TRANSTILE (default 2x2)
 
     // Tokenized I/O. delimiter == 0 keeps the historical per-character / 0..25 letter
     // decode (bit-identical to ord()); a non-zero delimiter (default ',' for
@@ -520,6 +534,21 @@ void transmatrix(int text[], int len, int w1, int w2, int clockwise);
 // recovered row-major plaintext to out[0..len-1] (out must differ from cipher).
 void decrypt_columnar(int cipher[], int len, int K, int order[], int dir, int out[]);
 
+// Columnar with a uniform within-column row permutation L (the "track order"):
+// like decrypt_columnar, but the grid's R rows are read in the order L[0..R-1]
+// (output row i = grid row L[i]), each left-to-right (row_rev 0) or reversed
+// (row_rev 1). Needs a complete grid (len % K == 0, R = len/K); a ragged grid
+// falls back to decrypt_columnar. out[] must not alias cipher[].
+void decrypt_columnar_tracked(int cipher[], int len, int K, int order[], int dir,
+                              int L[], int row_rev, int out[]);
+
+// Sub-grid / tile transposition primitive: the W contiguous R-tall columns are
+// reordered by `order`, then every complete h x w tile of the resulting R x W grid
+// is inverted by the cell permutation `perm` (length h*w), and the grid is read
+// row-major. Complete grid only (len % W == 0). out[] must not alias cipher[].
+void decrypt_tile(int cipher[], int len, int W, int order[], int h, int w,
+                  int perm[], int out[]);
+
 // Number of geometric routes recognised by route_cells()/decrypt_route().
 #define N_ROUTES 6
 
@@ -701,6 +730,15 @@ double chi_squared(int plaintext[], int len);
 void load_dictionary(char *filename, char ***dict, int *n_dict_words, int *max_dict_word_len, bool verbose);
 void free_dictionary(char **dict, int n_dict_words);
 int find_dictionary_words(char *plaintext, char **dict, int n_dict_words, int max_dict_word_len);
+
+// Fast word-set membership + the length-weighted dictionary-coverage objective
+// (Rec 2), used by the space-preserving transposition solvers. Built on demand from
+// the loaded dictionary; default solves never touch it.
+typedef struct WordSet WordSet;
+WordSet *word_set_build(char **dict, int n_words);
+void word_set_free(WordSet *ws);
+int word_set_contains(const WordSet *ws, const char *upper_word);
+double word_coverage(const int *text, int len, const WordSet *ws);
 
 
 void shuffle(int *array, size_t n);

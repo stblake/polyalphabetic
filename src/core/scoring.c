@@ -118,6 +118,35 @@ double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram
     return score;
 }
 
+double ngram_sum_raw(const int *text, int len, const float *ngram_data, int ngram_size) {
+    double score = 0.;
+    int n_windows = len - ngram_size + 1;
+    if (n_windows <= 0) return 0.;
+
+    int top = 1;                          // g_alpha^(ngram_size-1)
+    for (int j = 0; j < ngram_size - 1; j++) top *= g_alpha;
+
+    int index = 0, base = 1, bad = 0;
+    for (int j = 0; j < ngram_size; j++) {
+        int v = text[j];
+        if (v < 0) { bad++; v = 0; }       // sentinel: contributes 0 to the packed index
+        index += v * base;
+        base *= g_alpha;
+    }
+    if (bad == 0) score += ngram_data[index];
+
+    for (int i = 1; i < n_windows; i++) {
+        int out_v = text[i - 1];
+        int in_v  = text[i + ngram_size - 1];
+        if (out_v < 0) { bad--; out_v = 0; }
+        int in_iv = in_v;
+        if (in_v < 0) { bad++; in_iv = 0; }
+        index = (index - out_v) / g_alpha + in_iv * top;
+        if (bad == 0) score += ngram_data[index];
+    }
+    return score;
+}
+
 void perturbate_cycleword(int state[], int max, int len) {
     int i = rand_int(0, len);
     state[i] = rand_int(0, max);

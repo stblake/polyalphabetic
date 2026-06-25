@@ -10,6 +10,15 @@ double state_score(int decrypted[], int cipher_len,
             float weight_ngram, float weight_crib,
             float weight_ioc, float weight_entropy);
 double ngram_score(int decrypted[], int cipher_len, float *ngram_data, int ngram_size);
+
+// Raw (un-normalized) within-word n-gram sum: the same window walk as ngram_score
+// -- windows that straddle a negative sentinel (space/punct) are skipped -- but
+// returns the bare sum of ngram_data over the surviving windows, with NO division
+// by length and NO g_alpha^n scale. Because it is a plain additive sum, the score
+// of two concatenated texts equals the sum of their individual scores plus the
+// windows spanning the join, which is what makes an exact seam decomposition (and
+// hence Held-Karp best row ordering) possible. Not used by any existing solve.
+double ngram_sum_raw(const int *text, int len, const float *ngram_data, int ngram_size);
 double crib_score(int text[], int len, int crib_indices[], int crib_positions[], int n_cribs);
 
 float* load_ngrams(char *ngram_file, int ngram_size, bool verbose);

@@ -295,6 +295,119 @@ static void test_columnar_double(void) {
     }
 }
 
+// --- columnar with track permutation (decrypt_columnar_tracked) ----------
+//
+// Reference encryption (complete grid only): plaintext row i is placed into grid
+// row L[i] (within-row reversed if row_rev), then columns read off in `order` per
+// `dir`. The exact inverse of decrypt_columnar_tracked.
+static void ref_columnar_tracked_encrypt(int P[], int len, int K, int order[], int dir,
+                                          int L[], int row_rev, int ct[]) {
+    int R = len / K;
+    int grid[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < R; i++) {
+        int gr = L[i];
+        for (int c = 0; c < K; c++) {
+            int pc = row_rev ? (K - 1 - c) : c;
+            grid[gr * K + c] = P[i * K + pc];
+        }
+    }
+    int o = 0;
+    for (int j = 0; j < K; j++) {
+        int c = order[j];
+        if (dir == COL_READ_BT) for (int r = R - 1; r >= 0; r--) ct[o++] = grid[r * K + c];
+        else                    for (int r = 0; r < R; r++)     ct[o++] = grid[r * K + c];
+    }
+}
+
+static void test_columnar_tracked(void) {
+    int cfgs[][2] = { {168, 28}, {100, 10}, {96, 8}, {120, 12}, {90, 6} };  // len, K (complete)
+    for (int t = 0; t < 5; t++) {
+        int len = cfgs[t][0], K = cfgs[t][1], R = len / K;
+        for (int dir = 0; dir <= 1; dir++) {
+            for (int row_rev = 0; row_rev <= 1; row_rev++) {
+                int order[MAX_COLS], L[MAX_COLS];
+                for (int c = 0; c < K; c++) order[c] = c;
+                for (int r = 0; r < R; r++) L[r] = r;
+                shuffle(order, K);
+                shuffle(L, R);
+
+                int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+                random_text(P, len);
+                ref_columnar_tracked_encrypt(P, len, K, order, dir, L, row_rev, C);
+                decrypt_columnar_tracked(C, len, K, order, dir, L, row_rev, out);
+                CHECK(arrays_equal(out, P, len),
+                    "columnar-tracked len=%d K=%d dir=%d rowrev=%d round-trip mismatch",
+                    len, K, dir, row_rev);
+            }
+        }
+    }
+    // With L = identity and row_rev = 0 the tracked read equals plain decrypt_columnar.
+    int len = 168, K = 28, R = len / K;
+    int order[MAX_COLS], L[MAX_COLS];
+    for (int c = 0; c < K; c++) order[c] = c;
+    for (int r = 0; r < R; r++) L[r] = r;
+    shuffle(order, K);
+    int C[MAX_CIPHER_LENGTH], a[MAX_CIPHER_LENGTH], b[MAX_CIPHER_LENGTH];
+    random_text(C, len);
+    decrypt_columnar(C, len, K, order, COL_READ_TB, a);
+    decrypt_columnar_tracked(C, len, K, order, COL_READ_TB, L, 0, b);
+    CHECK(arrays_equal(a, b, len), "columnar-tracked identity L != decrypt_columnar");
+}
+
+// --- sub-grid / tile transposition (decrypt_tile) ------------------------
+//
+// Reference encryption (complete grid): plaintext read row-major IS P; apply the
+// inverse tile map (G cell at offset perm[s] takes P at offset s) then read columns
+// off contiguously in `order` -> block order_inv. The exact inverse of decrypt_tile.
+static void ref_tile_encrypt(int P[], int len, int W, int order[], int h, int w,
+                             int perm[], int ct[]) {
+    int R = len / W;
+    int G[MAX_CIPHER_LENGTH];
+    for (int i = 0; i < len; i++) G[i] = P[i];
+    int m = h * w;
+    for (int ti = 0; ti < R / h; ti++)
+        for (int tj = 0; tj < W / w; tj++) {
+            int r0 = ti * h, c0 = tj * w;
+            for (int s = 0; s < m; s++) {
+                int dr = s / w, dc = s % w, sr = perm[s] / w, sc = perm[s] % w;
+                G[(r0 + sr) * W + (c0 + sc)] = P[(r0 + dr) * W + (c0 + dc)];
+            }
+        }
+    // ct block order[c] = column c of G, read top-to-bottom.
+    for (int c = 0; c < W; c++)
+        for (int r = 0; r < R; r++) ct[order[c] * R + r] = G[r * W + c];
+}
+
+static void test_tile(void) {
+    int cfgs[][4] = { {96, 8, 2, 2}, {120, 10, 2, 2}, {168, 12, 2, 3}, {144, 12, 3, 3}, {90, 9, 3, 1} };
+    for (int t = 0; t < 5; t++) {
+        int len = cfgs[t][0], W = cfgs[t][1], h = cfgs[t][2], w = cfgs[t][3], m = h * w;
+        int order[MAX_COLS], perm[16];
+        for (int c = 0; c < W; c++) order[c] = c;
+        for (int s = 0; s < m; s++) perm[s] = s;
+        shuffle(order, W);
+        shuffle(perm, m);
+
+        int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+        random_text(P, len);
+        ref_tile_encrypt(P, len, W, order, h, w, perm, C);
+        decrypt_tile(C, len, W, order, h, w, perm, out);
+        CHECK(arrays_equal(out, P, len),
+            "tile len=%d W=%d %dx%d round-trip mismatch", len, W, h, w);
+    }
+    // identity tile perm + identity column order == plain row-major recovery of the
+    // contiguous-column layout (a clean columnar with order = identity).
+    int len = 96, W = 8, R = len / W;
+    int order[MAX_COLS], perm[4] = {0,1,2,3};
+    for (int c = 0; c < W; c++) order[c] = c;
+    int P[MAX_CIPHER_LENGTH], C[MAX_CIPHER_LENGTH], out[MAX_CIPHER_LENGTH];
+    random_text(P, len);
+    ref_tile_encrypt(P, len, W, order, 2, 2, perm, C);
+    decrypt_tile(C, len, W, order, 2, 2, perm, out);
+    CHECK(arrays_equal(out, P, len), "tile identity round-trip mismatch");
+    (void) R;
+}
+
 // --- rail fence (decrypt_railfence) --------------------------------------
 //
 // Independent reference encryption: read the plaintext off rail by rail (the
@@ -735,6 +848,8 @@ int main(void) {
     test_columnar_roundtrip();
     test_columnar_degenerate();
     test_columnar_double();
+    test_columnar_tracked();
+    test_tile();
     test_railfence();
     test_route_known_answer();
     test_route();

@@ -54,6 +54,13 @@ src/transposition/    # pure-transposition solvers + shared helpers
   transmatrix_solver.c/.h permutation_solver.c/.h columnar_solver.c/.h
   railfence_solver.c/.h route_solver.c/.h amsco_solver.c/.h myszkowski_solver.c/.h
   redefence_solver.c/.h cadenus_solver.c/.h nihilist_solver.c/.h swagman_solver.c/.h grille_solver.c/.h
+  columnar_track_solver.c/.h   # transcol-L: columnar + within-column row permutation L (seam best-L);
+                               #   also the structural -cribanchored block<->column matcher
+  route_chain_solver.c/.h      # transroutecol: fixed read-route global + searched column key (seam best-L)
+  tile_solver.c/.h             # transtile: sub-grid h x w tile transposition (joint column-order + tile perm)
+  # trans_common.c also carries the shared exact-ordering helpers: held_karp_best_path()
+  #   (max-weight Hamiltonian path) and seam_best_row_order() (exact best within-column
+  #   track order L via a per-row + seam-delta decomposition), plus trans_word_set().
 
 src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a CipherModel solver
   playfair.c playfair_solver.c/.h   # Playfair: 5x5 keyed grid; grid build / prepare / encrypt / decrypt
@@ -218,8 +225,9 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `transcol2`/`18`, `indep`/`28`, `homophonic`/`29`, `playfair`/`pf`/`30`, `bifid`/`bf`/`31`,
 `trifid`/`tf`/`tri`/`32`, `hill`/`33`, `gronsfeld`/`gron`/`34`,
 `phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37`,
-`twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40` (full list in
-`parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
+`twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40`,
+`transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`
+(full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
 By default only the **first line** of the `-cipher` file is read (the rest is ignored,
@@ -272,6 +280,46 @@ an early branch in `solve_cipher`):
 
 These `-type` values are distinct from the `-transmatrix`/`-transperoffset` *post-decrypt
 stage* flags, which apply a fixed, user-supplied transposition after a polyalphabetic solve.
+
+**Three additional transposition solvers** (added from the W168 toolkit review; see
+`COLOSSUS_ADDITIONS.md`) extend the columnar family. All preserve spaces/periods as grid
+cells and are isolated by their own early branch in `solve_cipher`:
+- `transcol-l`/`coltrack`/`41` → `solve_columnar_track()` (`columnar_track_solver.c`): a
+  **columnar with a within-column row permutation `L`** (the jarl / "dave transposition"
+  scheme). The engine anneals the column order under the cheap **identity-L** reading (the
+  within-row n-grams discriminate the order); the exact best `L` is recovered **once at
+  report** via the Held-Karp **seam decomposition** (`seam_best_row_order`, `trans_common.c`)
+  -- nesting best-L per eval is both slower and worse (it flattens the column-order contrast).
+  Needs a complete grid (`len % K == 0`) for best-L; a ragged grid degrades to a plain
+  columnar. Sweeps `K` over `-mincols..-maxcols`, optionally crossed with `-readdir` (column
+  dir) and `-readrowdir lr|rl|both` (row dir, Rec 4). The reward-only quadgram table makes the
+  seam ambiguous, so it effectively needs **`-logprob`** and/or the dictionary term.
+  **`-cribanchored`** switches to a STRUCTURAL crib attack (a soft crib gives no gradient on a
+  shallow many-column grid): the cipher's R-char blocks ARE the grid columns, a crib fixes some
+  cells of each column, and a backtracking **block<->column matching** (most-constrained
+  column first, n-gram + word-coverage tie-break) collapses the otherwise-intractable K-column
+  search -- the only reliable attack on a shallow keyed columnar (assumes `L = identity`). This
+  cracks all ten length-28 keyed columnars in `ciphers/W168/dave_tests/` from a 3-row crib
+  (`ciphers/W168/dave_tests/solve_all.sh`, 10/10).
+- `transroutecol`/`routecol`/`42` → `solve_route_chain()` (`route_chain_solver.c`): a two-stage
+  **chain** -- a fixed geometric read-route global (`route_cells`, the 6 colossus routes)
+  composed with a searched **column key**, read with the seam best-L. Sweeps the complete-grid
+  rectangles and all routes; anneals the column key. Blind recovery is hard (the route adds a
+  layer); best on short / favorable ciphers.
+- `transtile`/`tile`/`43` → `solve_tile()` (`tile_solver.c`): a **sub-grid / tile
+  transposition** -- every `h x w` tile of the grid is permuted by the same cell permutation
+  (`-tile h w`, default 2x2), composed with a columnar column-order global. The engine
+  **jointly** anneals the column order and the tile permutation; primitive `decrypt_tile`
+  (`transpositions.c`). Complete grid only.
+
+**Shared scoring additions (Rec 2, `dict.c`):** an optional `-weightword <f>` (default 0 =>
+bit-identical) folds a length-weighted dictionary **word-coverage** reward into the
+space-preserving transposition decrypt score (`word_set_build`/`word_coverage` + a fast hash
+set); the same coverage breaks ties in the seam best-L. New raw additive n-gram sum
+`ngram_sum_raw` (`scoring.c`) makes the seam decomposition exact. These are used only by the
+new solvers; every existing solve is byte-for-byte unchanged. Note: `main()` no longer trims
+trailing whitespace for the pure-transposition types (a trailing space is a real grid cell);
+all existing transposition test ciphers are trailing-space free, so this is bit-identical.
 
 The **homophonic** type (`solve_homophonic()`) is a `CipherModel` plugged into the shared
 `run_solver()` engine just like every other type (`HOMOPHONIC_MODEL`, `SHAPE_ANNEAL`). Its

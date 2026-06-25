@@ -70,6 +70,17 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "transcol2") || str_eq(arg, "doublecolumnar") ||
         str_eq(arg, "doublecol") || str_eq(arg, "dcol")) return TRANSCOL2;
 
+    // Columnar with within-column track permutation L (exact seam best-L)
+    if (str_eq(arg, "transcol-l") || str_eq(arg, "transcoll") || str_eq(arg, "columnar-track") ||
+        str_eq(arg, "coltrack") || str_eq(arg, "transcoltrack")) return TRANSCOL_L;
+
+    // Route + column-key two-stage chain (seam best-L reading)
+    if (str_eq(arg, "transroutecol") || str_eq(arg, "routecol") || str_eq(arg, "routecolumnar") ||
+        str_eq(arg, "chain")) return TRANSROUTECOL;
+
+    // Sub-grid / tile transposition (uniform h x w tile cell permutation)
+    if (str_eq(arg, "transtile") || str_eq(arg, "tile") || str_eq(arg, "subgrid")) return TRANSTILE;
+
     // Rail fence (covers the variant rail fence via the phase-offset sweep)
     if (str_eq(arg, "railfence") || str_eq(arg, "rail") || str_eq(arg, "rails") ||
         str_eq(arg, "varrailfence")) return RAILFENCE;

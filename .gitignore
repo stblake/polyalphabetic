@@ -3,6 +3,7 @@ colossus
 tests/test_transpositions
 tests/test_ciphers
 tests/test_optimal_cycleword
+tests/test_held_karp
 tests/test_solver
 tests/test_playfair
 tests/test_playfair_solver
