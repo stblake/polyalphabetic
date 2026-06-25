@@ -46,6 +46,10 @@ src/polyalphabetic/   # Vigenère family — searched inside POLYALPHA_MODEL
   polyalpha_solver.c/.h  # POLYALPHA_MODEL (vig/quag/beau/porta/autokey) + crib/cycleword helpers
                          #   + solve_polyalpha(); solve_cipher() dispatches the polyalpha types here
   vigenere.c gronsfeld.c beaufort.c porta.c quagmire.c autokey.c   # per-cipher encrypt/decrypt primitives
+  gromark.c gromark_solver.c/.h  # Gromark + Periodic Gromark: keyed-alphabet substitution + chain-
+                         #   addition running key. Basic = primer pre-pass (10^5 space) then a sigma
+                         #   anneal; Periodic = anneal the KEYWORD directly (it derives sigma/primer/
+                         #   offsets). Has its own CipherModels, not part of POLYALPHA_MODEL.
 
 src/transposition/    # pure-transposition solvers + shared helpers
   trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
@@ -93,6 +97,7 @@ tools/phillips_gen.c         # standalone Phillips test-data generator (make phi
 tools/twosquare_gen.c        # standalone Two-Square test-data generator (make twosquare_gen)
 tools/foursquare_gen.c       # standalone Four-Square test-data generator (make foursquare_gen)
 tools/nihilist_sub_gen.c     # standalone Nihilist Substitution generator (make nihilist_sub_gen)
+tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (make gromark_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -173,7 +178,14 @@ carry-triggering positions making the conventions diverge so a mix-up is caught 
 predicate asserted vs the legal set, and per-convention stress: encrypt/decrypt round-trips over
 random squares × keys × lengths × periods (incl. p=1, p>len, incomplete), a keyed-label round-trip
 that also asserts the label-keyed cipher equals the relabelled fixed-label cipher, and a
-side-generic 6x6).
+side-generic 6x6), and
+`tests/test_gromark.c` (the Gromark / Periodic Gromark primitives: the TWO ACA worked-example
+known-answer vectors pinned cell-for-cell — keyword `ENIGMA`, basic primer `23452`,
+`thereare…` → `NFYCK…`, and periodic period-6 `wintry…` → `RHNAAX…` — the K2M mixed-alphabet builder
+(`ENIGMA` → `AJRXEBKSYGFPVIDOUMHQWNCLTZ`), the chain-addition rule for P=5 and P=6, the periodic
+primer/offset derivation pinned (ranks `264351`, offsets `4 21 13 9 17 0`), encrypt/decrypt round-
+trips over random alphabets × primers × lengths for both variants, the identity-alphabet reduction
+to a pure chain-shift, and periodic-with-zero-offsets == basic).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -208,19 +220,25 @@ for all three codes plus a non-registry type; a period-estimator top-K hit rate 
 per convention; a capability floor + length cliff per convention (period pinned, ~250/400 chars);
 a BLIND-period carry solve — period estimated end-to-end, the reported period asserted a multiple
 of the true one; a carry multi-keyword sweep (mean/worst); and a carry keyed-label end-to-end solve
-recovered as the relabelled square).
+recovered as the relabelled square), and
+`tests/test_gromark_solver.c` (Gromark / Periodic Gromark: registry validation for both codes plus a
+non-registry type; a basic-Gromark primer pre-pass hit-rate (the true primer in the top-K vs length,
+over several keyword/primer pairs); a basic capability floor + length cliff (blind, the true primer
+recovered end-to-end at ~120/150/200 chars); and a Periodic Gromark blind solve with the period
+swept, the reported period asserted == the true one).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-49 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+51 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
-Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), and the Nihilist
+Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), the Nihilist
 Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solved as a
-relabelled square), all period-pinned) that each
+relabelled square), and a Gromark (`gromark_decl`, blind) + Periodic Gromark
+(`gromark_periodic_decl`, blind, period swept)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -260,7 +278,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40`,
 `transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`,
 `adfgx`/`44`, `adfgvx`/`adfg`/`45`,
-`nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`
+`nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`,
+`gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -591,6 +610,40 @@ equivalent **relabelled square** (proven by the `nihilist_sub_kl` regression cas
 ciphers with `tools/nihilist_sub_gen.c` (`make nihilist_sub_gen`; args are a square keyword, an
 additive keyword, `carry`/`nc`/`m100`, and optional `-labels <rowkey> <colkey>`).
 
+The **Gromark** (`gromark`/`gm`/`49`) and **Periodic Gromark** (`gromark-periodic`/`pgromark`/`50`)
+types (`solve_gromark()`, `gromark.c` + `gromark_solver.c`) are the ACA "GROnsfeld with Mixed
+Alphabet and Running Key" cipher (DUMBO 1969) and its periodic variant (1973). Both run on the
+**full 26-letter alphabet** (no J-merge). A keyed cipher alphabet **σ** (a permutation of A..Z,
+built by the **K2M transposition block** of a keyword — the simple keyed alphabet laid row-major at
+keyword-width and read off by columns in heading-letter order) is composed with a **chain-addition
+running key**: from a P-digit primer, `d[i]=primer[i]` for `i<P` and `d[i]=(d[i-P]+d[i-P+1]) mod 10`
+otherwise (one digit per letter). **Basic Gromark** (5-digit primer): `C[i]=σ[(p[i]+d[i]) mod 26]`.
+**Periodic Gromark**: the plaintext is split into consecutive groups of P (= the keyword length);
+group `g` (cycling `mod P`) adds a per-group **offset** = the keyword letter's position in σ, so
+`C[i]=σ[(p[i]+d[i]+offset[(i/P) mod P]) mod 26]`, and the primer is the keyword letters' alphabetical
+ranks. The primitives (`gromark.c`) are hand-verified cell-for-cell against the two ACA worked
+examples (keyword ENIGMA). **The two are attacked by DIFFERENT models** (both `SHAPE_ANNEAL`,
+effectively need `-logprob`), because there is **no σ-independent decoupling reward** (the additive
+shift sits inside the permutation σ, and chain addition amplifies a wrong primer digit into a
+fully-wrong key, so naive joint annealing of (σ, primer) never accepts a primer move):
+- **Basic Gromark** uses a **primer PRE-PASS** (the analog of `bifid_estimate_periods`): for each of
+  the 10⁵ primers the running key is known, so recovering σ collapses to a monoalphabetic-
+  substitution-with-known-per-position-shift — a 26×26 **max-weight assignment** (Hungarian) that
+  picks σ to maximize an English monogram fit — and the primer is ranked by the n-gram score of the
+  provisional decrypt. The top-K primers (length-adaptive, `-nprimers` overrides) become engine
+  configs, each annealing σ from a random restart warm-started by the provisional σ; the n-gram
+  score across configs picks the winner. Recovers reliably from ~120+ letters and reports the
+  recovered primer.
+- **Periodic Gromark** instead anneals the **KEYWORD directly** — its *entire* key is one keyword
+  of P distinct letters (~28 bits), which derives σ, the primer, AND the offsets together, so
+  treating those as independent unknowns blows a tiny key into an intractable coupled space the
+  primer cannot be ranked in. The state is the keyword (`key[0..P-1]`); each decrypt rebuilds
+  σ/primer/offsets via `gromark_build_from_keyword_idx`; one engine config per swept period P (like
+  a fractionation period), no pre-pass. This is both far faster and far more reliable than a free-σ
+  search (recovers ~150+ letters in seconds, reporting the recovered keyword). Cribs are not used.
+  Generate test ciphers with `tools/gromark_gen.c` (`make gromark_gen`; args are a plaintext, a
+  keyword, and a `<primer-digits>` for basic or the literal `periodic` for periodic).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -613,9 +666,12 @@ keyed squares), ADFGX (`SHAPE_ANNEAL`, `12x600000` per swept column count K) and
 (`SHAPE_ANNEAL`, `16x800000` per K — more, for the 36-cell square; both anneal at
 `inittemp 0.08`, `backtrack 0.30`) have tuned entries (the two/four-square budgets are
 larger than Playfair's for the 50-cell two-square state; the ADFGVX budgets are the largest,
-for the coupled square+columnar search), and the three Nihilist Substitution conventions
+for the coupled square+columnar search), the three Nihilist Substitution conventions
 (`SHAPE_ANNEAL`, `8x300000` per period, `inittemp 0.08`, `backtrack 0.30` — between Bifid and
-ADFGX, for the coupled square+additive search).
+ADFGX, for the coupled square+additive search), Gromark (`SHAPE_ANNEAL`, `3x120000` per top-K
+primer config — a lean per-config 26-letter substitution anneal, since the primer pre-pass and the
+provisional-σ warm start do most of the work) and Periodic Gromark (`SHAPE_ANNEAL`, `4x160000` per
+swept period — the keyword anneal over a ~28-bit key; both at `inittemp 0.08`, `backtrack 0.30`).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

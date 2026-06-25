@@ -456,6 +456,24 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 30, .s_n_hill_climbs = 300000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Gromark / Periodic Gromark: a primer PRE-PASS (gromark_rank_primers) ranks the finite
+    // primer space and emits one config per top-K primer; each config then anneals the keyed
+    // 26-letter alphabet (a simple-substitution anneal -- easier than a Polybius square, so a
+    // lean per-config budget suffices, and the pre-pass warm-starts the right primer's sigma).
+    // Periodic also anneals the P group offsets jointly, so it gets a little more. Same
+    // small-scale temperature (mean log-probability) as the other substitution types.
+    { .cipher_type = GROMARK, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 3, .a_n_hill_climbs = 120000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 12, .s_n_hill_climbs = 120000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = GROMARK_PERIODIC, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 4, .a_n_hill_climbs = 160000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 16, .s_n_hill_climbs = 160000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

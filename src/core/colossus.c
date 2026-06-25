@@ -226,6 +226,7 @@
 #include "hill_solver.h"
 #include "adfgvx_solver.h"
 #include "nihilist_sub_solver.h"
+#include "gromark_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -246,6 +247,7 @@ void init_config(ColossusConfig *cfg) {
     cfg->period_present = false;
     cfg->max_period = 0;        // 0 => derive from ciphertext length (min(20, len/2))
     cfg->n_periods = 5;         // anneal the estimator's top-K candidate periods
+    cfg->n_primers = 0;         // Gromark pre-pass top-K (0 => auto by ciphertext length)
 
     cfg->plaintext_keyword_len_present = false;
     cfg->ciphertext_keyword_len_present = false;
@@ -628,6 +630,9 @@ int main(int argc, char **argv) {
             // Bifid/Trifid: how many top-IoC candidate periods to anneal (default 5).
             cfg.n_periods = atoi(argv[++i]);
             printf("-nperiods %d\n", cfg.n_periods);
+        } else if (strcmp(argv[i], "-nprimers") == 0) {
+            cfg.n_primers = atoi(argv[++i]);
+            printf("-nprimers %d\n", cfg.n_primers);
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -728,6 +733,10 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Nihilist Substitution cipher (periodic additive over a keyed Polybius square, %s).\n\n",
             cfg.cipher_type == NIHILIST_SUB_NC ? "no-carry mod 10" :
             cfg.cipher_type == NIHILIST_SUB_M100 ? "add mod 100" : "integer add with carry");
+    } else if (cfg.cipher_type == GROMARK || cfg.cipher_type == GROMARK_PERIODIC) {
+        printf("\nAttacking a %s Gromark cipher (keyed-alphabet substitution + chain-addition running key%s).\n\n",
+            cfg.cipher_type == GROMARK_PERIODIC ? "Periodic" : "basic",
+            cfg.cipher_type == GROMARK_PERIODIC ? " + per-group offset" : "");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1138,6 +1147,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     if (cfg->cipher_type == NIHILIST_SUB || cfg->cipher_type == NIHILIST_SUB_NC ||
         cfg->cipher_type == NIHILIST_SUB_M100) {
         solve_nihilist_sub(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == GROMARK || cfg->cipher_type == GROMARK_PERIODIC) {
+        solve_gromark(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

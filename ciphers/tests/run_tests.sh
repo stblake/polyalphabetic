@@ -124,6 +124,11 @@ slow | nihilist_sub_carry | nihilist-sub      | nihilist_sub_carry.txt | -logpro
 slow | nihilist_sub_nc    | nihilist-sub-nc   | nihilist_sub_nc.txt    | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
 slow | nihilist_sub_m100  | nihilist-sub-m100 | nihilist_sub_m100.txt  | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
 slow | nihilist_sub_kl    | nihilist-sub      | nihilist_sub_kl.txt    | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
+# --- Gromark / Periodic Gromark (keyed-alphabet substitution + chain-addition running key) ---
+# Basic: a primer pre-pass over the 10^5 space then a sigma anneal (blind). Periodic: the whole
+# key is one keyword, annealed directly (blind, period swept).
+slow | gromark_decl          | gromark          | gromark_decl.txt          | -logprob -nprimers 24 -nrestarts 2 -nhillclimbs 80000
+slow | gromark_periodic_decl | gromark-periodic | gromark_periodic_decl.txt | -logprob -maxperiod 7 -nrestarts 3 -nhillclimbs 120000
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

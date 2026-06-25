@@ -21,6 +21,9 @@ tools/hill_gen
 tests/test_nihilist_sub
 tests/test_nihilist_sub_solver
 tools/nihilist_sub_gen
+tests/test_gromark
+tests/test_gromark_solver
+tools/gromark_gen
 *.o
 __pycache__/
 *.pyc

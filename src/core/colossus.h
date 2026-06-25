@@ -65,8 +65,13 @@
 #define NIHILIST_SUB      46   // Nihilist Substitution (carry): periodic additive over a keyed Polybius square
 #define NIHILIST_SUB_NC   47   // Nihilist Substitution, no-carry (per-digit add mod 10)
 #define NIHILIST_SUB_M100 48   // Nihilist Substitution, add mod 100
+#define GROMARK           49   // Gromark: keyed-alphabet substitution + chain-addition running key
+#define GROMARK_PERIODIC  50   // Periodic Gromark: + per-group offset (period = keyword length)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
+
+#define GROMARK_PRIMER_LEN 5    // basic Gromark standard primer length (ACA convention)
+#define GROMARK_MAX_PRIMER 26   // max primer length == max period (periodic: keyword len <= 26)
 
 #define ADFGX_SIDE  5           // ADFGX Polybius square side (5x5, 25 letters, J->I)
 #define ADFGVX_SIDE 6           // ADFGVX Polybius square side (6x6, 36 symbols A..Z + 0..9)
@@ -199,6 +204,7 @@ typedef struct {
     bool period_present;
     int max_period;
     int n_periods;
+    int n_primers;      // Gromark: top-K primers the pre-pass keeps to anneal (0 => auto by length)
 
     // Input Flags for lengths
     bool plaintext_keyword_len_present;
@@ -517,6 +523,31 @@ void gronsfeld_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     int key_digits[], int key_len);
 void gronsfeld_encrypt(int encrypted[], int plaintext_indices[], int plaintext_len,
     int key_digits[], int key_len);
+
+// Gromark / Periodic Gromark cipher (gromark.c). A keyed 26-letter substitution sigma (a
+// permutation of A..Z) composed with a chain-addition running key from a P-digit primer
+// (d[i] = primer[i] for i<P, else (d[i-P] + d[i-P+1]) mod 10; one digit per letter):
+//   BASIC     C[i] = sigma[(p[i] + d[i]) mod 26]
+//   PERIODIC  C[i] = sigma[(p[i] + d[i] + offset[(i/P) mod P]) mod 26], P = period, one
+//             offset per group of P letters (offset[g] = position of keyword[g] in sigma).
+// gromark_chain_key generates the running key; gromark_mixed_alphabet builds sigma from a
+// keyword via the K2M transposition block (generator + unit tests only -- the solver
+// hill-climbs sigma as a free permutation). gromark_decrypt_core is the solver hot path
+// (precomputed running key d[] + inverse alphabet; offsets == NULL => basic).
+void gromark_chain_key(const int primer[], int primer_len, int n, int out_digits[]);
+void gromark_mixed_alphabet(const char *keyword, int sigma[]);
+void gromark_build_from_keyword_idx(const int kw[], int P, int sigma[],
+                                    int primer[], int offsets[]);
+void gromark_encrypt(const int plain[], int len, const int sigma[],
+                     const int primer[], int primer_len, int out[]);
+void gromark_decrypt(const int cipher[], int len, const int sigma[],
+                     const int primer[], int primer_len, int out[]);
+void gromark_periodic_encrypt(const int plain[], int len, const int sigma[],
+                     const int primer[], int period, const int offsets[], int out[]);
+void gromark_periodic_decrypt(const int cipher[], int len, const int sigma[],
+                     const int primer[], int period, const int offsets[], int out[]);
+void gromark_decrypt_core(const int cipher[], int len, const int sigma_inv[],
+                     const int d[], const int offsets[], int period, int out[]);
 
 // Beaufort cipher
 void beaufort_decrypt(int decrypted[], int cipher_indices[], int cipher_len, 

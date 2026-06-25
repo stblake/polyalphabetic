@@ -168,6 +168,12 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "nihilist-sub") || str_eq(arg, "nihilistsub") ||
         str_eq(arg, "nihilistsubstitution") || str_eq(arg, "nihsub")) return NIHILIST_SUB;
 
+    // Gromark (keyed-alphabet substitution + chain-addition running key) and its Periodic
+    // variant (+ per-group offset). Test the periodic alias before the bare name.
+    if (str_eq(arg, "gromark-periodic") || str_eq(arg, "periodicgromark") ||
+        str_eq(arg, "gromark-p") || str_eq(arg, "pgromark")) return GROMARK_PERIODIC;
+    if (str_eq(arg, "gromark") || str_eq(arg, "gromark-basic") || str_eq(arg, "gm")) return GROMARK;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }
