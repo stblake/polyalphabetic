@@ -18,6 +18,9 @@ tools/playfair_gen
 tools/bifid_gen
 tools/trifid_gen
 tools/hill_gen
+tests/test_nihilist_sub
+tests/test_nihilist_sub_solver
+tools/nihilist_sub_gen
 *.o
 __pycache__/
 *.pyc

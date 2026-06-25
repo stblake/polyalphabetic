@@ -117,6 +117,13 @@ slow | twosquare_v_pride  | twosquare-v  | twosquare_v_pride.txt  | -logprob -nr
 slow | foursquare_pride   | foursquare   | foursquare_pride.txt   | -logprob -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
 # --- ADFGX (keyed-square fractionation + keyed columnar; 25-letter alphabet, J->I) ---
 slow | adfgx_decl | adfgx | adfgx_decl.txt | -logprob -mincols 6 -maxcols 6 -nrestarts 8 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
+# --- Nihilist Substitution (periodic additive over a keyed 5x5 square; numeric ciphertext) ---
+# Three addition conventions (carry / no-carry / mod-100); nihilist_sub_kl is a carry cipher
+# built with KEYED row/col labels, which the (fixed-label) solver recovers as a relabelled square.
+slow | nihilist_sub_carry | nihilist-sub      | nihilist_sub_carry.txt | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
+slow | nihilist_sub_nc    | nihilist-sub-nc   | nihilist_sub_nc.txt    | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
+slow | nihilist_sub_m100  | nihilist-sub-m100 | nihilist_sub_m100.txt  | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
+slow | nihilist_sub_kl    | nihilist-sub      | nihilist_sub_kl.txt    | -logprob -period 6 -nrestarts 5 -nhillclimbs 150000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

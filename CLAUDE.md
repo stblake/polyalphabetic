@@ -72,6 +72,9 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
   foursquare.c foursquare_solver.c/.h # Four-Square: 2 keyed + 2 fixed-standard squares / encrypt / decrypt (side-generic)
   adfgvx.c   adfgvx_solver.c/.h     # ADFGVX/ADFGX: keyed-square fractionation (reuses bifid square build/inverse) +
                                      #   keyed columnar (reuses decrypt_columnar); coordinate-space, side-generic 5x5/6x6
+  nihilist_sub.c nihilist_sub_solver.c/.h # Nihilist Substitution: periodic ADDITIVE over a keyed Polybius square
+                                     #   (numeric ciphertext); 3 add conventions (carry/no-carry/mod-100), one solver;
+                                     #   square-independent validity reward decouples the additive key (à la ADFGVX)
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -89,6 +92,7 @@ tools/gronsfeld_gen.c        # standalone Gronsfeld test-data generator (make gr
 tools/phillips_gen.c         # standalone Phillips test-data generator (make phillips_gen)
 tools/twosquare_gen.c        # standalone Two-Square test-data generator (make twosquare_gen)
 tools/foursquare_gen.c       # standalone Four-Square test-data generator (make foursquare_gen)
+tools/nihilist_sub_gen.c     # standalone Nihilist Substitution generator (make nihilist_sub_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -161,7 +165,15 @@ and a degenerate identity-square check pinning the exact coordinate algebra), an
 the whole convention end to end — identity 5x5 square, `ATTACK` + keyword `KEY` → `AGADAGAFGGAX`
 — the label tables, the K=1 (identity-columnar) edge case, and encrypt/decrypt round-trips over
 random squares × random column counts × random lengths incl. ragged grids and both read
-directions, for both the 5x5 (ADFGX) and the side-generic 6x6 (ADFGVX, 36 cells) squares).
+directions, for both the 5x5 (ADFGX) and the side-generic 6x6 (ADFGVX, 36 cells) squares), and
+`tests/test_nihilist_sub.c` (the Nihilist Substitution primitives: a HAND-COMPUTED known-answer
+vector pinning ALL THREE conventions at once on the same plaintext/key/square — identity 5x5,
+`ZAEZ` + key `ZK` → carry `110 36 70 80` / no-carry `0 36 60 70` / mod-100 `10 36 70 80`, the
+carry-triggering positions making the conventions diverge so a mix-up is caught — the validity
+predicate asserted vs the legal set, and per-convention stress: encrypt/decrypt round-trips over
+random squares × keys × lengths × periods (incl. p=1, p>len, incomplete), a keyed-label round-trip
+that also asserts the label-keyed cipher equals the relabelled fixed-label cipher, and a
+side-generic 6x6).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -190,17 +202,25 @@ square, odd through the lower-left — a length cliff, and a multi-keyword sweep
 non-registry type left untouched; an ADFGX capability floor with the column count K pinned;
 a BLIND K-selection test — K swept, the solver must report the true K, exercising the IoC
 decoupling term; an ADFGX length cliff; an ADFGX multi-keyword sweep (mean/worst); and an
-ADFGVX 6x6/36-symbol capability floor over the digit-bearing alphabet).
+ADFGVX 6x6/36-symbol capability floor over the digit-bearing alphabet), and
+`tests/test_nihilist_sub_solver.c` (Nihilist Substitution, run PER CONVENTION: registry validation
+for all three codes plus a non-registry type; a period-estimator top-K hit rate measured separately
+per convention; a capability floor + length cliff per convention (period pinned, ~250/400 chars);
+a BLIND-period carry solve — period estimated end-to-end, the reported period asserted a multiple
+of the true one; a carry multi-keyword sweep (mean/worst); and a carry keyed-label end-to-end solve
+recovered as the relabelled square).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-43 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+49 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
-Four-Square cipher, and an ADFGX cipher (`adfgx_decl`, K pinned)) that each
+Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), and the Nihilist
+Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solved as a
+relabelled square), all period-pinned) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -210,10 +230,10 @@ bit-identical refactor keeps every score at 100% and any behavioural regression 
 immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 21-case fast tier in ~50s (use while iterating),
-`--slow` the 21 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
-three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square and the
-~10s ADFGX), no flag runs both.
+`./run_tests.sh --fast` runs the 24-case fast tier in ~50s (use while iterating),
+`--slow` the 25 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
+~10s ADFGX and the four ~6–8s Nihilist Substitution solves), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -239,7 +259,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `phillips`/`phil`/`35`, `phillips-c`/`36`, `phillips-rc`/`37`,
 `twosquare`/`ts`/`38`, `twosquare-v`/`tsv`/`39`, `foursquare`/`fs`/`40`,
 `transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`,
-`adfgx`/`44`, `adfgvx`/`adfg`/`45`
+`adfgx`/`44`, `adfgvx`/`adfg`/`45`,
+`nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -540,6 +561,36 @@ positions are over the ciphertext, which is 2x the plaintext). Generate test cip
 `tools/adfgvx_gen.c` (`make adfgvx_gen`; args are a square keyword, a transposition keyword,
 and `adfgx`/`adfgvx`).
 
+The **Nihilist Substitution** family (`nihilist-sub`/`46`, `nihilist-sub-nc`/`47`,
+`nihilist-sub-m100`/`48`; `solve_nihilist_sub()`, `NIHILIST_SUB_MODEL`, `SHAPE_ANNEAL`) is a
+**periodic ADDITIVE** cipher over a keyed 5x5 Polybius square (25 letters, J→I, same alphabet as
+Bifid). Each plaintext letter → its 2-digit coordinate **number** `rowlbl[row]*10+collbl[col]`
+(fixed labels are `1..5`, so the legal set is `V = {11..15,21..25,…,51..55}`); a periodic additive
+key (its own coordinate numbers) is added per position, so the ciphertext is a stream of decimal
+**NUMBERS** (not letters) — `solve_nihilist_sub` parses them from the raw string itself (numbers
+are space/comma/any-separated; not the per-character decode). **Three addition conventions** are
+distinct `-type` codes sharing one primitive (`nihilist_sub.c`) + one solver, branched on
+`cfg->cipher_type`: `nihilist-sub` (integer add **with carry**, ACA standard, cipher 22–110),
+`nihilist-sub-nc` (per-digit add **mod 10, no carry**, cipher 00–99) and `nihilist-sub-m100` (2-digit
+add **mod 100**). It is structurally the twin of ADFGVX — a COUPLED square + periodic-key search —
+and uses the **same decoupling trick**: `pt_num = cipher_num − key_num` is INDEPENDENT of the
+square, so the fraction of positions decrypting to a legal coordinate (the **validity** reward,
+`NIH_VALID_WEIGHT * n_valid/n` folded into `score_adjust`) gives the additive-key search a gradient
+flat in the square dimension — the climb locks the additive by validity, then the n-gram score
+recovers the square (the additive cells live in `key[grid_size..]`, the square in `key[0..grid_size-1]`,
+exactly like ADFGVX). The period is recovered by columnar IoC over the ciphertext **numbers**
+(`nihilist_sub_estimate_periods`, top-`-nperiods` annealed; IoC also peaks at multiples, so a
+multiple of the true period — with the keyword repeated — is an equally correct solve). Cribs are not
+used (positions are over numbers, not plaintext). Like the other square types it effectively needs
+`-logprob`; it recovers reliably from ~250+ characters. The primitive is **side-generic** and
+**label-aware**: the standard fixed `1..5` labels can be replaced by a **keyed-label** permutation
+(`-labels` in the generator) — but since a label permutation only permutes which cell gets which
+number (leaving `V` unchanged), the labels are **not separately identifiable ciphertext-only**: they
+fold into the recovered square, so the (fixed-label) solver cracks a label-keyed cipher as the
+equivalent **relabelled square** (proven by the `nihilist_sub_kl` regression case). Generate test
+ciphers with `tools/nihilist_sub_gen.c` (`make nihilist_sub_gen`; args are a square keyword, an
+additive keyword, `carry`/`nc`/`m100`, and optional `-labels <rowkey> <colkey>`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -562,7 +613,9 @@ keyed squares), ADFGX (`SHAPE_ANNEAL`, `12x600000` per swept column count K) and
 (`SHAPE_ANNEAL`, `16x800000` per K — more, for the 36-cell square; both anneal at
 `inittemp 0.08`, `backtrack 0.30`) have tuned entries (the two/four-square budgets are
 larger than Playfair's for the 50-cell two-square state; the ADFGVX budgets are the largest,
-for the coupled square+columnar search).
+for the coupled square+columnar search), and the three Nihilist Substitution conventions
+(`SHAPE_ANNEAL`, `8x300000` per period, `inittemp 0.08`, `backtrack 0.30` — between Bifid and
+ADFGX, for the coupled square+additive search).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

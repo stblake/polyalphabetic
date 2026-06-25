@@ -62,6 +62,9 @@
 #define TRANSTILE      43   // sub-grid / tile (h x w) transposition: uniform tile cell permutation
 #define ADFGX          44   // ADFGX: 5x5 keyed-square fractionation + keyed columnar transposition
 #define ADFGVX         45   // ADFGVX: 6x6 (36-symbol) keyed-square fractionation + keyed columnar
+#define NIHILIST_SUB      46   // Nihilist Substitution (carry): periodic additive over a keyed Polybius square
+#define NIHILIST_SUB_NC   47   // Nihilist Substitution, no-carry (per-digit add mod 10)
+#define NIHILIST_SUB_M100 48   // Nihilist Substitution, add mod 100
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -82,6 +85,15 @@
 
 #define BIFID_MAX_SIDE 6        // largest Bifid square side supported (6x6, 36 cells)
 #define BIFID_MAX_GRID 36       // BIFID_MAX_SIDE * BIFID_MAX_SIDE
+
+#define NIHILIST_SUB_SIDE     5   // Nihilist Substitution Polybius square side (5x5, 25 letters, J->I)
+#define NIHILIST_SUB_GRID     25  // NIHILIST_SUB_SIDE^2
+#define NIHILIST_SUB_MAX_SIDE 6   // largest side the side-generic primitive/tests support
+#define NIHILIST_SUB_MAX_GRID 36  // NIHILIST_SUB_MAX_SIDE^2
+// Nihilist Substitution addition conventions (one per sub-type code; chosen by cipher_type).
+enum { NIH_ADD_CARRY = 0,    // integer add with carry (ACA standard): cipher 22..110
+       NIH_ADD_NOCARRY = 1,  // per-digit add mod 10, no carry: cipher 00..99 (2-digit)
+       NIH_ADD_MOD100 = 2 }; // 2-digit add mod 100: cipher 00..99
 
 #define TRIFID_SIDE 3           // Trifid cube side (the classic 3x3x3)
 #define TRIFID_CELLS 27         // Trifid cube size (TRIFID_SIDE^3) == the 27-symbol alphabet
@@ -629,6 +641,27 @@ void bifid_build_inverse(const int grid[], int pos[], int n);
 void bifid_encrypt(const int plain[], int len, const int grid[], int side, int period, int out[]);
 void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int period, int out[]);
 void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
+
+
+// Nihilist Substitution cipher (nihilist_sub.c). A periodic ADDITIVE cipher over a keyed
+// side x side Polybius square (a permutation of the active n = side*side alphabet, carried
+// in 0..n-1 indices like Bifid). Each plaintext letter -> its cell -> a 2-digit coordinate
+// number rowlbl[row]*10 + collbl[col] (fixed labels are 1..side); a periodic key (its own
+// cells -> numbers) is added per position under one of the NIH_ADD_* conventions, so the
+// ciphertext is a stream of decimal NUMBERS (not letters). The primitive is side-generic and
+// label-aware (rowlbl/collbl are a permutation of 1..side; nihilist_sub_fixed_labels fills the
+// standard 1..side). The solver always assumes fixed labels and recovers any keyed-label
+// cipher as the equivalent relabeled square. nihilist_sub_decrypt returns the count of
+// positions that decrypted to a legal coordinate (the square-independent validity signal the
+// solver rewards). key_cells[] are coordinate indices 0..n-1 (the additive's own cells).
+void nihilist_sub_fixed_labels(int rowlbl[], int collbl[], int side);
+int  nihilist_sub_num_valid(int num, int side);     // both digits of num in [1..side]?
+void nihilist_sub_encrypt(const int plain[], int n, const int grid[],
+        const int rowlbl[], const int collbl[], int side,
+        const int key_cells[], int period, int conv, int out_nums[]);
+int  nihilist_sub_decrypt(const int nums[], int n, const int grid[],
+        const int rowlbl[], const int collbl[], int side,
+        const int key_cells[], int period, int conv, int out_letters[]);
 
 
 // ADFGVX / ADFGX cipher (adfgvx.c). Fractionation over a keyed side x side Polybius

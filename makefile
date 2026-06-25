@@ -19,10 +19,10 @@ GRAPH=$(SRC)/polygraphic
 SUBST=$(SRC)/substitution
 
 # Cipher primitives (decrypt math, shared by the solvers and the unit tests).
-PRIMITIVES=$(CORE)/utils.c $(CORE)/parse.c $(CORE)/dict.c $(TRANS)/transpositions.c $(CORE)/perioc.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/gronsfeld.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c $(CORE)/optimal_cycleword.c $(GRAPH)/playfair.c $(GRAPH)/bifid.c $(GRAPH)/trifid.c $(GRAPH)/hill.c $(GRAPH)/phillips.c $(GRAPH)/twosquare.c $(GRAPH)/foursquare.c $(GRAPH)/adfgvx.c
+PRIMITIVES=$(CORE)/utils.c $(CORE)/parse.c $(CORE)/dict.c $(TRANS)/transpositions.c $(CORE)/perioc.c $(POLY)/quagmire.c $(POLY)/vigenere.c $(POLY)/gronsfeld.c $(POLY)/porta.c $(POLY)/beaufort.c $(POLY)/autokey.c $(CORE)/optimal_cycleword.c $(GRAPH)/playfair.c $(GRAPH)/bifid.c $(GRAPH)/trifid.c $(GRAPH)/hill.c $(GRAPH)/phillips.c $(GRAPH)/twosquare.c $(GRAPH)/foursquare.c $(GRAPH)/adfgvx.c $(GRAPH)/nihilist_sub.c
 
 # Cipher-agnostic core + per-cipher-type solver modules (split out of colossus.c).
-SOLVERS=$(CORE)/engine.c $(CORE)/scoring.c $(TRANS)/trans_common.c $(POLY)/polyalpha_solver.c $(TRANS)/transmatrix_solver.c $(TRANS)/permutation_solver.c $(TRANS)/columnar_solver.c $(TRANS)/columnar_track_solver.c $(TRANS)/route_chain_solver.c $(TRANS)/tile_solver.c $(TRANS)/railfence_solver.c $(TRANS)/route_solver.c $(TRANS)/amsco_solver.c $(TRANS)/myszkowski_solver.c $(TRANS)/redefence_solver.c $(TRANS)/cadenus_solver.c $(TRANS)/nihilist_solver.c $(TRANS)/swagman_solver.c $(TRANS)/grille_solver.c $(SUBST)/indep_solver.c $(SUBST)/homophonic_solver.c $(GRAPH)/playfair_solver.c $(GRAPH)/bifid_solver.c $(GRAPH)/trifid_solver.c $(GRAPH)/hill_solver.c $(GRAPH)/phillips_solver.c $(GRAPH)/twosquare_solver.c $(GRAPH)/foursquare_solver.c $(GRAPH)/adfgvx_solver.c
+SOLVERS=$(CORE)/engine.c $(CORE)/scoring.c $(TRANS)/trans_common.c $(POLY)/polyalpha_solver.c $(TRANS)/transmatrix_solver.c $(TRANS)/permutation_solver.c $(TRANS)/columnar_solver.c $(TRANS)/columnar_track_solver.c $(TRANS)/route_chain_solver.c $(TRANS)/tile_solver.c $(TRANS)/railfence_solver.c $(TRANS)/route_solver.c $(TRANS)/amsco_solver.c $(TRANS)/myszkowski_solver.c $(TRANS)/redefence_solver.c $(TRANS)/cadenus_solver.c $(TRANS)/nihilist_solver.c $(TRANS)/swagman_solver.c $(TRANS)/grille_solver.c $(SUBST)/indep_solver.c $(SUBST)/homophonic_solver.c $(GRAPH)/playfair_solver.c $(GRAPH)/bifid_solver.c $(GRAPH)/trifid_solver.c $(GRAPH)/hill_solver.c $(GRAPH)/phillips_solver.c $(GRAPH)/twosquare_solver.c $(GRAPH)/foursquare_solver.c $(GRAPH)/adfgvx_solver.c $(GRAPH)/nihilist_sub_solver.c
 
 # The full solver translation-unit set (everything but the test harnesses).
 SOLVER_SRC=$(PRIMITIVES) $(SOLVERS) $(CORE)/colossus.c
@@ -64,6 +64,8 @@ test:
 	./tests/test_foursquare
 	$(CC) $(INCLUDES) tests/test_adfgvx.c $(CORE)/utils.c $(GRAPH)/adfgvx.c $(GRAPH)/bifid.c $(TRANS)/transpositions.c -o tests/test_adfgvx
 	./tests/test_adfgvx
+	$(CC) $(INCLUDES) tests/test_nihilist_sub.c $(CORE)/utils.c $(GRAPH)/nihilist_sub.c -o tests/test_nihilist_sub
+	./tests/test_nihilist_sub
 
 # Slow optimizer regression suite (~30s): planted-cipher recovery through the
 # full solve_cipher hill climber at fixed seeds and budgets. Kept separate from
@@ -89,6 +91,8 @@ testopt:
 	./tests/test_foursquare_solver
 	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_adfgvx_solver.c $(SOLVER_SRC) -o tests/test_adfgvx_solver
 	./tests/test_adfgvx_solver
+	$(CC) $(INCLUDES) -DCOLOSSUS_NO_MAIN tests/test_nihilist_sub_solver.c $(SOLVER_SRC) -o tests/test_nihilist_sub_solver
+	./tests/test_nihilist_sub_solver
 
 # Everything.
 testall: test testopt
@@ -144,5 +148,11 @@ foursquare_gen:
 adfgvx_gen:
 	$(CC) $(INCLUDES) tools/adfgvx_gen.c $(GRAPH)/adfgvx.c $(GRAPH)/bifid.c $(TRANS)/transpositions.c $(CORE)/utils.c -o tools/adfgvx_gen
 
+# Standalone test-data generator for Nihilist Substitution ciphers. Reuses the real cipher
+# code (nihilist_sub.c + bifid.c keyed-square build/inverse + utils.c) so the generator and
+# the solver can never drift in convention.
+nihilist_sub_gen:
+	$(CC) $(INCLUDES) tools/nihilist_sub_gen.c $(GRAPH)/nihilist_sub.c $(GRAPH)/bifid.c $(CORE)/utils.c -o tools/nihilist_sub_gen
+
 clean:
-	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_held_karp tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tests/test_twosquare tests/test_twosquare_solver tests/test_foursquare tests/test_foursquare_solver tests/test_adfgvx tests/test_adfgvx_solver tools/homophonic_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen tools/twosquare_gen tools/foursquare_gen tools/adfgvx_gen
+	rm -f colossus tests/test_transpositions tests/test_ciphers tests/test_optimal_cycleword tests/test_held_karp tests/test_solver tests/test_playfair tests/test_playfair_solver tests/test_bifid tests/test_bifid_solver tests/test_trifid tests/test_trifid_solver tests/test_hill tests/test_hill_solver tests/test_gronsfeld tests/test_gronsfeld_solver tests/test_phillips tests/test_phillips_solver tests/test_twosquare tests/test_twosquare_solver tests/test_foursquare tests/test_foursquare_solver tests/test_adfgvx tests/test_adfgvx_solver tests/test_nihilist_sub tests/test_nihilist_sub_solver tools/homophonic_gen tools/nihilist_sub_gen tools/playfair_gen tools/bifid_gen tools/trifid_gen tools/hill_gen tools/gronsfeld_gen tools/phillips_gen tools/twosquare_gen tools/foursquare_gen tools/adfgvx_gen

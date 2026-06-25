@@ -158,6 +158,16 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "adfgvx") || str_eq(arg, "adfg")) return ADFGVX;
     if (str_eq(arg, "adfgx")) return ADFGX;
 
+    // Nihilist Substitution (periodic additive over a keyed Polybius square). Distinct from
+    // the Nihilist TRANSPOSITION above (alias "nihilist"). Test the convention variants before
+    // the bare name so the longer aliases win; the bare name is the ACA carry convention.
+    if (str_eq(arg, "nihilist-sub-nc") || str_eq(arg, "nihilistsubnc") ||
+        str_eq(arg, "nihilist-sub-nocarry") || str_eq(arg, "nihsub-nc")) return NIHILIST_SUB_NC;
+    if (str_eq(arg, "nihilist-sub-m100") || str_eq(arg, "nihilistsubm100") ||
+        str_eq(arg, "nihilist-sub-mod100") || str_eq(arg, "nihsub-m100")) return NIHILIST_SUB_M100;
+    if (str_eq(arg, "nihilist-sub") || str_eq(arg, "nihilistsub") ||
+        str_eq(arg, "nihilistsubstitution") || str_eq(arg, "nihsub")) return NIHILIST_SUB;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

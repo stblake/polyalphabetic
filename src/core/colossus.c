@@ -225,6 +225,7 @@
 #include "trifid_solver.h"
 #include "hill_solver.h"
 #include "adfgvx_solver.h"
+#include "nihilist_sub_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -722,6 +723,11 @@ int main(int argc, char **argv) {
         printf("\nAttacking an ADFGX cipher (5x5 keyed-square fractionation + keyed columnar transposition).\n\n");
     } else if (cfg.cipher_type == ADFGVX) {
         printf("\nAttacking an ADFGVX cipher (6x6 keyed-square fractionation + keyed columnar transposition).\n\n");
+    } else if (cfg.cipher_type == NIHILIST_SUB || cfg.cipher_type == NIHILIST_SUB_NC ||
+               cfg.cipher_type == NIHILIST_SUB_M100) {
+        printf("\nAttacking a Nihilist Substitution cipher (periodic additive over a keyed Polybius square, %s).\n\n",
+            cfg.cipher_type == NIHILIST_SUB_NC ? "no-carry mod 10" :
+            cfg.cipher_type == NIHILIST_SUB_M100 ? "add mod 100" : "integer add with carry");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -819,6 +825,15 @@ int main(int argc, char **argv) {
     if (cfg.cipher_type == ADFGVX && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet_adfgvx();
         printf("-type adfgvx: alphabet forced to %d symbols (A..Z + 0..9): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // Nihilist Substitution runs on the same 5x5 (25-letter, J->I) square as Playfair/Bifid.
+    // Force it here -- before load_ngrams -- unless the user already shrank the alphabet.
+    if ((cfg.cipher_type == NIHILIST_SUB || cfg.cipher_type == NIHILIST_SUB_NC ||
+         cfg.cipher_type == NIHILIST_SUB_M100) && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type nihilist-sub: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -1116,6 +1131,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == ADFGX || cfg->cipher_type == ADFGVX) {
         solve_adfgvx(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == NIHILIST_SUB || cfg->cipher_type == NIHILIST_SUB_NC ||
+        cfg->cipher_type == NIHILIST_SUB_M100) {
+        solve_nihilist_sub(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

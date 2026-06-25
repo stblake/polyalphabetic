@@ -430,6 +430,32 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 50, .s_n_hill_climbs = 700000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Nihilist Substitution (and its no-carry / mod-100 variants): a COUPLED search -- a keyed
+    // 5x5 square AND a periodic additive key, jointly annealed (one config per candidate
+    // period). The square anneal is Bifid's; the additive-key moves ride a square-independent
+    // "validity" reward (folded into score_adjust) that decouples the two halves, exactly like
+    // ADFGVX's IoC term. Same small-scale temperature (mean log-probability) and backtracking
+    // as the other square types; an 8x300000 budget per period (between Bifid and ADFGX -- the
+    // additive adds a coupled lane but the square is only 25 cells). All three conventions
+    // share the profile.
+    { .cipher_type = NIHILIST_SUB, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 300000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = NIHILIST_SUB_NC, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 300000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = NIHILIST_SUB_M100, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 300000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {
