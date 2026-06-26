@@ -50,6 +50,11 @@ src/polyalphabetic/   # Vigenère family — searched inside POLYALPHA_MODEL
                          #   addition running key. Basic = primer pre-pass (10^5 space) then a sigma
                          #   anneal; Periodic = anneal the KEYWORD directly (it derives sigma/primer/
                          #   offsets). Has its own CipherModels, not part of POLYALPHA_MODEL.
+  nicodemus.c nicodemus_solver.c/.h  # Nicodemus: periodic Vigenere/Variant/Beaufort substitution
+                         #   (one shift per column) composed with a per-block columnar transposition,
+                         #   both keyed by one keyword. Solver anneals the COLUMN ORDER and derives the
+                         #   per-column shifts by monogram fit (decoupling). Own CipherModel; sweeps
+                         #   (period P, block height H).
 
 src/transposition/    # pure-transposition solvers + shared helpers
   trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
@@ -98,6 +103,7 @@ tools/twosquare_gen.c        # standalone Two-Square test-data generator (make t
 tools/foursquare_gen.c       # standalone Four-Square test-data generator (make foursquare_gen)
 tools/nihilist_sub_gen.c     # standalone Nihilist Substitution generator (make nihilist_sub_gen)
 tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (make gromark_gen)
+tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -185,7 +191,14 @@ known-answer vectors pinned cell-for-cell — keyword `ENIGMA`, basic primer `23
 (`ENIGMA` → `AJRXEBKSYGFPVIDOUMHQWNCLTZ`), the chain-addition rule for P=5 and P=6, the periodic
 primer/offset derivation pinned (ranks `264351`, offsets `4 21 13 9 17 0`), encrypt/decrypt round-
 trips over random alphabets × primers × lengths for both variants, the identity-alphabet reduction
-to a pure chain-shift, and periodic-with-zero-offsets == basic).
+to a pure chain-shift, and periodic-with-zero-offsets == basic), and
+`tests/test_nicodemus.c` (the Nicodemus primitives: a HAND-COMPUTED known-answer vector pinning all
+three substitution conventions at once on the same plaintext/keyword — `ATTACKATDAWN`, keyword `KEY`,
+H=2 → VIG `XGKKRIXAKKBL` / VARIANT `PYQQVMPSQQFP` / BEAU `LCKKFOLIKKVL` — `nicodemus_key_from_keyword`
+(shifts + stable-argsort order incl. repeated keyword letters), encrypt/decrypt round-trips over
+random orders/shifts × lengths × P × block heights — incl. ragged final blocks, H=1 and the
+single-block degenerate — for all three variants, and agreement of the per-column substitution with
+`vigenere_decrypt`/`beaufort_decrypt` fed the same shift as a length-1 cycleword).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -225,20 +238,26 @@ recovered as the relabelled square), and
 non-registry type; a basic-Gromark primer pre-pass hit-rate (the true primer in the top-K vs length,
 over several keyword/primer pairs); a basic capability floor + length cliff (blind, the true primer
 recovered end-to-end at ~120/150/200 chars); and a Periodic Gromark blind solve with the period
-swept, the reported period asserted == the true one).
+swept, the reported period asserted == the true one), and
+`tests/test_nicodemus_solver.c` (Nicodemus: registry validation for all three codes plus a
+non-registry type; a per-variant capability floor (~300 chars, P/H pinned); a length cliff
+(recovery from ~120 chars); a multi-keyword sweep (mean/worst); and two blind solves — P swept
+with H pinned (the reported P asserted == the true one) and H swept with P pinned — validating each
+sweep axis. Also the basis the `SearchDefaults` schedule was tuned against).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-51 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+54 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
 Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), the Nihilist
 Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solved as a
-relabelled square), and a Gromark (`gromark_decl`, blind) + Periodic Gromark
-(`gromark_periodic_decl`, blind, period swept)) that each
+relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
+(`gromark_periodic_decl`, blind, period swept), and the three Nicodemus variants
+(`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -249,9 +268,10 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 24-case fast tier in ~50s (use while iterating),
-`--slow` the 25 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+`--slow` the 28 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
-~10s ADFGX and the four ~6–8s Nihilist Substitution solves), no flag runs both.
+~10s ADFGX, the four ~6–8s Nihilist Substitution solves, and the three ~1s Nicodemus
+solves), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -279,7 +299,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `transcol-l`/`coltrack`/`41`, `transroutecol`/`routecol`/`42`, `transtile`/`tile`/`43`,
 `adfgx`/`44`, `adfgvx`/`adfg`/`45`,
 `nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`,
-`gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`
+`gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`,
+`nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -644,6 +665,37 @@ fully-wrong key, so naive joint annealing of (σ, primer) never accepts a primer
   Generate test ciphers with `tools/gromark_gen.c` (`make gromark_gen`; args are a plaintext, a
   keyword, and a `<primer-digits>` for basic or the literal `periodic` for periodic).
 
+The **Nicodemus** family (`nicodemus`/`51`, `nicodemus-variant`/`52`, `nicodemus-beaufort`/`53`;
+`solve_nicodemus()`, `NICODEMUS_MODEL`, `SHAPE_ANNEAL`) is the ACA **substitution + transposition**
+composite — the first such type besides ADFGVX, and the most plausibly K4-relevant (a masking
+construction). A single **keyword** of length P drives two stages over blocks of **H rows × P
+columns** (row-major fill, final block ragged; H is the ACA-standard 5 but swept here): (1) each
+grid **column** is enciphered by its keyword letter — three ACA substitution conventions are
+distinct `-type` codes sharing one primitive (`nicodemus.c`) + solver, `nicodemus` (Vigenère,
+`C=P+k`), `nicodemus-variant` (`C=P−k`) and `nicodemus-beaufort` (`C=k−P`, reciprocal); (2) the
+block's columns are read off top-to-bottom in the keyword's **alphabetical rank order** (a per-block
+columnar transposition, the same incomplete-grid rule as `decrypt_columnar` but applied per H·P
+block — its `K>len` guard would misfire on a final block narrower than P). Full 26-letter alphabet
+(no J-merge); cribs are not used (the per-block transposition scrambles plaintext positions).
+**The key to making the composite tractable** is the same decoupling the default `-optimalcycle`
+path uses for the polyalphabetic ciphers: the annealed state is the **COLUMN ORDER alone** (a
+permutation of `0..P-1` in `key[0..P-1]`, perturbed with the columnar `perm_move`/`perm_seed`), and
+the P per-column **shifts are DERIVED deterministically** for each candidate order — after
+de-transposing, grid-column `g = i % P` is a Caesar sample, and the shift maximising its monogram
+fit against `g_monograms` is chosen (specialising `derive_optimal_cycleword`). Because every column
+is fit to English *monograms* regardless of order, the **n-gram (quadgram) score drives the order**
+search — cross-column digraphs only form at the true order — so it effectively needs `-logprob`.
+Solving this general (order, shifts) form also cracks the ACA cipher (true key = the special case
+`order == argsort(shifts)`); the recovered plaintext is what's checked. Note Vigenère and Variant
+are **not separately identifiable** (a free derived shift absorbs the sign), so either solver cracks
+a shift-substitution Nicodemus; only Beaufort (a reflection) is distinct. The period P **and** block
+height H are **swept** — one engine config per `(P, H)` pair (`-period`/`-blockheight` pin them,
+`-mincols`/`-maxcols`/`-maxblockheight` bound the sweep) — IoC period estimation is useless through
+a transposition. It recovers reliably from ~120+ letters (P/H known) — see
+`tests/test_nicodemus_solver.c`, which prints the length cliff and tunes the schedule. Generate test
+ciphers with `tools/nicodemus_gen.c` (`make nicodemus_gen`; args are a plaintext, a keyword, a
+`vig`/`variant`/`beau` substitution, and an optional block height).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -672,7 +724,10 @@ for the coupled square+columnar search), the three Nihilist Substitution convent
 ADFGX, for the coupled square+additive search), Gromark (`SHAPE_ANNEAL`, `3x120000` per top-K
 primer config — a lean per-config 26-letter substitution anneal, since the primer pre-pass and the
 provisional-σ warm start do most of the work) and Periodic Gromark (`SHAPE_ANNEAL`, `4x160000` per
-swept period — the keyword anneal over a ~28-bit key; both at `inittemp 0.08`, `backtrack 0.30`).
+swept period — the keyword anneal over a ~28-bit key; both at `inittemp 0.08`, `backtrack 0.30`),
+and the three Nicodemus codes (`SHAPE_ANNEAL`, `16x20000` per swept `(P, H)` pair, `inittemp 0.08`,
+`backtrack 0.30` — many short restarts, since the climbed state is just a short column-order
+permutation, so restarts are the robustness lever, not climbs).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

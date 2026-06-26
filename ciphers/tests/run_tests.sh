@@ -129,6 +129,12 @@ slow | nihilist_sub_kl    | nihilist-sub      | nihilist_sub_kl.txt    | -logpro
 # key is one keyword, annealed directly (blind, period swept).
 slow | gromark_decl          | gromark          | gromark_decl.txt          | -logprob -nprimers 24 -nrestarts 2 -nhillclimbs 80000
 slow | gromark_periodic_decl | gromark-periodic | gromark_periodic_decl.txt | -logprob -maxperiod 7 -nrestarts 3 -nhillclimbs 120000
+# --- Nicodemus (periodic Vigenere/Variant/Beaufort substitution + per-block columnar; the solver
+# anneals the column order and derives the per-column shifts). P and block height pinned to keep
+# the case fast -- the (P,H) sweep is exercised by tests/test_nicodemus_solver.c. ---
+slow | nicodemus_decl          | nicodemus          | nicodemus_decl.txt          | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
+slow | nicodemus_variant_decl  | nicodemus-variant  | nicodemus_variant_decl.txt  | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
+slow | nicodemus_beaufort_decl | nicodemus-beaufort | nicodemus_beaufort_decl.txt | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

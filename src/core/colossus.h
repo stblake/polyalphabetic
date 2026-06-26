@@ -67,6 +67,9 @@
 #define NIHILIST_SUB_M100 48   // Nihilist Substitution, add mod 100
 #define GROMARK           49   // Gromark: keyed-alphabet substitution + chain-addition running key
 #define GROMARK_PERIODIC  50   // Periodic Gromark: + per-group offset (period = keyword length)
+#define NICODEMUS          51  // Nicodemus: periodic Vigenere + per-block columnar (one keyword)
+#define NICODEMUS_VARIANT  52  // Nicodemus, Variant substitution (C = P - k)
+#define NICODEMUS_BEAUFORT 53  // Nicodemus, Beaufort substitution (C = k - P, reciprocal)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -294,6 +297,11 @@ typedef struct {
     bool crib_anchored;  // -cribanchored: pin crib-implied positions in the transposition search
     float weight_word;   // optional dictionary word-fraction reward (default 0 => unused)
     int tile_h, tile_w;  // sub-grid tile shape for TRANSTILE (default 2x2)
+
+    // Nicodemus block height (rows per block). block_height > 0 pins a single height;
+    // 0 => sweep [2 .. max_block_height]. max_block_height 0 => default top of the sweep.
+    int block_height;
+    int max_block_height;
 
     // Tokenized I/O. delimiter == 0 keeps the historical per-character / 0..25 letter
     // decode (bit-identical to ord()); a non-zero delimiter (default ',' for

@@ -658,6 +658,31 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 16, .s_n_hill_climbs = 160000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Nicodemus (+ Variant / Beaufort): a per-(P,H) COLUMN-ORDER anneal (the P shifts are
+    // derived deterministically per order, so the climbed state is just a short permutation of
+    // length P). One config per (period P, block height H), so a lean per-config budget of MANY
+    // short restarts is repeated across the sweep -- the small permutation climbs converge fast
+    // and the landscape is rugged, so restarts (independent draws) are the robustness lever, not
+    // climbs (tuned in tests/test_nicodemus_solver.c). Same small-scale temperature (mean
+    // log-probability) as the other -logprob substitution types.
+    { .cipher_type = NICODEMUS, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 16, .a_n_hill_climbs = 20000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 16, .s_n_hill_climbs = 20000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = NICODEMUS_VARIANT, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 16, .a_n_hill_climbs = 20000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 16, .s_n_hill_climbs = 20000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = NICODEMUS_BEAUFORT, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 16, .a_n_hill_climbs = 20000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 16, .s_n_hill_climbs = 20000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

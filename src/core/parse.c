@@ -174,6 +174,14 @@ int parse_cipher_type(const char *arg) {
         str_eq(arg, "gromark-p") || str_eq(arg, "pgromark")) return GROMARK_PERIODIC;
     if (str_eq(arg, "gromark") || str_eq(arg, "gromark-basic") || str_eq(arg, "gm")) return GROMARK;
 
+    // Nicodemus (periodic substitution + per-block columnar). The substitution variant is
+    // part of the type: bare = Vigenere, -v = Variant, -b = Beaufort.
+    if (str_eq(arg, "nicodemus-variant") || str_eq(arg, "nicodemus-v") || str_eq(arg, "nicov"))
+        return NICODEMUS_VARIANT;
+    if (str_eq(arg, "nicodemus-beaufort") || str_eq(arg, "nicodemus-b") || str_eq(arg, "nicob"))
+        return NICODEMUS_BEAUFORT;
+    if (str_eq(arg, "nicodemus") || str_eq(arg, "nico")) return NICODEMUS;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

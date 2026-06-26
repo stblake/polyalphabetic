@@ -227,6 +227,7 @@
 #include "adfgvx_solver.h"
 #include "nihilist_sub_solver.h"
 #include "gromark_solver.h"
+#include "nicodemus_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -303,6 +304,8 @@ void init_config(ColossusConfig *cfg) {
 
     cfg->min_cols = 2;
     cfg->max_cols = 30;
+    cfg->block_height = 0;       // Nicodemus: 0 => sweep block heights
+    cfg->max_block_height = 0;   // 0 => default top of the sweep
     cfg->read_direction = COL_READ_TB; // canonical only; bottom-to-top is opt-in
     cfg->read_row_direction = ROW_READ_LR; // canonical only; right-to-left is opt-in (transcol-L/chain)
     cfg->crib_anchored = false;        // -cribanchored: structural crib constraint, off by default
@@ -602,6 +605,12 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-maxcols") == 0) {
             cfg.max_cols = atoi(argv[++i]);
             printf("-maxcols %d\n", cfg.max_cols);
+        } else if (strcmp(argv[i], "-blockheight") == 0) {
+            cfg.block_height = atoi(argv[++i]);   // Nicodemus: pin the rows-per-block
+            printf("-blockheight %d\n", cfg.block_height);
+        } else if (strcmp(argv[i], "-maxblockheight") == 0) {
+            cfg.max_block_height = atoi(argv[++i]); // Nicodemus: top of the block-height sweep
+            printf("-maxblockheight %d\n", cfg.max_block_height);
         } else if (strcmp(argv[i], "-readdir") == 0) {
             char *dir_arg = argv[++i];
             // Flexible parsing of the columnar read direction.
@@ -765,6 +774,11 @@ int main(int argc, char **argv) {
         printf("\nAttacking a %s Gromark cipher (keyed-alphabet substitution + chain-addition running key%s).\n\n",
             cfg.cipher_type == GROMARK_PERIODIC ? "Periodic" : "basic",
             cfg.cipher_type == GROMARK_PERIODIC ? " + per-group offset" : "");
+    } else if (cfg.cipher_type == NICODEMUS || cfg.cipher_type == NICODEMUS_VARIANT ||
+               cfg.cipher_type == NICODEMUS_BEAUFORT) {
+        printf("\nAttacking a Nicodemus cipher (periodic %s substitution + per-block columnar transposition).\n\n",
+            cfg.cipher_type == NICODEMUS_VARIANT ? "Variant"
+            : cfg.cipher_type == NICODEMUS_BEAUFORT ? "Beaufort" : "Vigenere");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1181,6 +1195,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == GROMARK || cfg->cipher_type == GROMARK_PERIODIC) {
         solve_gromark(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == NICODEMUS || cfg->cipher_type == NICODEMUS_VARIANT ||
+        cfg->cipher_type == NICODEMUS_BEAUFORT) {
+        solve_nicodemus(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }
