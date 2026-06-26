@@ -286,6 +286,12 @@ void init_config(ColossusConfig *cfg) {
     cfg->min_temp = 0.001;
     cfg->cooling_rate = 0.0;   // 0 => derive the geometric schedule over n_hill_climbs
 
+    cfg->n_particles = 30;     // particle swarm (SHAPE_PSO, -method pso)
+    cfg->inertia = 0.7;
+    cfg->cognitive = 1.5;
+    cfg->social = 1.5;
+    cfg->refine_steps = 50;
+
     cfg->transperoffset_present = false;
     cfg->trans_offset = 0;
     cfg->trans_period = 1;
@@ -347,6 +353,9 @@ int main(int argc, char **argv) {
             else if (strcasecmp(m, "sa") == 0 || strcasecmp(m, "anneal") == 0 ||
                      strcasecmp(m, "simanneal") == 0 || strcasecmp(m, "simulatedannealing") == 0)
                 cfg.method = METHOD_ANNEAL;
+            else if (strcasecmp(m, "pso") == 0 || strcasecmp(m, "particle") == 0 ||
+                     strcasecmp(m, "particleswarm") == 0 || strcasecmp(m, "swarm") == 0)
+                cfg.method = METHOD_PSO;
         }
     }
     apply_cipher_defaults(&cfg, true);
@@ -466,11 +475,30 @@ int main(int argc, char **argv) {
             } else if (strcasecmp(m, "sa") == 0 || strcasecmp(m, "anneal") == 0 ||
                        strcasecmp(m, "simanneal") == 0 || strcasecmp(m, "simulatedannealing") == 0) {
                 cfg.method = METHOD_ANNEAL;
+            } else if (strcasecmp(m, "pso") == 0 || strcasecmp(m, "particle") == 0 ||
+                       strcasecmp(m, "particleswarm") == 0 || strcasecmp(m, "swarm") == 0) {
+                cfg.method = METHOD_PSO;
             } else {
-                printf("Unknown -method '%s' (expected shotgun | sa | anneal | simanneal | simulatedannealing).\n", m);
+                printf("Unknown -method '%s' (expected shotgun | sa | anneal | simanneal | simulatedannealing | pso).\n", m);
                 return 1;
             }
-            printf("-method %s\n", cfg.method == METHOD_SHOTGUN ? "shotgun" : "simulated-annealing");
+            printf("-method %s\n", cfg.method == METHOD_SHOTGUN ? "shotgun" :
+                                   cfg.method == METHOD_PSO ? "particle-swarm" : "simulated-annealing");
+        } else if (strcmp(argv[i], "-nparticles") == 0 || strcmp(argv[i], "-npart") == 0) {
+            cfg.n_particles = atoi(argv[++i]);
+            printf("-nparticles %d\n", cfg.n_particles);
+        } else if (strcmp(argv[i], "-inertia") == 0) {
+            cfg.inertia = atof(argv[++i]);
+            printf("-inertia %.6f\n", cfg.inertia);
+        } else if (strcmp(argv[i], "-cognitive") == 0 || strcmp(argv[i], "-cog") == 0) {
+            cfg.cognitive = atof(argv[++i]);
+            printf("-cognitive %.6f\n", cfg.cognitive);
+        } else if (strcmp(argv[i], "-social") == 0 || strcmp(argv[i], "-soc") == 0) {
+            cfg.social = atof(argv[++i]);
+            printf("-social %.6f\n", cfg.social);
+        } else if (strcmp(argv[i], "-refine") == 0 || strcmp(argv[i], "-psorefine") == 0) {
+            cfg.refine_steps = atoi(argv[++i]);
+            printf("-refine %d\n", cfg.refine_steps);
         } else if (strcmp(argv[i], "-inittemp") == 0 || strcmp(argv[i], "-initialtemp") == 0 ||
                    strcmp(argv[i], "-inittemperature") == 0 || strcmp(argv[i], "-initialtemperature") == 0) {
             cfg.init_temp = atof(argv[++i]);

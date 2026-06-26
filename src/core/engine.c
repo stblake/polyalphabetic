@@ -133,6 +133,186 @@ static double run_one_config_incremental(const CipherModel *m, SolverCtx *ctx,
     return best_score;
 }
 
+// =====================================================================
+//  Particle swarm optimisation (SHAPE_PSO / -method pso)
+// =====================================================================
+//
+// A third optimisation method, sibling to the shotgun / anneal climbers above,
+// and -- like them -- COMPLETELY CIPHER-AGNOSTIC: it drives every cipher type
+// through nothing but the model's existing hooks (seed / perturb / copy_state /
+// decrypt) plus a generic Hamming distance over the raw SolverState lanes. It
+// never interprets the representation, so a permutation stays a permutation, a
+// keyword stays a keyword, a homophone map stays a map.
+//
+// Discrete swarm: a particle's "position" IS a SolverState. The two PSO
+// primitives are built from the model's own neighbour operator:
+//   * "pull toward an attractor (pbest/gbest)" = apply perturb() moves and keep
+//     only those that do not increase the Hamming distance to the attractor
+//     (pull_toward). Every kept move is the model's own move, so validity is
+//     automatic.
+//   * "inertia / momentum" = a few plain random perturb() moves.
+// Each particle then does a short greedy local refinement (memetic PSO) before
+// its decrypt+score updates the personal best (pbest) and the global best
+// (gbest). The swarm reuses the engine budget knobs: n_particles particles run
+// for n_hill_climbs iterations, relaunched n_restarts times.
+
+#define MAX_PSO_PARTICLES 128   // swarm-size cap (n_particles is clamped to this)
+#define PSO_PULL_ATTEMPTS  12   // tries to find a distance-reducing move per pull step
+
+// Generic Hamming distance between two states: count of differing entries over the
+// active lanes the engine already tracks (the fixed 26-entry keyword lanes, the
+// cycleword to its length, the key lane to key_len). For polyalphabetic types the
+// cycleword length is the config's `period`; non-polyalpha types never touch the
+// cycleword lane (it stays zero across all particles) so comparing it is a no-op.
+// Dead lanes are seeded identically and never moved by perturb(), so they
+// contribute nothing -- this only needs to be a monotone proxy, not an exact metric.
+static int state_distance(const SolverConfig *cfg_c,
+                          const SolverState *a, const SolverState *b) {
+    int d = 0;
+    for (int i = 0; i < ALPHABET_SIZE; i++) {
+        if (a->pt_keyword[i] != b->pt_keyword[i]) d++;
+        if (a->ct_keyword[i] != b->ct_keyword[i]) d++;
+    }
+    int cw = cfg_c->period;
+    if (cw < 0) cw = 0;
+    if (cw > MAX_CYCLEWORD_LEN) cw = MAX_CYCLEWORD_LEN;
+    for (int i = 0; i < cw; i++)
+        if (a->cycleword[i] != b->cycleword[i]) d++;
+    int kl = a->key_len < b->key_len ? a->key_len : b->key_len;
+    for (int i = 0; i < kl; i++)
+        if (a->key[i] != b->key[i]) d++;
+    return d;
+}
+
+// Move `st` up to n_moves of the model's own perturb() moves toward `target`,
+// keeping only strictly-closer moves (a few attempts each); stops early once it
+// can find no closer neighbour. `trial` is caller-provided scratch. Pulls never
+// decrypt -- they only compare Hamming distances -- so they are cheap.
+static void pull_toward(const CipherModel *m, const SolverCtx *ctx,
+                        const SolverConfig *cfg_c, SolverState *st,
+                        const SolverState *target, int n_moves, SolverState *trial) {
+    bool force_primary = false;
+    int dist = state_distance(cfg_c, st, target);
+    for (int mv = 0; mv < n_moves && dist > 0; mv++) {
+        bool accepted = false;
+        for (int attempt = 0; attempt < PSO_PULL_ATTEMPTS; attempt++) {
+            m->copy_state(cfg_c, st, trial);
+            m->perturb(ctx, cfg_c, trial, &force_primary);
+            int nd = state_distance(cfg_c, trial, target);
+            if (nd < dist) {
+                m->copy_state(cfg_c, trial, st);
+                dist = nd;
+                accepted = true;
+                break;
+            }
+        }
+        if (!accepted) break;   // stuck: no closer neighbour found, stop pulling
+    }
+}
+
+// Run one outer config under particle-swarm optimisation. Same contract as
+// run_one_config: writes the best state + its decryption to the out params and
+// returns the best score. Always uses the full decrypt+score path (the optional
+// incremental fast-path hooks are not used here).
+static double run_one_config_pso(const CipherModel *m, SolverCtx *ctx,
+                                 const SolverConfig *cfg_c,
+                                 SolverState *out_best, int *out_decrypted) {
+
+    static SolverState particle[MAX_PSO_PARTICLES];
+    static SolverState pbest[MAX_PSO_PARTICLES];
+    static double      pbest_score[MAX_PSO_PARTICLES];
+    static SolverState gbest, trial, loc;
+    static int decrypted[MAX_CIPHER_LENGTH], gbest_dec[MAX_CIPHER_LENGTH];
+    ColossusConfig *cfg = ctx->cfg;
+
+    int np = cfg->n_particles;
+    if (np < 1) np = 1;
+    if (np > MAX_PSO_PARTICLES) np = MAX_PSO_PARTICLES;
+    int refine = cfg->refine_steps < 0 ? 0 : cfg->refine_steps;
+
+    double gbest_score = 0.0;
+    bool have_gbest = false;
+    bool force_primary = false;
+    double adjust;
+
+    EngineStats st;
+    memset(&st, 0, sizeof st);
+    st.start_time = clock();
+
+    for (int rs = 0; rs < cfg->n_restarts; rs++) {
+        st.n_restarts = rs;
+
+        // (Re)seed the swarm and initialise personal / global bests.
+        for (int p = 0; p < np; p++) {
+            m->seed(ctx, cfg_c, &particle[p]);
+            adjust = 0.0;
+            m->decrypt(ctx, cfg_c, &particle[p], decrypted, &adjust);
+            double sc = engine_score(ctx, decrypted, adjust);
+            m->copy_state(cfg_c, &particle[p], &pbest[p]);
+            pbest_score[p] = sc;
+            if (!have_gbest || sc > gbest_score) {
+                gbest_score = sc; have_gbest = true;
+                m->copy_state(cfg_c, &particle[p], &gbest);
+                vec_copy(decrypted, gbest_dec, ctx->cipher_len);
+            }
+        }
+
+        for (int it = 0; it < cfg->n_hill_climbs; it++) {
+            st.n_iterations++;
+            for (int p = 0; p < np; p++) {
+                // 1. inertia: a little random momentum (exploration).
+                int n_inertia = (int)(cfg->inertia * (1.0 + frand()) + 0.5);
+                for (int k = 0; k < n_inertia; k++)
+                    m->perturb(ctx, cfg_c, &particle[p], &force_primary);
+
+                // 2. cognitive pull toward this particle's personal best.
+                int n_cog = (int)(cfg->cognitive * frand() *
+                                  state_distance(cfg_c, &particle[p], &pbest[p]) + 0.5);
+                if (n_cog > 0)
+                    pull_toward(m, ctx, cfg_c, &particle[p], &pbest[p], n_cog, &trial);
+
+                // 3. social pull toward the global best.
+                int n_soc = (int)(cfg->social * frand() *
+                                  state_distance(cfg_c, &particle[p], &gbest) + 0.5);
+                if (n_soc > 0)
+                    pull_toward(m, ctx, cfg_c, &particle[p], &gbest, n_soc, &trial);
+
+                // 4. memetic local refinement: a short greedy hill-climb.
+                adjust = 0.0;
+                m->decrypt(ctx, cfg_c, &particle[p], decrypted, &adjust);
+                double sc = engine_score(ctx, decrypted, adjust);
+                for (int k = 0; k < refine; k++) {
+                    m->copy_state(cfg_c, &particle[p], &loc);
+                    m->perturb(ctx, cfg_c, &loc, &force_primary);
+                    double adj2 = 0.0;
+                    m->decrypt(ctx, cfg_c, &loc, decrypted, &adj2);
+                    double ls = engine_score(ctx, decrypted, adj2);
+                    if (ls > sc) { m->copy_state(cfg_c, &loc, &particle[p]); sc = ls; }
+                }
+
+                // 5. update personal and global bests.
+                if (sc > pbest_score[p]) {
+                    m->copy_state(cfg_c, &particle[p], &pbest[p]);
+                    pbest_score[p] = sc;
+                    if (sc > gbest_score) {
+                        gbest_score = sc;
+                        m->copy_state(cfg_c, &particle[p], &gbest);
+                        adjust = 0.0;
+                        m->decrypt(ctx, cfg_c, &gbest, gbest_dec, &adjust);
+                        if (cfg->verbose && m->report_verbose)
+                            m->report_verbose(ctx, cfg_c, &gbest, gbest_score, gbest_dec, &st);
+                    }
+                }
+            }
+        }
+    }
+
+    m->copy_state(cfg_c, &gbest, out_best);
+    adjust = 0.0;
+    m->decrypt(ctx, cfg_c, &gbest, out_decrypted, &adjust);
+    return gbest_score;
+}
+
 // Hill-climb one outer config: shotgun restarts + per-iteration neighbour move,
 // with SHOTGUN slip / ANNEAL Metropolis acceptance and best-state tracking. Writes
 // the config's best state to *out_best and its decryption to out_decrypted, and
@@ -140,6 +320,10 @@ static double run_one_config_incremental(const CipherModel *m, SolverCtx *ctx,
 static double run_one_config(const CipherModel *m, SolverCtx *ctx,
                              const SolverConfig *cfg_c,
                              SolverState *out_best, int *out_decrypted) {
+
+    // Particle swarm (-method pso) is a fully separate, cipher-agnostic driver.
+    if (ctx->cfg->method == METHOD_PSO)
+        return run_one_config_pso(m, ctx, cfg_c, out_best, out_decrypted);
 
     // Models exposing the incremental hooks take the fast path; all others fall
     // through to the unchanged generic climber below.
@@ -486,8 +670,29 @@ bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {
     SearchShape shape = d->default_shape;
     if (cfg->method == METHOD_SHOTGUN) shape = SHAPE_SHOTGUN;
     else if (cfg->method == METHOD_ANNEAL) shape = SHAPE_ANNEAL;
+    else if (cfg->method == METHOD_PSO) shape = SHAPE_PSO;
 
-    if (shape == SHAPE_SHOTGUN) {
+    if (shape == SHAPE_PSO) {
+        // PSO reuses n_restarts (swarm relaunches) / n_hill_climbs (iterations) plus
+        // its own swarm knobs. p_n_particles == 0 => this type has no tuned PSO
+        // profile, so keep the init_config globals (mirrors a type with no entry).
+        if (d->p_n_particles > 0) {
+            cfg->n_restarts = d->p_n_restarts;
+            cfg->n_hill_climbs = d->p_n_hill_climbs;
+            cfg->n_particles = d->p_n_particles;
+            cfg->inertia = d->p_inertia;
+            cfg->cognitive = d->p_cognitive;
+            cfg->social = d->p_social;
+            cfg->refine_steps = d->p_refine_steps;
+            if (announce)
+                printf("-type defaults: pso schedule %dx%d swarm %d (inertia %.2f, cog %.2f, soc %.2f, refine %d)\n",
+                    d->p_n_restarts, d->p_n_hill_climbs, d->p_n_particles,
+                    d->p_inertia, d->p_cognitive, d->p_social, d->p_refine_steps);
+        } else if (announce) {
+            printf("-type defaults: pso (global schedule %dx%d swarm %d)\n",
+                cfg->n_restarts, cfg->n_hill_climbs, cfg->n_particles);
+        }
+    } else if (shape == SHAPE_SHOTGUN) {
         cfg->n_restarts = d->s_n_restarts;
         cfg->n_hill_climbs = d->s_n_hill_climbs;
         cfg->slip_probability = d->s_slip_probability;

@@ -157,6 +157,7 @@ enum { PHILLIPS_ROW, PHILLIPS_COL, PHILLIPS_ROWCOL };
 #define METHOD_DEFAULT 0       // per-model default (shotgun, or anneal for transposition)
 #define METHOD_SHOTGUN 1       // accept-worse with slip_probability
 #define METHOD_ANNEAL  2       // geometric-cooling Metropolis (simulated annealing)
+#define METHOD_PSO     3       // memetic particle swarm (discrete, cipher-agnostic)
 
 #define FREQUENCY_WEIGHTED_SELECTION 1
 #define DICTIONARY 1
@@ -263,6 +264,17 @@ typedef struct {
     double init_temp;    // starting temperature (-inittemp), default 0.10
     double min_temp;     // floor temperature for the derived schedule (-mintemp), default 0.001
     double cooling_rate; // per-iteration multiplier (-coolingrate); <= 0 => derive, default 0
+
+    // Particle swarm schedule (SHAPE_PSO only, via -method pso). The swarm runs
+    // n_particles particles for n_hill_climbs iterations, relaunched n_restarts
+    // times; each iteration pulls a particle toward its personal best (cognitive)
+    // and the global best (social) with random momentum (inertia), then refines it
+    // with refine_steps local hill-climb steps (memetic).
+    int    n_particles;  // swarm size (-nparticles), default 30
+    double inertia;      // momentum: random-perturb scale (-inertia), default 0.7
+    double cognitive;    // pull-toward-pbest scale (-cognitive), default 1.5
+    double social;       // pull-toward-gbest scale (-social), default 1.5
+    int    refine_steps; // per-particle local hill-climb steps (-refine), default 50
 
     // Transpositions.
     bool transperoffset_present;
@@ -372,7 +384,8 @@ typedef struct {
 typedef enum {
     SHAPE_SHOTGUN,        // accept-worse with slip_probability (polyalpha, transmatrix)
     SHAPE_ANNEAL,         // geometric-cooling Metropolis acceptance (columnar, permutation)
-    SHAPE_DETERMINISTIC   // shotgun + first-improvement break (Vig/Beau/Porta under -optimalcycle)
+    SHAPE_DETERMINISTIC,  // shotgun + first-improvement break (Vig/Beau/Porta under -optimalcycle)
+    SHAPE_PSO             // memetic particle swarm; engine-only, forced via -method pso
 } SearchShape;
 
 // Live engine counters, filled by the engine for the verbose-report hook.
@@ -498,6 +511,16 @@ typedef struct {
     int    s_n_hill_climbs;
     double s_slip_probability;
     double s_backtracking_probability;
+    // Particle-swarm profile (used when the effective shape is SHAPE_PSO, i.e.
+    // -method pso). p_n_particles == 0 means "no PSO profile for this type" -- the
+    // global init_config defaults are kept, exactly like a type with no entry.
+    int    p_n_restarts;
+    int    p_n_hill_climbs;
+    int    p_n_particles;
+    double p_inertia;
+    double p_cognitive;
+    double p_social;
+    int    p_refine_steps;
 } SearchDefaults;
 
 

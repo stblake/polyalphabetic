@@ -648,8 +648,9 @@ fully-wrong key, so naive joint annealing of (σ, primer) never accepts a primer
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
 needs its own schedule. A small compiled-in registry (`g_search_defaults[]` in
-`colossus.c`) keyed by cipher type carries a tuned profile for **both** search shapes
-(anneal + shotgun). `main()` pre-scans `-type`/`-method` and overlays the matching profile
+`colossus.c`) keyed by cipher type carries a tuned profile for **all three** search shapes
+(anneal `a_*` + shotgun `s_*` + particle-swarm `p_*`; a zero `p_n_particles` means "no PSO
+profile, keep globals"). `main()` pre-scans `-type`/`-method` and overlays the matching profile
 *before* the main arg loop, so precedence is **globals < registry < explicit CLI flags**.
 Types with no entry keep the global defaults bit-for-bit (so the regression suite is
 unaffected) — currently Playfair (`SHAPE_ANNEAL`, `6x400000`, `inittemp 0.08`,
@@ -675,6 +676,30 @@ swept period — the keyword anneal over a ~28-bit key; both at `inittemp 0.08`,
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
+
+**Optimisation methods (`-method`, cipher-agnostic).** The engine offers three search
+methods, all driven by the *same* `run_solver`/`run_one_config` skeleton over the model
+hooks — none of them know anything about the cipher representation:
+- **Shotgun hill-climbing** (`SHAPE_SHOTGUN`): greedy uphill + accept-worse with a flat
+  `slip_probability`; escape is external (many restarts + backtracking).
+- **Simulated annealing** (`SHAPE_ANNEAL`): greedy uphill + Metropolis accept-worse
+  `exp((Δ)/temp)` on a geometric `inittemp → mintemp` schedule. Each model declares its
+  default shape; `-method shotgun|anneal` overrides it on every type.
+- **Particle swarm** (`SHAPE_PSO`, `-method pso`): a memetic, **discrete swap-sequence**
+  PSO in `run_one_config_pso` (`engine.c`). It is *only* reachable via `-method pso` (never
+  a model's default), and is **completely cipher-agnostic**: a particle's position *is* a
+  `SolverState`; "pull toward an attractor (pbest/gbest)" applies the model's own
+  `perturb()` moves and keeps only those that reduce a generic Hamming distance over the raw
+  state lanes (`state_distance`) — so a permutation stays a permutation, a keyword a keyword,
+  a homophone map a map, with no per-cipher code. "Inertia" is a few random `perturb()`
+  moves; each particle then does a short greedy local refinement (`-refine`) before its
+  decrypt+score updates pbest/gbest. It reuses the budget knobs (`-nhillclimbs` = swarm
+  iterations, `-nrestarts` = swarm relaunches) plus `-nparticles`/`-inertia`/`-cognitive`/
+  `-social`/`-refine` (defaults in `init_config`; per-type `p_*` registry overrides). Works
+  on **every** cipher type (verified end-to-end on polyalpha, square/period, and
+  transposition lanes); whether it beats annealing on a given type is a tuning/benchmark
+  question, not assumed. Because everything is gated behind `-method pso`, the
+  `METHOD_DEFAULT` path — and the whole regression suite — stays byte-for-byte identical.
 
 ## How the solver works (mental model)
 
