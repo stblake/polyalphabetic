@@ -42,6 +42,12 @@ tests/test_portax
 tests/test_portax_solver
 tools/bazeries_gen
 tools/portax_gen
+tests/test_progkey
+tests/test_progkey_solver
+tools/progkey_gen
+tests/test_slidefair
+tests/test_slidefair_solver
+tools/slidefair_gen
 *.o
 __pycache__/
 *.pyc

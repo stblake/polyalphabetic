@@ -188,6 +188,14 @@ int parse_cipher_type(const char *arg) {
     // Portax (periodic digraphic Porta; vertical pairs over a Porta slide).
     if (str_eq(arg, "portax") || str_eq(arg, "ptx")) return PORTAX;
 
+    // Slidefair (periodic digraphic Vigenere/Variant/Beaufort). Check the variant/beaufort
+    // aliases before the bare slidefair so a substring never shadows them.
+    if (str_eq(arg, "slidefair-var") || str_eq(arg, "slidefair-v") || str_eq(arg, "sfv"))
+        return SLIDEFAIR_VAR;
+    if (str_eq(arg, "slidefair-beau") || str_eq(arg, "slidefair-b") || str_eq(arg, "sfb"))
+        return SLIDEFAIR_BEAU;
+    if (str_eq(arg, "slidefair") || str_eq(arg, "sf")) return SLIDEFAIR;
+
     // Progressive Key (periodic base cipher + per-group constant key drift). Check the
     // variant/beaufort aliases before the bare progkey so a substring never shadows them.
     if (str_eq(arg, "progkey-var") || str_eq(arg, "progkey-v") || str_eq(arg, "pkv"))

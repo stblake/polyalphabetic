@@ -143,6 +143,13 @@ slow | bazeries_decl | bazeries | bazeries_decl.txt | -logprob -period 5 -nresta
 # P per-column Porta shifts; period pinned here to keep the case fast -- the blind P sweep is
 # exercised by tests/test_portax_solver.c. Rides the reward-only quadgram table (no -logprob).
 fast | portax_decl | portax | portax_decl.txt | -period 7 -nrestarts 8 -nhillclimbs 20000 -inittemp 0.08 -backtrackprob 0.3
+# Slidefair (periodic digraphic Vigenere/Variant/Beaufort; rectangle over a shift slide). The climbed
+# state is the P per-column key letters (monogram-warm-started); period pinned here to keep the cases
+# fast -- the blind P sweep is exercised by tests/test_slidefair_solver.c. Rides the reward-only
+# quadgram table (no -logprob); recovers cleanly from very short text.
+fast | slidefair_decl      | slidefair      | slidefair_decl.txt      | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
+fast | slidefair_var_decl  | slidefair-var  | slidefair_var_decl.txt  | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
+fast | slidefair_beau_decl | slidefair-beau | slidefair_beau_decl.txt | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
 # Progressive Key (periodic Vigenere/Variant/Beaufort + per-group constant key drift). The climbed
 # state is the P per-column base shifts (monogram-warm-started); period + progression pinned here to
 # keep the cases fast -- the blind P and blind progression sweeps are exercised by

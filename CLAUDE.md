@@ -102,6 +102,14 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   matters). Self-reciprocal. Solver anneals the P per-column shifts (cycleword
                                      #   lane, one config per swept period P); a per-column monogram-fit warm start
                                      #   decouples each column (every pair uses ONE column key). Cribs supported.
+  slidefair.c slidefair_solver.c/.h  # Slidefair: PERIODIC DIGRAPHIC Vigenere/Variant/Beaufort. Plaintext taken in
+                                     #   consecutive DIGRAPHS; digraph i is keyed by keyword[i mod P] over a two-row
+                                     #   slide (top = standard alphabet, bottom = a shift alphabet). The pair forms
+                                     #   diagonal corners of a rectangle; substitutes are the other two corners (top
+                                     #   first), vertical pair -> the pair one column right (decrypt: left). Self-
+                                     #   reciprocal but for that vertical step. 3 type codes share the solver. Solver
+                                     #   anneals the P per-column key letters (0..25); a per-column monogram-fit warm
+                                     #   start decouples each column (every digraph uses ONE column key). Cribs supported.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -124,6 +132,7 @@ tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (
 tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_gen)
 tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
 tools/portax_gen.c           # standalone Portax generator (make portax_gen)
+tools/slidefair_gen.c        # standalone Slidefair generator (make slidefair_gen)
 tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
@@ -239,7 +248,14 @@ with the per-group drift A,B,C — encrypt/decrypt round-trips over random keywo
 period for all three bases (incl. ragged final group, P=1, over-long key), agreement of
 `progkey_encrypt` with an INDEPENDENT two-pass reference built from `vigenere_*`/`beaufort_*` (keyword
 pass then a full-length drift-key pass), the prog=0 degeneration to a plain periodic Vigenère/Variant,
-and `progkey_deprogress` inverting the drift pass exactly).
+and `progkey_deprogress` inverting the drift pass exactly), and
+`tests/test_slidefair.c` (the Slidefair primitives: the ACA worked-example known-answer vectors — the
+mini pairs for all three variants (key B: `ca→ZD/BB/BZ`, `de→EF/FC/XY`, `de` being the vertical/same-
+column case), plus the full Vigenère example keyword `DIGRAPH`,
+`THESLIDEFAIRCANBEUSEDWITHVIGENEREVARIANTORBEAUFORT → EWKMCRNUAFCXTJ…` — each encrypt pair asserted to
+invert under decrypt over every (key, variant, p1, p2), decrypt(encrypt) == identity over random keys ×
+lengths × all three variants (incl. odd length → lone final letter passthrough), per-column independence,
+and edge cases — `P=1`, `P>ndigraphs`, a single digraph).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -301,13 +317,18 @@ length cliff; a multi-keyword sweep (mean/worst); a BLIND period solve (P swept,
 reported P asserted == the true one); a BLIND progression solve (prog swept, P pinned, the reported
 prog asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. Rides
 the reward-only quadgram table — no `-logprob` needed; recovers cleanly from very short text since the
-de-progressed columns are a pure Vigenère).
+de-progressed columns are a pure Vigenère), and
+`tests/test_slidefair_solver.c` (Slidefair: registry validation for all three codes plus a non-registry
+type; a capability floor across all three variants (period pinned); a length cliff (recovers ~100% from
+~50 chars — the per-column monogram warm start makes it strong); a multi-keyword sweep (mean/worst); a
+BLIND period solve (P swept, the reported P asserted == the true one); and a per-scheme pass under
+`-method` anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-59 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+62 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -317,8 +338,9 @@ relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
 (`gromark_periodic_decl`, blind, period swept), the three Nicodemus variants
 (`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned), a
 Bazeries cipher (`bazeries_decl`, digit count pinned), a Portax cipher (`portax_decl`, period
-pinned), and the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
-`progkey_beau_decl`, period + progression pinned)) that each
+pinned), the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
+`progkey_beau_decl`, period + progression pinned), and the three Slidefair bases (`slidefair_decl` /
+`slidefair_var_decl` / `slidefair_beau_decl`, period pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -328,8 +350,8 @@ bit-identical refactor keeps every score at 100% and any behavioural regression 
 immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 28-case fast tier in ~50s (use while iterating; incl. the three
-~0s Progressive Key bases),
+`./run_tests.sh --fast` runs the 31-case fast tier in ~50s (use while iterating; incl. the three
+~0s Progressive Key bases and the three ~0s Slidefair bases),
 `--slow` the 29 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
@@ -364,7 +386,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`,
 `nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`,
 `bazeries`/`baz`/`54`, `portax`/`ptx`/`55`,
-`progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`
+`progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`,
+`slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -850,6 +873,38 @@ Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|ps
 Generate test ciphers with `tools/progkey_gen.c` (`make progkey_gen`; args are a plaintext, a keyword,
 a progression index, and `vig`/`var`/`beau`).
 
+The **Slidefair** family (`slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`;
+`solve_slidefair()`, `SLIDEFAIR_MODEL`, `SHAPE_ANNEAL`) is the ACA **periodic DIGRAPHIC
+Vigenère/Variant/Beaufort** — the digraphic sibling of Portax (rectangle-over-a-slide applied to the
+three shift tableaus instead of the Porta tableau). The plaintext is taken in consecutive **digraphs**;
+a **keyword** fixes the period **P**, and digraph i (cipher letters 2i, 2i+1) is keyed by `keyword[i%P]`
+over a **two-row slide**: the TOP row is the standard alphabet (`top[col]=col`), the BOTTOM row a shift
+alphabet — Vigenère `bottom[col]=(col+k)`, Variant `(col−k)`, Beaufort `(k−col)` (the three are distinct
+`-type` codes sharing one primitive `slidefair.c` + solver, branched on `cfg->cipher_type`). A plaintext
+pair (p1 in the top row at column p1, p2 in the bottom row at the column where `bottom==p2`) forms diagonal
+corners of a 2-row rectangle; the **substitutes are the other two corners, the TOP one first**
+(`c1=top[col2]`, `c2=bottom[col1]`); a **vertical pair** (both in one column) maps to the vertical pair
+**one column to the right** (decrypt: to the **left** — the only place decrypt ≠ encrypt, the rectangle
+case being self-reciprocal). Full 26-letter alphabet (**no J→I merge**); the primitive is hand-verified
+cell-for-cell against the ACA worked examples (key B: `ca→ZD/BB/BZ`, `de→EF/FC/XY`; keyword `DIGRAPH`,
+`the slidefair can be used... → EWKMCRNUAFCXTJ...`). **The whole key is P key letters (0..25), a 26^P
+space**, carried in the cycleword lane, with **one engine config per swept period P** (IoC period
+estimation is useless through the digraphic pairing, so P is swept and the n-gram score picks it — a wrong
+P decrypts to gibberish; `-period` pins one, `-mincols`/`-maxcols` bound the sweep). **The key to
+efficiency is per-column independence:** a digraph is enciphered ENTIRELY by its column key, so every
+digraph in column c decrypts from `key[c]` alone — the **per-column monogram-fit key** (the analog of
+`derive_optimal_cycleword`) **warm-starts the seed**, and the n-gram (quadgram) score then drives the
+anneal (cross-column digraphs only form at the true keys) and corrects any column the monogram fit mis-set.
+No `score_adjust` is needed (every cycleword is a valid bijective decrypt). Vigenère and Variant are
+**not separately identifiable** (a free per-column key absorbs the sign), so either solver cracks a
+shift-Slidefair; only Beaufort is distinct. Like the rest of the Vigenère/Porta family it **rides the
+reward-only quadgram table (no `-logprob`)** and **recovers cleanly from very short text** (~100% from
+~50 letters — the 26-value per-column monogram fit is a strong warm start; see
+`tests/test_slidefair_solver.c`). **Cribs are supported** (the cipher is positional: `decrypted[i]` is
+plaintext position i). Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso`
+all run on it. Generate test ciphers with `tools/slidefair_gen.c` (`make slidefair_gen`; args are a
+plaintext, a keyword, and `vig`/`var`/`beau`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -890,7 +945,10 @@ since the monogram-fit warm start gets most of the short per-column-shift state 
 the anneal/n-gram pass only corrects a few columns), and the three Progressive Key bases
 (`SHAPE_ANNEAL`, `3x2500` per swept `(P, prog)` pair, `inittemp 0.08`, `backtrack 0.30` — a very
 lean per-config budget, since MANY `(P, prog)` configs are enumerated and the per-column monogram
-warm start already gets most columns right, so a few short restarts suffice).
+warm start already gets most columns right, so a few short restarts suffice), and the three Slidefair
+bases (`SHAPE_ANNEAL`, `8x10000` per swept period P, `inittemp 0.08`, `backtrack 0.30` — a very lean
+budget, since the 26-value per-column monogram warm start recovers ~100% from ~50 letters, so a few
+short restarts and modest climbs suffice).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

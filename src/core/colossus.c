@@ -231,6 +231,7 @@
 #include "bazeries_solver.h"
 #include "portax_solver.h"
 #include "progkey_solver.h"
+#include "slidefair_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -798,6 +799,11 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Progressive Key cipher (periodic %s + per-group constant key drift).\n\n",
             cfg.cipher_type == PROGKEY_VAR ? "Variant"
             : cfg.cipher_type == PROGKEY_BEAU ? "Beaufort" : "Vigenere");
+    } else if (cfg.cipher_type == SLIDEFAIR || cfg.cipher_type == SLIDEFAIR_VAR ||
+               cfg.cipher_type == SLIDEFAIR_BEAU) {
+        printf("\nAttacking a Slidefair cipher (periodic digraphic %s: rectangle over a shift slide).\n\n",
+            cfg.cipher_type == SLIDEFAIR_VAR ? "Variant"
+            : cfg.cipher_type == SLIDEFAIR_BEAU ? "Beaufort" : "Vigenere");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1248,6 +1254,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     if (cfg->cipher_type == PROGKEY || cfg->cipher_type == PROGKEY_VAR ||
         cfg->cipher_type == PROGKEY_BEAU) {
         solve_progkey(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == SLIDEFAIR || cfg->cipher_type == SLIDEFAIR_VAR ||
+        cfg->cipher_type == SLIDEFAIR_BEAU) {
+        solve_slidefair(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

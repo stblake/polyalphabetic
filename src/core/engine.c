@@ -733,6 +733,31 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 3, .s_n_hill_climbs = 2500,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+
+    // Slidefair (periodic digraphic Vigenere / Variant / Beaufort). Like Portax, the climbed state
+    // is the P per-column key letters (0..25) that the monogram-fit warm start gets mostly right on
+    // seed; the anneal/n-gram pass only corrects a few columns -- recovery is so strong (100% from
+    // ~50 letters in tests/test_slidefair_solver.c) that a LEAN budget suffices: a few short restarts
+    // (the robustness lever) x modest climbs, one config per swept period P. Reward-only quadgram
+    // table (Vigenere family, no -logprob), same small-scale temperature. Tuned in that test.
+    { .cipher_type = SLIDEFAIR, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 10000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 8, .s_n_hill_climbs = 10000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = SLIDEFAIR_VAR, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 10000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 8, .s_n_hill_climbs = 10000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = SLIDEFAIR_BEAU, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 10000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 8, .s_n_hill_climbs = 10000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

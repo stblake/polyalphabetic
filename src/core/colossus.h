@@ -75,6 +75,9 @@
 #define PROGKEY            56  // Progressive Key (Vigenere base): periodic key + per-group constant drift
 #define PROGKEY_VAR        57  // Progressive Key, Variant base (C = P - k per pass)
 #define PROGKEY_BEAU       58  // Progressive Key, Beaufort base (C = k - P per pass, reciprocal)
+#define SLIDEFAIR          59  // Slidefair: periodic digraphic Vigenere (rectangle over a shift slide)
+#define SLIDEFAIR_VAR      60  // Slidefair, Variant slide (bottom = col - k)
+#define SLIDEFAIR_BEAU     61  // Slidefair, Beaufort slide (bottom = k - col)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
