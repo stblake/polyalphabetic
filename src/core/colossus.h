@@ -70,6 +70,7 @@
 #define NICODEMUS          51  // Nicodemus: periodic Vigenere + per-block columnar (one keyword)
 #define NICODEMUS_VARIANT  52  // Nicodemus, Variant substitution (C = P - k)
 #define NICODEMUS_BEAUFORT 53  // Nicodemus, Beaufort substitution (C = k - P, reciprocal)
+#define BAZERIES           54  // Bazeries: keyed-square substitution + digit-grouped reversal (one number key)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 

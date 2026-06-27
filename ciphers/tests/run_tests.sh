@@ -135,6 +135,10 @@ slow | gromark_periodic_decl | gromark-periodic | gromark_periodic_decl.txt | -l
 slow | nicodemus_decl          | nicodemus          | nicodemus_decl.txt          | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
 slow | nicodemus_variant_decl  | nicodemus-variant  | nicodemus_variant_decl.txt  | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
 slow | nicodemus_beaufort_decl | nicodemus-beaufort | nicodemus_beaufort_decl.txt | -logprob -period 6 -blockheight 5 -nrestarts 4 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
+# Bazeries (keyed-square substitution + digit-grouped reversal, one number key). The climbed
+# state is the key number's digits; the digit count D is pinned here to keep the case fast --
+# the blind D sweep is exercised by tests/test_bazeries_solver.c. ---
+slow | bazeries_decl | bazeries | bazeries_decl.txt | -logprob -period 5 -nrestarts 12 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

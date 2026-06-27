@@ -182,6 +182,9 @@ int parse_cipher_type(const char *arg) {
         return NICODEMUS_BEAUFORT;
     if (str_eq(arg, "nicodemus") || str_eq(arg, "nico")) return NICODEMUS;
 
+    // Bazeries (keyed-square substitution + digit-grouped reversal, one number key).
+    if (str_eq(arg, "bazeries") || str_eq(arg, "baz")) return BAZERIES;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

@@ -228,6 +228,7 @@
 #include "nihilist_sub_solver.h"
 #include "gromark_solver.h"
 #include "nicodemus_solver.h"
+#include "bazeries_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -779,6 +780,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Nicodemus cipher (periodic %s substitution + per-block columnar transposition).\n\n",
             cfg.cipher_type == NICODEMUS_VARIANT ? "Variant"
             : cfg.cipher_type == NICODEMUS_BEAUFORT ? "Beaufort" : "Vigenere");
+    } else if (cfg.cipher_type == BAZERIES) {
+        printf("\nAttacking a Bazeries cipher (keyed-square substitution + digit-grouped reversal, one number key).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -885,6 +888,14 @@ int main(int argc, char **argv) {
          cfg.cipher_type == NIHILIST_SUB_M100) && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type nihilist-sub: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // Bazeries runs on the same 5x5 (25-letter, J->I) square as Playfair/Bifid. Force it
+    // here -- before load_ngrams -- unless the user already shrank the alphabet.
+    if (cfg.cipher_type == BAZERIES && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type bazeries: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -1202,6 +1213,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     if (cfg->cipher_type == NICODEMUS || cfg->cipher_type == NICODEMUS_VARIANT ||
         cfg->cipher_type == NICODEMUS_BEAUFORT) {
         solve_nicodemus(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == BAZERIES) {
+        solve_bazeries(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

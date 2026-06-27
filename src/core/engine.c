@@ -683,6 +683,18 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 16, .s_n_hill_climbs = 20000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+
+    // Bazeries: the climbed state is the key NUMBER's decimal digits (one config per digit
+    // count D in 1..6), a tiny rugged < 10^6 keyspace, so RESTARTS are the robustness lever
+    // (each restart reseeds a fresh random number; the square-quality monogram reward then
+    // pulls the climb toward the right square). Many restarts x modest climbs, per D config.
+    // Tuned in tests/test_bazeries_solver.c.
+    { .cipher_type = BAZERIES, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 40, .a_n_hill_climbs = 20000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 40, .s_n_hill_climbs = 20000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

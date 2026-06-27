@@ -84,6 +84,11 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
   nihilist_sub.c nihilist_sub_solver.c/.h # Nihilist Substitution: periodic ADDITIVE over a keyed Polybius square
                                      #   (numeric ciphertext); 3 add conventions (carry/no-carry/mod-100), one solver;
                                      #   square-independent validity reward decouples the additive key (à la ADFGVX)
+  bazeries.c bazeries_solver.c/.h    # Bazeries: keyed-square substitution (N spelled out -> ct square,
+                                     #   fixed column-major pt square) composed with a digit-grouped reversal
+                                     #   transposition, both keyed by ONE number N < 10^6. Solver CLIMBS N's
+                                     #   decimal digits (one config per digit count D); a transposition-independent
+                                     #   monogram reward decouples the square from the digits. Reuses bifid square build.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -104,6 +109,7 @@ tools/foursquare_gen.c       # standalone Four-Square test-data generator (make 
 tools/nihilist_sub_gen.c     # standalone Nihilist Substitution generator (make nihilist_sub_gen)
 tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (make gromark_gen)
 tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_gen)
+tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -198,7 +204,14 @@ H=2 → VIG `XGKKRIXAKKBL` / VARIANT `PYQQVMPSQQFP` / BEAU `LCKKFOLIKKVL` — `n
 (shifts + stable-argsort order incl. repeated keyword letters), encrypt/decrypt round-trips over
 random orders/shifts × lengths × P × block heights — incl. ragged final blocks, H=1 and the
 single-block degenerate — for all three variants, and agreement of the per-column substitution with
-`vigenere_decrypt`/`beaufort_decrypt` fed the same shift as a length-1 cycleword).
+`vigenere_decrypt`/`beaufort_decrypt` fed the same shift as a length-1 cycleword), and
+`tests/test_bazeries.c` (the Bazeries primitives: the ACA worked-example known-answer vector pinning
+the whole convention end to end — plaintext `simplesubstitution…`, `N=3752` → ciphertext `ACYYU…GQGCI`,
+the spelled-out keyed square `THREOUSANDVFIYWBCGKLMPQXZ`, the digits `3,7,5,2`, and the intermediate
+reversed-groups string `missbuselp…` — the column-major pt vs row-major ct substitution convention
+(identity-square check + fsub/invsub mutual inverse), the transposition asserted an involution over
+random digit patterns, encrypt/decrypt round-trips over random N × lengths (incl. the 150–250 band),
+and edge cases — a 0 digit, a 1-digit key, ragged final groups).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -243,21 +256,27 @@ swept, the reported period asserted == the true one), and
 non-registry type; a per-variant capability floor (~300 chars, P/H pinned); a length cliff
 (recovery from ~120 chars); a multi-keyword sweep (mean/worst); and two blind solves — P swept
 with H pinned (the reported P asserted == the true one) and H swept with P pinned — validating each
-sweep axis. Also the basis the `SearchDefaults` schedule was tuned against).
+sweep axis. Also the basis the `SearchDefaults` schedule was tuned against), and
+`tests/test_bazeries_solver.c` (Bazeries: registry validation plus a non-registry type; a capability
+floor over the ACA 150–250-letter band across several numbers (D pinned); a length cliff; a
+multi-number sweep (mean/worst); a BLIND digit-count solve — D swept, the reported digit count
+asserted == the true one; and a per-scheme pass running the same cipher under `-method`
+anneal / shotgun / pso, reporting recovery + time for each (the data the schedule is tuned against)).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-54 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+55 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
 Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), the Nihilist
 Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solved as a
 relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
-(`gromark_periodic_decl`, blind, period swept), and the three Nicodemus variants
-(`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned)) that each
+(`gromark_periodic_decl`, blind, period swept), the three Nicodemus variants
+(`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned), and a
+Bazeries cipher (`bazeries_decl`, digit count pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -268,10 +287,10 @@ immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 24-case fast tier in ~50s (use while iterating),
-`--slow` the 28 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+`--slow` the 29 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
-~10s ADFGX, the four ~6–8s Nihilist Substitution solves, and the three ~1s Nicodemus
-solves), no flag runs both.
+~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
+solves, and the ~1s Bazeries solve), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -300,7 +319,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `adfgx`/`44`, `adfgvx`/`adfg`/`45`,
 `nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`,
 `gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`,
-`nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`
+`nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`,
+`bazeries`/`baz`/`54`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -696,6 +716,34 @@ a transposition. It recovers reliably from ~120+ letters (P/H known) — see
 ciphers with `tools/nicodemus_gen.c` (`make nicodemus_gen`; args are a plaintext, a keyword, a
 `vig`/`variant`/`beau` substitution, and an optional block height).
 
+The **Bazeries** type (`bazeries`/`baz`/`54`; `solve_bazeries()`, `BAZERIES_MODEL`, `SHAPE_ANNEAL`)
+is the ACA **"simple substitution plus transposition"** cipher, keyed by ONE number **N < 1,000,000**
+that drives BOTH stages over the 25-letter J→I alphabet (so `init_alphabet("J")` is forced before
+`load_ngrams`, same as Playfair/Bifid). (1) **Transposition:** the plaintext is split into groups
+whose sizes cycle through N's **decimal digits** (e.g. `3752` → 3,7,5,2,3,7,5,2,…) and each group is
+**reversed** (an involution; a 0 digit is a zero-length group, skipped). (2) **Substitution:** a fixed
+monoalphabetic map between two 5×5 squares — the PLAINTEXT square is the alphabet entered **column-major**
+(fixed), the CIPHERTEXT square is **N spelled out** ("three thousand seven hundred fifty two") used as
+the keyword of a keyed square entered **row-major** (so the square build reuses `bifid_grid_from_keyword`
+/ `bifid_build_inverse`; the substitution is `pt_square[(r,c)] → ct_square[(r,c)]`). Encryption =
+transpose then substitute; decryption = inverse-substitute then un-transpose. The primitive
+(`bazeries.c`) is hand-verified cell-for-cell against the ACA worked example (`N=3752`, the square
+`THREOUSANDVFIYW…`, ciphertext `ACYYU…`). **Because Colossus is optimisation-only and the whole key is
+a number, the solver CLIMBS N's decimal digits rather than adding an exhaustive driver:** the state is
+the D digit values (`key[0..D-1]`, leading digit 1..9), with **one engine config per digit count D in
+1..6** (`-period` pins a single D; the union over D covers all of 1..999999). The rugged < 10⁶ digit
+landscape is made navigable by a **square-quality monogram reward folded into `score_adjust`** (the
+analog of ADFGVX's structural IoC term): the inverse substitution is monoalphabetic and a transposition
+leaves the monogram multiset unchanged, so the decrypt's **mean English-monogram fit depends only on the
+square (which N is spelled), not on the transposition digits** — rewarding it pulls the digit climb toward
+the correct square, after which the n-gram score discriminates the exact number. Like the other square
+types it effectively needs `-logprob`; **RESTARTS are the robustness lever** (each reseeds a fresh random
+number), and it recovers reliably blind from ~150+ letters. Because the model also implements
+`seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it (calibrated in
+`tests/test_bazeries_solver.c`). Cribs are not used (the transposition scrambles plaintext positions).
+Generate test ciphers with `tools/bazeries_gen.c` (`make bazeries_gen`; args are a plaintext and the
+number N).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -727,7 +775,10 @@ provisional-σ warm start do most of the work) and Periodic Gromark (`SHAPE_ANNE
 swept period — the keyword anneal over a ~28-bit key; both at `inittemp 0.08`, `backtrack 0.30`),
 and the three Nicodemus codes (`SHAPE_ANNEAL`, `16x20000` per swept `(P, H)` pair, `inittemp 0.08`,
 `backtrack 0.30` — many short restarts, since the climbed state is just a short column-order
-permutation, so restarts are the robustness lever, not climbs).
+permutation, so restarts are the robustness lever, not climbs), and Bazeries
+(`SHAPE_ANNEAL`, `40x20000` per swept digit count D, `inittemp 0.08`, `backtrack 0.30` — many
+restarts, since the climbed state is a short digit string over a rugged < 10⁶ keyspace, so each
+restart reseeds a fresh random number and restarts carry the robustness).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.
