@@ -71,6 +71,7 @@
 #define NICODEMUS_VARIANT  52  // Nicodemus, Variant substitution (C = P - k)
 #define NICODEMUS_BEAUFORT 53  // Nicodemus, Beaufort substitution (C = k - P, reciprocal)
 #define BAZERIES           54  // Bazeries: keyed-square substitution + digit-grouped reversal (one number key)
+#define PORTAX             55  // Portax: periodic digraphic Porta (vertical pairs over a Porta slide)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -543,6 +544,10 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 // Porta cipher
 void porta_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 void porta_encrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+
+// Portax cipher (periodic digraphic Porta). cycleword_indices are key letters 0..25.
+void portax_encrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
+void portax_decrypt(int output[], int input[], int len, int cycleword_indices[], int cycleword_len);
 
 // Vigenere cipher
 void vigenere_decrypt(int decrypted[], int cipher_indices[], int cipher_len,

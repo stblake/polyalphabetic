@@ -185,6 +185,9 @@ int parse_cipher_type(const char *arg) {
     // Bazeries (keyed-square substitution + digit-grouped reversal, one number key).
     if (str_eq(arg, "bazeries") || str_eq(arg, "baz")) return BAZERIES;
 
+    // Portax (periodic digraphic Porta; vertical pairs over a Porta slide).
+    if (str_eq(arg, "portax") || str_eq(arg, "ptx")) return PORTAX;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

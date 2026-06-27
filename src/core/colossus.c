@@ -229,6 +229,7 @@
 #include "gromark_solver.h"
 #include "nicodemus_solver.h"
 #include "bazeries_solver.h"
+#include "portax_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -782,6 +783,8 @@ int main(int argc, char **argv) {
             : cfg.cipher_type == NICODEMUS_BEAUFORT ? "Beaufort" : "Vigenere");
     } else if (cfg.cipher_type == BAZERIES) {
         printf("\nAttacking a Bazeries cipher (keyed-square substitution + digit-grouped reversal, one number key).\n\n");
+    } else if (cfg.cipher_type == PORTAX) {
+        printf("\nAttacking a Portax cipher (periodic digraphic Porta: vertical pairs over a Porta slide).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1219,6 +1222,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == BAZERIES) {
         solve_bazeries(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == PORTAX) {
+        solve_portax(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

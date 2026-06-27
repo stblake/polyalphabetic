@@ -695,6 +695,18 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 40, .s_n_hill_climbs = 20000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+
+    // Portax: the climbed state is the P per-column Porta shifts (0..12), a tiny per-period key
+    // that the monogram-fit warm start gets mostly right on seed; the anneal/n-gram pass only
+    // needs to correct a few columns. One config per swept period P, so MANY short restarts (the
+    // robustness lever) x modest climbs. Same small-scale (mean log-probability) temperature as
+    // the other Porta-family / -logprob types. Tuned in tests/test_portax_solver.c.
+    { .cipher_type = PORTAX, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 12, .a_n_hill_climbs = 20000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 12, .s_n_hill_climbs = 20000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

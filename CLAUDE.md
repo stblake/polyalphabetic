@@ -89,6 +89,12 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   transposition, both keyed by ONE number N < 10^6. Solver CLIMBS N's
                                      #   decimal digits (one config per digit count D); a transposition-independent
                                      #   monogram reward decouples the square from the digits. Reuses bifid square build.
+  portax.c   portax_solver.c/.h      # Portax: PERIODIC DIGRAPHIC Porta. Plaintext written row-major at width P
+                                     #   (= keyword len), rows taken in PAIRS; the vertical pair in column c is
+                                     #   enciphered as a unit over a Porta slide by keyword[c] (only its shift key/2
+                                     #   matters). Self-reciprocal. Solver anneals the P per-column shifts (cycleword
+                                     #   lane, one config per swept period P); a per-column monogram-fit warm start
+                                     #   decouples each column (every pair uses ONE column key). Cribs supported.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -110,6 +116,7 @@ tools/nihilist_sub_gen.c     # standalone Nihilist Substitution generator (make 
 tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (make gromark_gen)
 tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_gen)
 tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
+tools/portax_gen.c           # standalone Portax generator (make portax_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -211,7 +218,13 @@ the spelled-out keyed square `THREOUSANDVFIYWBCGKLMPQXZ`, the digits `3,7,5,2`, 
 reversed-groups string `missbuselp…` — the column-major pt vs row-major ct substitution convention
 (identity-square check + fsub/invsub mutual inverse), the transposition asserted an involution over
 random digit patterns, encrypt/decrypt round-trips over random N × lengths (incl. the 150–250 band),
-and edge cases — a 0 digit, a 1-digit key, ragged final groups).
+and edge cases — a 0 digit, a 1-digit key, ragged final groups), and
+`tests/test_portax.c` (the Portax primitives: the ACA worked-example known-answer vectors — the
+mini pairs `IN→JL`/`NO→UA`/`NA→DB` (key U/V) and `TA→NM`/`BG→QH` (key E, same-column), plus the
+keyword `EASY` end-to-end `THEEARLYBIRDGETSTHEWORMX → NIJAMPBGQCWKHQJEUIKYMPAT` — the pair operation
+asserted an involution over all (s, a, b), the self-reciprocal `decrypt == encrypt` and the
+shift/key-letter forms agreeing over random keys × lengths, per-column independence, a ragged final
+block (lone top letters pass through), and edge cases — `P=1`, `P>len`, a single pair).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -261,13 +274,18 @@ sweep axis. Also the basis the `SearchDefaults` schedule was tuned against), and
 floor over the ACA 150–250-letter band across several numbers (D pinned); a length cliff; a
 multi-number sweep (mean/worst); a BLIND digit-count solve — D swept, the reported digit count
 asserted == the true one; and a per-scheme pass running the same cipher under `-method`
-anneal / shotgun / pso, reporting recovery + time for each (the data the schedule is tuned against)).
+anneal / shotgun / pso, reporting recovery + time for each (the data the schedule is tuned against)), and
+`tests/test_portax_solver.c` (Portax: registry validation plus a non-registry type; a capability floor
+across several keywords (period pinned); a length cliff (recovers cleanly from ~70 chars — the
+per-column monogram warm start makes it strong); a multi-keyword sweep (mean/worst); a BLIND period
+solve — P swept, the reported period asserted == the true one; and a per-scheme pass under `-method`
+anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-55 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+56 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -275,8 +293,9 @@ Four-Square cipher, an ADFGX cipher (`adfgx_decl`, K pinned), the Nihilist
 Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solved as a
 relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
 (`gromark_periodic_decl`, blind, period swept), the three Nicodemus variants
-(`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned), and a
-Bazeries cipher (`bazeries_decl`, digit count pinned)) that each
+(`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned), a
+Bazeries cipher (`bazeries_decl`, digit count pinned), and a Portax cipher (`portax_decl`, period
+pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -286,7 +305,7 @@ bit-identical refactor keeps every score at 100% and any behavioural regression 
 immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 24-case fast tier in ~50s (use while iterating),
+`./run_tests.sh --fast` runs the 25-case fast tier in ~50s (use while iterating),
 `--slow` the 29 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
@@ -320,7 +339,7 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`,
 `gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`,
 `nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`,
-`bazeries`/`baz`/`54`
+`bazeries`/`baz`/`54`, `portax`/`ptx`/`55`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -744,6 +763,33 @@ number), and it recovers reliably blind from ~150+ letters. Because the model al
 Generate test ciphers with `tools/bazeries_gen.c` (`make bazeries_gen`; args are a plaintext and the
 number N).
 
+The **Portax** type (`portax`/`ptx`/`55`; `solve_portax()`, `PORTAX_MODEL`, `SHAPE_ANNEAL`) is the
+ACA **periodic DIGRAPHIC Porta** — the first digraphic polyalphabetic type. The plaintext is written
+row-major into a block of width **P** (= keyword length) and rows are taken in **vertical PAIRS**
+(rows 2g, 2g+1); the pair in column c — (top, bottom) — is enciphered **as a unit** over a Porta
+**slide** keyed by `keyword[c]`, of which **only the Porta shift `key/2` (0..12) matters** (key
+letters U and V are identical). The slide has a fixed upper half (A–M), a sliding upper half (N–Z),
+and a two-row lower alphabet (even/odd letters); the two plaintext letters are diagonally opposite
+corners of a rectangle whose **other two corners are the substitutes** (with a same-vertical-line
+special case taking the other two cells of that line). The map is **self-reciprocal** (decrypt ==
+encrypt). Full 26-letter alphabet (**no J→I merge**); the primitive (`portax.c`) is hand-verified
+cell-for-cell against the ACA worked examples (key U/V `IN→JL`/`NO→UA`/`NA→DB`; key E `TA→NM`/`BG→QH`;
+keyword `EASY`, `the early bird gets the worm` → `NIJAMPBGQCWKHQJEUIKYMPAT`). **The whole key is P
+Porta shifts (a 13^P space)**, carried in the cycleword lane, with **one engine config per swept
+period P** (IoC period estimation is useless through the digraphic pairing, so P is swept and the
+n-gram score picks it — the rigid pairing makes a wrong P decrypt to gibberish; `-period` pins one,
+`-mincols`/`-maxcols` bound the sweep). **The key to efficiency is per-column independence:** a
+vertical pair is enciphered ENTIRELY by its column key, so every pair in column c decrypts from
+`shift[c]` alone — the **per-column monogram-fit shift** (the analog of `derive_optimal_cycleword`)
+**warm-starts the seed**, and the n-gram (quadgram) score then drives the anneal (cross-column
+digraphs only form at the true shifts) and corrects any column the monogram fit mis-set. No
+`score_adjust` is needed (every cycleword is a valid bijective decrypt). Unlike the other square /
+fractionation types it **rides the reward-only quadgram table (no `-logprob`)**, like the rest of the
+Porta family, and recovers reliably from **~70+ letters** (see `tests/test_portax_solver.c`). **Cribs
+are supported** (the cipher is positional: `decrypted[i]` is plaintext position i). Because the model
+implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it. Generate test ciphers
+with `tools/portax_gen.c` (`make portax_gen`; args are a plaintext and a keyword).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -778,7 +824,10 @@ and the three Nicodemus codes (`SHAPE_ANNEAL`, `16x20000` per swept `(P, H)` pai
 permutation, so restarts are the robustness lever, not climbs), and Bazeries
 (`SHAPE_ANNEAL`, `40x20000` per swept digit count D, `inittemp 0.08`, `backtrack 0.30` — many
 restarts, since the climbed state is a short digit string over a rugged < 10⁶ keyspace, so each
-restart reseeds a fresh random number and restarts carry the robustness).
+restart reseeds a fresh random number and restarts carry the robustness), and Portax
+(`SHAPE_ANNEAL`, `12x20000` per swept period P, `inittemp 0.08`, `backtrack 0.30` — a lean budget,
+since the monogram-fit warm start gets most of the short per-column-shift state right on seed and
+the anneal/n-gram pass only corrects a few columns).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

@@ -139,6 +139,10 @@ slow | nicodemus_beaufort_decl | nicodemus-beaufort | nicodemus_beaufort_decl.tx
 # state is the key number's digits; the digit count D is pinned here to keep the case fast --
 # the blind D sweep is exercised by tests/test_bazeries_solver.c. ---
 slow | bazeries_decl | bazeries | bazeries_decl.txt | -logprob -period 5 -nrestarts 12 -nhillclimbs 30000 -inittemp 0.08 -backtrackprob 0.3
+# Portax (periodic digraphic Porta; vertical pairs over a Porta slide). The climbed state is the
+# P per-column Porta shifts; period pinned here to keep the case fast -- the blind P sweep is
+# exercised by tests/test_portax_solver.c. Rides the reward-only quadgram table (no -logprob).
+fast | portax_decl | portax | portax_decl.txt | -period 7 -nrestarts 8 -nhillclimbs 20000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000
