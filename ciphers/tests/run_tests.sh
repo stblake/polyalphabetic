@@ -143,6 +143,13 @@ slow | bazeries_decl | bazeries | bazeries_decl.txt | -logprob -period 5 -nresta
 # P per-column Porta shifts; period pinned here to keep the case fast -- the blind P sweep is
 # exercised by tests/test_portax_solver.c. Rides the reward-only quadgram table (no -logprob).
 fast | portax_decl | portax | portax_decl.txt | -period 7 -nrestarts 8 -nhillclimbs 20000 -inittemp 0.08 -backtrackprob 0.3
+# Progressive Key (periodic Vigenere/Variant/Beaufort + per-group constant key drift). The climbed
+# state is the P per-column base shifts (monogram-warm-started); period + progression pinned here to
+# keep the cases fast -- the blind P and blind progression sweeps are exercised by
+# tests/test_progkey_solver.c. Rides the reward-only quadgram table (no -logprob).
+fast | progkey_decl      | progkey      | progkey_decl.txt      | -period 10 -progression 1 -nrestarts 4 -nhillclimbs 8000 -inittemp 0.08 -backtrackprob 0.3
+fast | progkey_var_decl  | progkey-var  | progkey_var_decl.txt  | -period 10 -progression 2 -nrestarts 4 -nhillclimbs 8000 -inittemp 0.08 -backtrackprob 0.3
+fast | progkey_beau_decl | progkey-beau | progkey_beau_decl.txt | -period 10 -progression 3 -nrestarts 4 -nhillclimbs 8000 -inittemp 0.08 -backtrackprob 0.3
 # --- pure transposition ---
 fast | transmatrix_solve   | transmatrix   | transmatrix_solve.txt   | -nrestarts 400 -nhillclimbs 2000
 slow | transposition_solve | transposition | transposition_solve.txt | -nrestarts 6000 -nhillclimbs 6000

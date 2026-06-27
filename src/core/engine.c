@@ -707,6 +707,32 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 12, .s_n_hill_climbs = 20000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+
+    // Progressive Key (Vigenere / Variant / Beaufort base). The climbed state is the P per-column
+    // base shifts (0..25); the per-column monogram-fit warm start gets most of them right on seed,
+    // so the anneal only needs to correct a few columns. Many (P, prog) configs are enumerated
+    // (period brute-forced x progression 0..25, since IoC fails through the drift), so each config
+    // gets a LEAN budget: a few restarts x modest climbs. The reward-only quadgram table suffices
+    // (Vigenere family), so the same small-scale temperature as the other -optimalcycle types.
+    // Tuned in tests/test_progkey_solver.c.
+    { .cipher_type = PROGKEY, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 3, .a_n_hill_climbs = 2500,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 3, .s_n_hill_climbs = 2500,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = PROGKEY_VAR, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 3, .a_n_hill_climbs = 2500,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 3, .s_n_hill_climbs = 2500,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    { .cipher_type = PROGKEY_BEAU, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 3, .a_n_hill_climbs = 2500,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 3, .s_n_hill_climbs = 2500,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

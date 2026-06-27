@@ -12,7 +12,8 @@ folder holds unrelated experiment runs, logs, and candidate dumps; ignore it.)
 ## What this is
 
 Colossus is a polyalphabetic substitution cipher solver in C by Sam Blake (started 14 July 2023).
-It attacks **Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, and Autokey** ciphers (plus
+It attacks **Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, Autokey, and Progressive
+Key** ciphers (plus
 their variants and Beaufort/Porta autokey tableaus), optionally composed with a
 transposition stage. The engine is a **stochastic, slippery, shotgun-restarted hill
 climber with backtracking**. Cipher conventions follow the American Cryptogram
@@ -55,6 +56,12 @@ src/polyalphabetic/   # Vigenère family — searched inside POLYALPHA_MODEL
                          #   both keyed by one keyword. Solver anneals the COLUMN ORDER and derives the
                          #   per-column shifts by monogram fit (decoupling). Own CipherModel; sweeps
                          #   (period P, block height H).
+  progkey.c progkey_solver.c/.h  # Progressive Key (Vig/Var/Beau base): a periodic base cipher
+                         #   under a keyword + a per-GROUP constant key drift (the progression
+                         #   index). Own CipherModel (NOT in POLYALPHA_MODEL); period brute-forced
+                         #   x progression 0..25 enumerated (IoC fails through the drift). For a
+                         #   fixed prog, DE-PROGRESSING decouples the keyword -> per-column monogram
+                         #   warm start, then n-gram anneal. 3 type codes share the solver.
 
 src/transposition/    # pure-transposition solvers + shared helpers
   trans_common.c/.h    # shared transposition-solver helpers: report_transposition(),
@@ -117,6 +124,7 @@ tools/gromark_gen.c          # standalone Gromark / Periodic Gromark generator (
 tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_gen)
 tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
 tools/portax_gen.c           # standalone Portax generator (make portax_gen)
+tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
 ciphers/kryptos/     # K1–K4 ciphertexts + run scripts
@@ -224,7 +232,14 @@ mini pairs `IN→JL`/`NO→UA`/`NA→DB` (key U/V) and `TA→NM`/`BG→QH` (key 
 keyword `EASY` end-to-end `THEEARLYBIRDGETSTHEWORMX → NIJAMPBGQCWKHQJEUIKYMPAT` — the pair operation
 asserted an involution over all (s, a, b), the self-reciprocal `decrypt == encrypt` and the
 shift/key-letter forms agreeing over random keys × lengths, per-column independence, a ragged final
-block (lone top letters pass through), and edge cases — `P=1`, `P>len`, a single pair).
+block (lone top letters pass through), and edge cases — `P=1`, `P>len`, a single pair), and
+`tests/test_progkey.c` (the Progressive Key primitives: the ACA worked-example known-answer vector —
+Vigenère, key `GRAPEFRUIT`, P=10, prog=1, `THISCIPHERCANBEUSEDWITHANYOFTH → ZYIHGNGBMKJSORJAKZMQQMJRTFHBDC`
+with the per-group drift A,B,C — encrypt/decrypt round-trips over random keyword × prog × length ×
+period for all three bases (incl. ragged final group, P=1, over-long key), agreement of
+`progkey_encrypt` with an INDEPENDENT two-pass reference built from `vigenere_*`/`beaufort_*` (keyword
+pass then a full-length drift-key pass), the prog=0 degeneration to a plain periodic Vigenère/Variant,
+and `progkey_deprogress` inverting the drift pass exactly).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -279,13 +294,20 @@ anneal / shotgun / pso, reporting recovery + time for each (the data the schedul
 across several keywords (period pinned); a length cliff (recovers cleanly from ~70 chars — the
 per-column monogram warm start makes it strong); a multi-keyword sweep (mean/worst); a BLIND period
 solve — P swept, the reported period asserted == the true one; and a per-scheme pass under `-method`
-anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed).
+anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed), and
+`tests/test_progkey_solver.c` (Progressive Key: registry validation for all three codes plus a
+non-registry type; a capability floor over the ACA ~150-letter band for EACH base (P/prog pinned); a
+length cliff; a multi-keyword sweep (mean/worst); a BLIND period solve (P swept, prog pinned, the
+reported P asserted == the true one); a BLIND progression solve (prog swept, P pinned, the reported
+prog asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. Rides
+the reward-only quadgram table — no `-logprob` needed; recovers cleanly from very short text since the
+de-progressed columns are a pure Vigenère).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-56 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+59 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -294,8 +316,9 @@ Substitution family (carry / no-carry / mod-100, plus a keyed-label cipher solve
 relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
 (`gromark_periodic_decl`, blind, period swept), the three Nicodemus variants
 (`nicodemus_decl` / `nicodemus_variant_decl` / `nicodemus_beaufort_decl`, P/H pinned), a
-Bazeries cipher (`bazeries_decl`, digit count pinned), and a Portax cipher (`portax_decl`, period
-pinned)) that each
+Bazeries cipher (`bazeries_decl`, digit count pinned), a Portax cipher (`portax_decl`, period
+pinned), and the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
+`progkey_beau_decl`, period + progression pinned)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -305,7 +328,8 @@ bit-identical refactor keeps every score at 100% and any behavioural regression 
 immediately. Each test's `-nrestarts`/`-nhillclimbs` are trimmed to the smallest that
 still lands on the solution at the seed, so the full run is ~2 min (was ~45 before
 trimming). The manifest tags each case `fast` or `slow`:
-`./run_tests.sh --fast` runs the 25-case fast tier in ~50s (use while iterating),
+`./run_tests.sh --fast` runs the 28-case fast tier in ~50s (use while iterating; incl. the three
+~0s Progressive Key bases),
 `--slow` the 29 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
@@ -339,7 +363,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `nihilist-sub`/`nihsub`/`46`, `nihilist-sub-nc`/`47`, `nihilist-sub-m100`/`48`,
 `gromark`/`gm`/`49`, `gromark-periodic`/`pgromark`/`50`,
 `nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`,
-`bazeries`/`baz`/`54`, `portax`/`ptx`/`55`
+`bazeries`/`baz`/`54`, `portax`/`ptx`/`55`,
+`progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -790,6 +815,41 @@ are supported** (the cipher is positional: `decrypted[i]` is plaintext position 
 implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it. Generate test ciphers
 with `tools/portax_gen.c` (`make portax_gen`; args are a plaintext and a keyword).
 
+The **Progressive Key** family (`progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`;
+`solve_progkey()`, `PROGKEY_MODEL`, `SHAPE_ANNEAL`) is the ACA **periodic key with a constant per-group
+drift** — the first **non-stationary periodic key** type (a leading K4 hypothesis). The plaintext is
+set in groups of **P** (= keyword length); a **primary** periodic encipherment of base type T under the
+keyword yields `C1`, then a **second** encipherment **of the same type T** adds the **progressive key
+letter** `Kp[g] = (g·prog) mod 26` per group `g = i/P` (the **progression index** `prog`: 1→A,B,C…,
+2→A,C,E…). So the per-position shift is `keyword[i%P]` drifting by `(g·prog)`. **Three base types** are
+distinct `-type` codes sharing one primitive (`progkey.c`) + solver, branched on `cfg->cipher_type`:
+`progkey` (**Vigenère**, `C=P+k`), `progkey-var` (**Variant**, `C=P−k`) and `progkey-beau` (**Beaufort**,
+`C=k−P`). Full 26-letter alphabet (**no J→I merge**); the primitive is hand-verified cell-for-cell
+against the ACA worked example (Vigenère, key `GRAPEFRUIT`, P=10, prog=1, `thiscipher… → ZYIHG NGBMK
+JSORJ AKZMQ QMJRT FHBDC…`). (`prog=0` is no drift — a plain periodic Vigenère/Variant; the Beaufort
+group-0 pass is still a reflection, not identity.) **The whole key is P base shifts (0..25) plus the
+progression**, carried in the cycleword lane. **IoC period estimation FAILS** (within a column each
+group carries a different drifted shift, so columns are not monoalphabetic — like autokey), so the
+**period is brute-forced** and the **progression enumerated 0..25**: one engine config per `(P, prog)`
+pair (`cc->aux[0] = prog`; `-period`/`-cyclewordlen` pin P, `-progression` pins prog, `-mincols`/
+`-maxcols` bound the period sweep). **The key to efficiency** is the same decoupling the polyalphabetic
+`-optimalcycle` path uses: for a fixed `prog`, **DE-PROGRESSING** the ciphertext (undoing only the
+drift pass via `progkey_deprogress`, leaving the primary base cipher `C1`) makes every column an
+independent base sample under its own keyword shift — so the **per-column monogram-fit shift**
+**warm-starts the seed**, and the n-gram (quadgram) score then drives the anneal AND, across all
+`(P, prog)` configs, selects the true period and progression (a wrong P or prog leaves columns drifted
+→ gibberish → low score). No `score_adjust` is needed (every cycleword is a valid bijective decrypt).
+Unlike the square/fractionation types it **rides the reward-only quadgram table (no `-logprob`)**, like
+the rest of the Vigenère family, and **recovers from very short text** (the de-progressed columns are a
+pure Vigenère; see `tests/test_progkey_solver.c`). It is a **dedicated `CipherModel`, NOT inside
+`POLYALPHA_MODEL`** (the engine's `engine_build_hist` keys per-column histograms on the raw cipher +
+period, but progkey needs them on the de-progressed buffer, which depends on `prog` — so the solver
+does its own per-column derivation, keeping the cipher-agnostic engine and shared `optimal_cycleword.c`
+untouched). **Cribs are supported** (the cipher is positional: `decrypted[i]` is plaintext position i).
+Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it.
+Generate test ciphers with `tools/progkey_gen.c` (`make progkey_gen`; args are a plaintext, a keyword,
+a progression index, and `vig`/`var`/`beau`).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -827,7 +887,10 @@ restarts, since the climbed state is a short digit string over a rugged < 10⁶ 
 restart reseeds a fresh random number and restarts carry the robustness), and Portax
 (`SHAPE_ANNEAL`, `12x20000` per swept period P, `inittemp 0.08`, `backtrack 0.30` — a lean budget,
 since the monogram-fit warm start gets most of the short per-column-shift state right on seed and
-the anneal/n-gram pass only corrects a few columns).
+the anneal/n-gram pass only corrects a few columns), and the three Progressive Key bases
+(`SHAPE_ANNEAL`, `3x2500` per swept `(P, prog)` pair, `inittemp 0.08`, `backtrack 0.30` — a very
+lean per-config budget, since MANY `(P, prog)` configs are enumerated and the per-column monogram
+warm start already gets most columns right, so a few short restarts suffice).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

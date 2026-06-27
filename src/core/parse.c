@@ -188,6 +188,15 @@ int parse_cipher_type(const char *arg) {
     // Portax (periodic digraphic Porta; vertical pairs over a Porta slide).
     if (str_eq(arg, "portax") || str_eq(arg, "ptx")) return PORTAX;
 
+    // Progressive Key (periodic base cipher + per-group constant key drift). Check the
+    // variant/beaufort aliases before the bare progkey so a substring never shadows them.
+    if (str_eq(arg, "progkey-var") || str_eq(arg, "progkey-v") || str_eq(arg, "pkv"))
+        return PROGKEY_VAR;
+    if (str_eq(arg, "progkey-beau") || str_eq(arg, "progkey-b") || str_eq(arg, "pkb"))
+        return PROGKEY_BEAU;
+    if (str_eq(arg, "progkey") || str_eq(arg, "pk") || str_eq(arg, "progressivekey"))
+        return PROGKEY;
+
     // Return -1 to indicate invalid/unknown type.
     return -1;
 }

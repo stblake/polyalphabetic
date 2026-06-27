@@ -72,8 +72,27 @@
 #define NICODEMUS_BEAUFORT 53  // Nicodemus, Beaufort substitution (C = k - P, reciprocal)
 #define BAZERIES           54  // Bazeries: keyed-square substitution + digit-grouped reversal (one number key)
 #define PORTAX             55  // Portax: periodic digraphic Porta (vertical pairs over a Porta slide)
+#define PROGKEY            56  // Progressive Key (Vigenere base): periodic key + per-group constant drift
+#define PROGKEY_VAR        57  // Progressive Key, Variant base (C = P - k per pass)
+#define PROGKEY_BEAU       58  // Progressive Key, Beaufort base (C = k - P per pass, reciprocal)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
+
+// Progressive Key base type (which periodic cipher both the keyword and the
+// progressive-drift passes use) and its shift math, shared by the primitive
+// (progkey.c) and the solver (progkey_solver.c). The progression index ranges
+// 0..PROGKEY_MAX_PROG (0 = no drift -> a plain periodic Vigenere/Variant cipher;
+// for the Beaufort base the group-0 pass is still a reflection, not identity).
+#define PROGKEY_MAX_PROG 25
+enum { PROGKEY_BASE_VIG = 0, PROGKEY_BASE_VAR = 1, PROGKEY_BASE_BEAU = 2 };
+
+static inline int progkey_base(int cipher_type) {
+    if (cipher_type == PROGKEY_VAR)  return PROGKEY_BASE_VAR;
+    if (cipher_type == PROGKEY_BEAU) return PROGKEY_BASE_BEAU;
+    return PROGKEY_BASE_VIG;
+}
+// progkey_base_encrypt / progkey_base_decrypt are defined just below the
+// ALPHABET_SIZE definition (they use it as the mod base).
 
 #define GROMARK_PRIMER_LEN 5    // basic Gromark standard primer length (ACA convention)
 #define GROMARK_MAX_PRIMER 26   // max primer length == max period (periodic: keyword len <= 26)
@@ -133,6 +152,20 @@ enum { PHILLIPS_ROW, PHILLIPS_COL, PHILLIPS_ROWCOL };
                                 // indexed by a live symbol id in [0, g_alpha). All other
                                 // (polyalphabetic) arrays stay ALPHABET_SIZE.
 #define MAX_CIPHER_LENGTH 10000
+
+// Progressive Key per-letter base shift math (mod ALPHABET_SIZE). Shared by the
+// primitive (progkey.c) and the solver's per-column monogram warm start.
+static inline int progkey_base_encrypt(int p, int k, int base) {
+    if (base == PROGKEY_BASE_VAR)  return (p - k + ALPHABET_SIZE) % ALPHABET_SIZE;
+    if (base == PROGKEY_BASE_BEAU) return (k - p + ALPHABET_SIZE) % ALPHABET_SIZE;
+    return (p + k) % ALPHABET_SIZE;                                   // VIGENERE
+}
+static inline int progkey_base_decrypt(int c, int k, int base) {
+    if (base == PROGKEY_BASE_VAR)  return (c + k) % ALPHABET_SIZE;
+    if (base == PROGKEY_BASE_BEAU) return (k - c + ALPHABET_SIZE) % ALPHABET_SIZE;
+    return (c - k + ALPHABET_SIZE) % ALPHABET_SIZE;                   // VIGENERE
+}
+
 #define MAX_SYMBOLS    512      // distinct ciphertext symbols a homophonic cipher may use
 #define MAX_TOKEN_LEN  16       // longest surface form of one ciphertext symbol token
 #define MAX_FILENAME_LEN 4096   // must hold absolute paths; main() strcpy's CLI args in unbounded
@@ -211,6 +244,10 @@ typedef struct {
     int max_period;
     int n_periods;
     int n_primers;      // Gromark: top-K primers the pre-pass keeps to anneal (0 => auto by length)
+
+    // Progressive Key: pin the per-group progression index (else the solver sweeps 0..25).
+    bool progression_present;
+    int  progression;
 
     // Input Flags for lengths
     bool plaintext_keyword_len_present;
@@ -334,6 +371,7 @@ typedef struct {
     int plaintext_keyword[ALPHABET_SIZE];
     int ciphertext_keyword[ALPHABET_SIZE];
     int cycleword[MAX_CYCLEWORD_LEN];
+    int progression;            // Progressive Key: recovered progression index (else 0)
     int decrypted[MAX_CIPHER_LENGTH];
     int decrypted_len;
 } SolveResult;
@@ -560,6 +598,18 @@ void gronsfeld_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
     int key_digits[], int key_len);
 void gronsfeld_encrypt(int encrypted[], int plaintext_indices[], int plaintext_len,
     int key_digits[], int key_len);
+
+// Progressive Key cipher (progkey.c). A periodic base cipher (Vig/Var/Beau, `base`) under a
+// P-letter keyword (per-column shifts 0..25, in `keyword[]`), composed with a per-GROUP
+// constant drift: group g = i/P adds (g*prog) mod 26 via a second base pass. So the per-
+// position shift is keyword[i%P] (+/-) (g*prog). `progkey_deprogress` undoes only the drift
+// pass, leaving a pure periodic base cipher (C1) the solver attacks per column.
+void progkey_encrypt(int encrypted[], int plaintext_indices[], int plaintext_len,
+    int keyword[], int P, int prog, int base);
+void progkey_decrypt(int decrypted[], int cipher_indices[], int cipher_len,
+    int keyword[], int P, int prog, int base);
+void progkey_deprogress(int out[], int cipher_indices[], int cipher_len,
+    int P, int prog, int base);
 
 // Gromark / Periodic Gromark cipher (gromark.c). A keyed 26-letter substitution sigma (a
 // permutation of A..Z) composed with a chain-addition running key from a P-digit primer

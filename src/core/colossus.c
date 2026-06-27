@@ -230,6 +230,7 @@
 #include "nicodemus_solver.h"
 #include "bazeries_solver.h"
 #include "portax_solver.h"
+#include "progkey_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -248,6 +249,8 @@ void init_config(ColossusConfig *cfg) {
 
     cfg->period = 0;            // bifid: 0 => estimate (not pinned by user)
     cfg->period_present = false;
+    cfg->progression_present = false;   // progkey: 0 => sweep the progression index 0..25
+    cfg->progression = 0;
     cfg->max_period = 0;        // 0 => derive from ciphertext length (min(20, len/2))
     cfg->n_periods = 5;         // anneal the estimator's top-K candidate periods
     cfg->n_primers = 0;         // Gromark pre-pass top-K (0 => auto by ciphertext length)
@@ -672,6 +675,11 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-nprimers") == 0) {
             cfg.n_primers = atoi(argv[++i]);
             printf("-nprimers %d\n", cfg.n_primers);
+        } else if (strcmp(argv[i], "-progression") == 0) {
+            // Progressive Key: pin the per-group progression index (else swept 0..25).
+            cfg.progression_present = true;
+            cfg.progression = atoi(argv[++i]);
+            printf("-progression %d\n", cfg.progression);
         } else {
             printf("\n\nERROR: unknown command line arg: \'%s\'\n\n", argv[i]);
             return 0;
@@ -785,6 +793,11 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Bazeries cipher (keyed-square substitution + digit-grouped reversal, one number key).\n\n");
     } else if (cfg.cipher_type == PORTAX) {
         printf("\nAttacking a Portax cipher (periodic digraphic Porta: vertical pairs over a Porta slide).\n\n");
+    } else if (cfg.cipher_type == PROGKEY || cfg.cipher_type == PROGKEY_VAR ||
+               cfg.cipher_type == PROGKEY_BEAU) {
+        printf("\nAttacking a Progressive Key cipher (periodic %s + per-group constant key drift).\n\n",
+            cfg.cipher_type == PROGKEY_VAR ? "Variant"
+            : cfg.cipher_type == PROGKEY_BEAU ? "Beaufort" : "Vigenere");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -1228,6 +1241,13 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == PORTAX) {
         solve_portax(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == PROGKEY || cfg->cipher_type == PROGKEY_VAR ||
+        cfg->cipher_type == PROGKEY_BEAU) {
+        solve_progkey(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }
