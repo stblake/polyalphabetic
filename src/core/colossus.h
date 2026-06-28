@@ -78,6 +78,7 @@
 #define SLIDEFAIR          59  // Slidefair: periodic digraphic Vigenere (rectangle over a shift slide)
 #define SLIDEFAIR_VAR      60  // Slidefair, Variant slide (bottom = col - k)
 #define SLIDEFAIR_BEAU     61  // Slidefair, Beaufort slide (bottom = k - col)
+#define SERIATED_PLAYFAIR  62  // Seriated Playfair: digraphic Playfair over vertical pairs of a two-row seriated layout (period swept)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -748,6 +749,15 @@ void playfair_encrypt(const int plain[], int len, const int grid[], int out[]);
 void playfair_decrypt(const int cipher[], int len, const int grid[], int out[]);
 int  playfair_prepare(const int raw[], int len, int filler, int alt, int out[], int out_cap);
 void playfair_grid_from_keyword(const int keyword[], int kwlen, int grid[]);
+
+// Seriated Playfair cipher (seriated_playfair.c). Plain Playfair over the same 5x5 keyed
+// grid, but digraphs are vertical pairs of a two-row seriated layout of period P: in each
+// 2P block, pair j couples block-letter j with j+P. Reuses playfair_build_inverse and
+// playfair_grid_from_keyword. The solver needs only seriated_playfair_decrypt(); encrypt
+// + prepare (null insertion for doubled vertical pairs) serve the generator + unit tests.
+void seriated_playfair_encrypt(const int plain[], int len, const int grid[], int period, int out[]);
+void seriated_playfair_decrypt(const int cipher[], int len, const int grid[], int period, int out[]);
+int  seriated_playfair_prepare(const int raw[], int len, int period, int filler, int alt, int out[], int out_cap);
 
 
 // Bifid cipher (bifid.c). Side-generic over a side x side keyed Polybius square (a

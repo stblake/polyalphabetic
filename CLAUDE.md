@@ -110,6 +110,13 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   reciprocal but for that vertical step. 3 type codes share the solver. Solver
                                      #   anneals the P per-column key letters (0..25); a per-column monogram-fit warm
                                      #   start decouples each column (every digraph uses ONE column key). Cribs supported.
+  seriated_playfair.c seriated_playfair_solver.c/.h  # Seriated Playfair: plain Playfair over a
+                                     #   SINGLE 5x5 keyed square, but digraphs are the VERTICAL PAIRS of a two-row
+                                     #   seriated layout of period P: in each 2P block, pair j couples block-letter j
+                                     #   (top) with j+P (bottom); cipher taken off block by block (top row then bottom).
+                                     #   Reuses playfair.c's grid/inverse + keyword build. NO per-column decoupling (one
+                                     #   square), so the attack IS Playfair's single-grid anneal with the seriation period
+                                     #   SWEPT (one config per P; n-gram score picks it). Needs -logprob; no cribs.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -133,6 +140,7 @@ tools/nicodemus_gen.c        # standalone Nicodemus generator (make nicodemus_ge
 tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
 tools/portax_gen.c           # standalone Portax generator (make portax_gen)
 tools/slidefair_gen.c        # standalone Slidefair generator (make slidefair_gen)
+tools/seriated_playfair_gen.c # standalone Seriated Playfair generator (make seriated_playfair_gen)
 tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
@@ -255,7 +263,14 @@ column case), plus the full Vigenère example keyword `DIGRAPH`,
 `THESLIDEFAIRCANBEUSEDWITHVIGENEREVARIANTORBEAUFORT → EWKMCRNUAFCXTJ…` — each encrypt pair asserted to
 invert under decrypt over every (key, variant, p1, p2), decrypt(encrypt) == identity over random keys ×
 lengths × all three variants (incl. odd length → lone final letter passthrough), per-column independence,
-and edge cases — `P=1`, `P>ndigraphs`, a single digraph).
+and edge cases — `P=1`, `P>ndigraphs`, a single digraph), and
+`tests/test_seriated_playfair.c` (the Seriated Playfair primitives: the ACA worked-example known-answer
+vector — square `LOGARITHMBCDEFKNPQSUVWXYZ`, period 6,
+`comequicklyweneedhelpimmediatelytom` → prepared `COMEQU…XELPIM…` (one null splits the `e/e` vertical
+pair) → cipher `NLBCSPCDFGXZQQCDCMGCGQTBHCFTRHFGWHGB` — the prepare/encrypt/decrypt verified cell for cell;
+a targeted null-insertion check (filler + the `X→Q` alt rule); a `P=1` equivalence asserting
+`seriated_decrypt == playfair_decrypt` (block 2 = consecutive pairs); and encrypt/decrypt round-trips over
+random grids × plaintexts × periods incl. ragged buffers (lone top letters pass through) and `P>length`).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -322,13 +337,19 @@ de-progressed columns are a pure Vigenère), and
 type; a capability floor across all three variants (period pinned); a length cliff (recovers ~100% from
 ~50 chars — the per-column monogram warm start makes it strong); a multi-keyword sweep (mean/worst); a
 BLIND period solve (P swept, the reported P asserted == the true one); and a per-scheme pass under
-`-method` anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed).
+`-method` anneal / shotgun / pso. Rides the reward-only quadgram table — no `-logprob` needed), and
+`tests/test_seriated_playfair_solver.c` (Seriated Playfair: registry validation + a non-registry type;
+a capability floor across several keywords (period pinned, ~500 chars, `-logprob` — keywords chosen to
+avoid the rare-letter X ambiguity that pins an unlucky grid at ~92%); a length cliff (recovers from
+~250 chars); a multi-keyword sweep (mean/worst); a BLIND period solve (P swept over a bounded range, the
+reported P asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. The
+basis the `SearchDefaults` `6x400000` schedule is tuned against).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-62 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+63 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -340,7 +361,8 @@ relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
 Bazeries cipher (`bazeries_decl`, digit count pinned), a Portax cipher (`portax_decl`, period
 pinned), the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
 `progkey_beau_decl`, period + progression pinned), and the three Slidefair bases (`slidefair_decl` /
-`slidefair_var_decl` / `slidefair_beau_decl`, period pinned)) that each
+`slidefair_var_decl` / `slidefair_beau_decl`, period pinned), and a Seriated Playfair cipher
+(`seriated_playfair_decl`, period pinned, `-logprob`)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -352,10 +374,10 @@ still lands on the solution at the seed, so the full run is ~2 min (was ~45 befo
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 31-case fast tier in ~50s (use while iterating; incl. the three
 ~0s Progressive Key bases and the three ~0s Slidefair bases),
-`--slow` the 29 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+`--slow` the 30 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
-solves, and the ~1s Bazeries solve), no flag runs both.
+solves, the ~1s Bazeries solve, and the ~3s Seriated Playfair solve), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -387,7 +409,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `nicodemus`/`nico`/`51`, `nicodemus-variant`/`nicov`/`52`, `nicodemus-beaufort`/`nicob`/`53`,
 `bazeries`/`baz`/`54`, `portax`/`ptx`/`55`,
 `progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`,
-`slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`
+`slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`,
+`seriated-playfair`/`serpf`/`spf`/`62`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -905,6 +928,38 @@ plaintext position i). Because the model implements `seed`/`perturb`/`copy`, `-m
 all run on it. Generate test ciphers with `tools/slidefair_gen.c` (`make slidefair_gen`; args are a
 plaintext, a keyword, and `vig`/`var`/`beau`).
 
+The **Seriated Playfair** type (`seriated-playfair`/`serpf`/`spf`/`62`; `solve_seriated_playfair()`,
+`SERIATED_PLAYFAIR_MODEL`, `SHAPE_ANNEAL`) is the ACA **"Seriated Playfair"** — plain Playfair over a
+**single 5x5 keyed square**, but the digraphs are the **VERTICAL PAIRS of a two-row seriated layout** of
+period **P** instead of consecutive horizontal pairs. The plaintext is laid into blocks of **2P** letters
+(first P = top row, next P = bottom row); within a block, vertical pair `j` couples block-letter `j` (top)
+with `j+P` (bottom) for `j = 0..P-1`, each pair enciphered by the three standard Playfair rules and written
+**back to the same positions**, and the cipher is the blocks serialized left-to-right (top row then bottom —
+the "taken off horizontally" readout). The whole cipher is thus
+`for each 2P block, for j: (out[j], out[j+P]) = playfair_pair(in[j], in[j+P], dir)`. Runs on the same
+25-letter (J→I) grid as Playfair (`init_alphabet("J")` before `load_ngrams`); the primitive
+(`seriated_playfair.c`, hand-verified cell-for-cell against the ACA worked example — square
+`LOGARITHMBCDEFKNPQSUVWXYZ`, period 6, `comequickly… → NLBCSP…`) **reuses** `playfair.c`'s
+`playfair_build_inverse`/`playfair_grid_from_keyword` (only the 3-rule pair is a small inlined copy so
+`playfair.c` stays byte-identical). **The key design point is what it is NOT:** unlike Portax/Slidefair there
+is **NO per-column independence** — one square enciphers every pair — so there is **no
+`derive_optimal_cycleword`-style decoupling**. The attack is therefore **exactly Playfair's single-grid
+anneal** (random-grid seed; cell-swap-dominated moves + row/column swaps + reflections; bijection, no
+anti-collapse penalty) with **one addition: the seriation period P is SWEPT** (IoC is useless through the
+pairing, so one engine config per P and the n-gram score picks the true one — only the exact P pairs
+correctly, a multiple does not; `-period` pins, `-mincols`/`-maxcols` bound the sweep, default top 15). Each
+config is a full Playfair-scale grid anneal, so the blind sweep **multiplies the Playfair cost**; like every
+square type it effectively **needs `-logprob`** and recovers reliably from **~250+ letters** (see
+`tests/test_seriated_playfair_solver.c`, which prints the length cliff). On rare grids the recovered solution
+hits the inherent **rare-letter ambiguity** of a square attack (the filler `X` appears only as nulls, so it
+is weakly constrained and a few X-positions may flip — a deterministic ~92% ceiling no budget escapes, as in
+Playfair). The grid is unique only up to a cyclic row/column rotation (all re-decrypt identically). **Cribs
+are not used** (the prepare null-insertion shifts plaintext positions, like Playfair). Because the model
+implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it. The encrypt/prepare path
+(null insertion on a doubled vertical pair → a filler `X`, or `Q` if the letter is `X`; final block padded)
+serves only the generator + unit tests; the solver only ever decrypts. Generate test ciphers with
+`tools/seriated_playfair_gen.c` (`make seriated_playfair_gen`; args are a plaintext, a keyword, and a period).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -948,7 +1003,11 @@ lean per-config budget, since MANY `(P, prog)` configs are enumerated and the pe
 warm start already gets most columns right, so a few short restarts suffice), and the three Slidefair
 bases (`SHAPE_ANNEAL`, `8x10000` per swept period P, `inittemp 0.08`, `backtrack 0.30` — a very lean
 budget, since the 26-value per-column monogram warm start recovers ~100% from ~50 letters, so a few
-short restarts and modest climbs suffice).
+short restarts and modest climbs suffice), and Seriated Playfair
+(`SHAPE_ANNEAL`, **`6x400000` per swept seriation period P**, `inittemp 0.08`, `backtrack 0.30` — Playfair's
+own proven square-anneal budget, since each period is a full single-grid anneal with no per-column
+decoupling; the 400000-climb cooling schedule is what reliably reaches the optimum, and the budget is
+*per P* so the blind sweep multiplies it).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

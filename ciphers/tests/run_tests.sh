@@ -150,6 +150,11 @@ fast | portax_decl | portax | portax_decl.txt | -period 7 -nrestarts 8 -nhillcli
 fast | slidefair_decl      | slidefair      | slidefair_decl.txt      | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
 fast | slidefair_var_decl  | slidefair-var  | slidefair_var_decl.txt  | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
 fast | slidefair_beau_decl | slidefair-beau | slidefair_beau_decl.txt | -period 7 -nrestarts 8 -nhillclimbs 10000 -inittemp 0.08 -backtrackprob 0.3
+# Seriated Playfair (digraphic Playfair over the vertical pairs of a two-row seriated layout; one
+# global 5x5 keyed square, the seriation period swept). A full Playfair-scale grid anneal per period,
+# so it needs -logprob; period pinned here (and a lean budget) to keep the case fast -- the blind P
+# sweep is exercised by tests/test_seriated_playfair_solver.c. Alphabet forced to 25 (J->I).
+slow | seriated_playfair_decl | seriated-playfair | seriated_playfair_decl.txt | -logprob -period 7 -nrestarts 3 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # Progressive Key (periodic Vigenere/Variant/Beaufort + per-group constant key drift). The climbed
 # state is the P per-column base shifts (monogram-warm-started); period + progression pinned here to
 # keep the cases fast -- the blind P and blind progression sweeps are exercised by

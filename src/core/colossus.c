@@ -232,6 +232,7 @@
 #include "portax_solver.h"
 #include "progkey_solver.h"
 #include "slidefair_solver.h"
+#include "seriated_playfair_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -759,6 +760,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a homophonic substitution (ciphertext alphabet larger than the plaintext alphabet).\n\n");
     } else if (cfg.cipher_type == PLAYFAIR) {
         printf("\nAttacking a Playfair cipher (digraphic substitution over a 5x5 keyed grid).\n\n");
+    } else if (cfg.cipher_type == SERIATED_PLAYFAIR) {
+        printf("\nAttacking a Seriated Playfair cipher (digraphic Playfair over vertical pairs of a two-row seriated layout).\n\n");
     } else if (cfg.cipher_type == BIFID) {
         printf("\nAttacking a Bifid cipher (fractionation over a keyed Polybius square).\n\n");
     } else if (cfg.cipher_type == TRIFID) {
@@ -849,6 +852,13 @@ int main(int argc, char **argv) {
     if (cfg.cipher_type == PLAYFAIR && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type playfair: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // Seriated Playfair runs on the same 5x5 (25-letter, J->I) grid as Playfair.
+    if (cfg.cipher_type == SERIATED_PLAYFAIR && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type seriated-playfair: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -1172,6 +1182,11 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
     }
     if (cfg->cipher_type == PLAYFAIR) {
         solve_playfair(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+    if (cfg->cipher_type == SERIATED_PLAYFAIR) {
+        solve_seriated_playfair(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

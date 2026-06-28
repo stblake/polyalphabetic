@@ -758,6 +758,20 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 8, .s_n_hill_climbs = 10000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+
+    // Seriated Playfair: a single 5x5 keyed square (no per-column decoupling), so the
+    // climbed state is the whole grid and each config is a FULL Playfair-scale grid anneal
+    // -- but enumerated once per swept seriation period P, so the budget is per-P and the
+    // blind sweep multiplies the cost (document it). Playfair's small-scale (mean log-
+    // probability) temperature; effectively needs -logprob. Uses Playfair's proven
+    // 6x400000 -- the 400000-climb cooling schedule is what reliably reaches the optimum
+    // (300000 leaves it seed-sensitive). Tuned in tests/test_seriated_playfair_solver.c.
+    { .cipher_type = SERIATED_PLAYFAIR, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 6, .a_n_hill_climbs = 400000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
 };
 
 bool apply_cipher_defaults(ColossusConfig *cfg, bool announce) {

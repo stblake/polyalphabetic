@@ -196,6 +196,11 @@ int parse_cipher_type(const char *arg) {
         return SLIDEFAIR_BEAU;
     if (str_eq(arg, "slidefair") || str_eq(arg, "sf")) return SLIDEFAIR;
 
+    // Seriated Playfair (digraphic Playfair over vertical pairs of a two-row seriated
+    // layout; the seriation period is swept). 'sf' is taken by Slidefair, so use 'spf'.
+    if (str_eq(arg, "seriated-playfair") || str_eq(arg, "seriatedplayfair") ||
+        str_eq(arg, "serpf") || str_eq(arg, "spf")) return SERIATED_PLAYFAIR;
+
     // Progressive Key (periodic base cipher + per-group constant key drift). Check the
     // variant/beaufort aliases before the bare progkey so a substring never shadows them.
     if (str_eq(arg, "progkey-var") || str_eq(arg, "progkey-v") || str_eq(arg, "pkv"))
