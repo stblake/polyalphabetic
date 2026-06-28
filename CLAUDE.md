@@ -117,6 +117,14 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   Reuses playfair.c's grid/inverse + keyword build. NO per-column decoupling (one
                                      #   square), so the attack IS Playfair's single-grid anneal with the seriation period
                                      #   SWEPT (one config per P; n-gram score picks it). Needs -logprob; no cribs.
+  digrafid.c digrafid_solver.c/.h    # Digrafid: digraphic fractionation over TWO keyed 27-symbol
+                                     #   alphabets (A..Z + #) -- a horizontal 3x9 grid + a vertical 9x3 grid. A
+                                     #   plaintext digraph -> a 3-digit number (top=col in H, bot=row in V, mid from
+                                     #   the 3x3 intersection); each PERIOD-long group's numbers are stacked + Trifid-
+                                     #   fractionated, then mapped back to ciphertext digraphs. State = the two grids
+                                     #   (54 cells, like Two-Square); attack = the Two-Square SA square break with the
+                                     #   period SWEPT (one config per P; n-gram score picks it). Reuses bifid.c's
+                                     #   build-inverse. Needs -logprob; no cribs.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -141,6 +149,7 @@ tools/bazeries_gen.c         # standalone Bazeries generator (make bazeries_gen)
 tools/portax_gen.c           # standalone Portax generator (make portax_gen)
 tools/slidefair_gen.c        # standalone Slidefair generator (make slidefair_gen)
 tools/seriated_playfair_gen.c # standalone Seriated Playfair generator (make seriated_playfair_gen)
+tools/digrafid_gen.c         # standalone Digrafid generator (make digrafid_gen)
 tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
@@ -270,7 +279,13 @@ vector — square `LOGARITHMBCDEFKNPQSUVWXYZ`, period 6,
 pair) → cipher `NLBCSPCDFGXZQQCDCMGCGQTBHCFTRHFGWHGB` — the prepare/encrypt/decrypt verified cell for cell;
 a targeted null-insertion check (filler + the `X→Q` alt rule); a `P=1` equivalence asserting
 `seriated_decrypt == playfair_decrypt` (block 2 = consecutive pairs); and encrypt/decrypt round-trips over
-random grids × plaintexts × periods incl. ragged buffers (lone top letters pass through) and `P>length`).
+random grids × plaintexts × periods incl. ragged buffers (lone top letters pass through) and `P>length`), and
+`tests/test_digrafid.c` (the Digrafid primitives: the TWO ACA worked-example known-answer vectors — grids
+from keywords `KEYWORD` (H, 3x9) / `VERTICAL` (V, 9x3), `THISISTHEFORESTPRI` → period 3 `HJMXWSWJADWGFCSPYI`
+and period 4 `HJTKVHYUFFWDSQYPRI` (the period-4 case a ragged final group of one digraph) — the two grids
+asserted cell-for-cell, the `P=1` identity, an odd-length lone-trailing-letter passthrough, and
+decrypt/encrypt round-trips over random independent grids × even lengths × periods incl. ragged blocks and
+`P>digraph count`).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -343,13 +358,19 @@ a capability floor across several keywords (period pinned, ~500 chars, `-logprob
 avoid the rare-letter X ambiguity that pins an unlucky grid at ~92%); a length cliff (recovers from
 ~250 chars); a multi-keyword sweep (mean/worst); a BLIND period solve (P swept over a bounded range, the
 reported P asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. The
-basis the `SearchDefaults` `6x400000` schedule is tuned against).
+basis the `SearchDefaults` `6x400000` schedule is tuned against), and
+`tests/test_digrafid_solver.c` (Digrafid: registry validation + a non-registry type; the PERIOD ESTIMATOR
+in isolation (true period in the top-K per-lane IoC across periods × lengths); a capability floor across
+keywords (period pinned, ~880 chars, `-logprob`); a length cliff (sharp — fails ≤600, ~100% by 880); a
+multi-keyword sweep (mean/worst); a BLIND period solve (period estimated over a bounded scan, the reported
+P asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. The basis the
+`SearchDefaults` `6x400000` schedule is tuned against).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-63 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+64 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -361,8 +382,9 @@ relabelled square), a Gromark (`gromark_decl`, blind) + Periodic Gromark
 Bazeries cipher (`bazeries_decl`, digit count pinned), a Portax cipher (`portax_decl`, period
 pinned), the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
 `progkey_beau_decl`, period + progression pinned), and the three Slidefair bases (`slidefair_decl` /
-`slidefair_var_decl` / `slidefair_beau_decl`, period pinned), and a Seriated Playfair cipher
-(`seriated_playfair_decl`, period pinned, `-logprob`)) that each
+`slidefair_var_decl` / `slidefair_beau_decl`, period pinned), a Seriated Playfair cipher
+(`seriated_playfair_decl`, period pinned, `-logprob`), and a Digrafid cipher
+(`digrafid_pride`, period pinned, `-logprob`)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -377,7 +399,7 @@ trimming). The manifest tags each case `fast` or `slow`:
 `--slow` the 30 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
-solves, the ~1s Bazeries solve, and the ~3s Seriated Playfair solve), no flag runs both.
+solves, the ~1s Bazeries solve, the ~3s Seriated Playfair solve, and the ~20s Digrafid solve), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -410,7 +432,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `bazeries`/`baz`/`54`, `portax`/`ptx`/`55`,
 `progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`,
 `slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`,
-`seriated-playfair`/`serpf`/`spf`/`62`
+`seriated-playfair`/`serpf`/`spf`/`62`,
+`digrafid`/`df`/`dgf`/`63`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -960,6 +983,38 @@ implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it. 
 serves only the generator + unit tests; the solver only ever decrypts. Generate test ciphers with
 `tools/seriated_playfair_gen.c` (`make seriated_playfair_gen`; args are a plaintext, a keyword, and a period).
 
+The **Digrafid** type (`digrafid`/`df`/`dgf`/`63`; `solve_digrafid()`, `DIGRAFID_MODEL`, `SHAPE_ANNEAL`)
+is the ACA **"Digrafid"** — a **digraphic fractionation cipher over TWO independently keyed 27-symbol
+alphabets** (A..Z + `#`, so `init_alphabet_digrafid()` is forced before `load_ngrams`, like Trifid's
+A..Z+`+`; **no J→I merge**). The tableau is a **horizontal** grid `H` (3 rows × 9 cols, keyed alphabet
+entered **row-major**) and a **vertical** grid `V` (9 rows × 3 cols, entered **column-major**). A plaintext
+**digraph** (a, b) → a **3-digit number** (top, mid, bot), each 0..8: `top` = a's column in `H`, `bot` =
+b's row in `V`, `mid` = (a's row in `H`)·3 + (b's col in `V`) (the 3×3 intersection block) — a bijection
+between the 729 digraphs and 729 triples. **Fractionation** (period = digraphs per group): within each
+group of `g` digraphs the `g` triples are stacked as 3 rows (tops/mids/bots), read **row-major** into a
+`3g`-digit stream, re-split into `g` consecutive triples, and each new triple mapped back through the
+tableau to one ciphertext digraph — exactly the Trifid reshape, but over digraphs. The primitive
+(`digrafid.c`, hand-verified cell-for-cell against the ACA worked example — keywords `KEYWORD`/`VERTICAL`,
+`THISISTHEFORESTPRI` → period 3 `HJMXWSWJADWGFCSPYI`, period 4 `HJTKVHYUFFWDSQYPRI`) **reuses** `bifid.c`'s
+`bifid_build_inverse` and is O(len). **The key design point:** the whole key is the **pair of grids**
+(two permutations of 0..26 packed back-to-back in `key`, `H = key[0..26]`, `V = key[27..53]` — **54 cells**,
+like Two/Four-Square), so the attack is the **same SA square break as Two-Square** (cell-swap-dominant
+moves + row/column swaps + reflections honouring each grid's 3×9 / 9×3 shape, a move perturbing one grid;
+bijection, **no anti-collapse penalty**, `score_adjust` stays 0) — but with **NO transparency leakage**
+(unlike Two-Square) and a **fractionation period SWEPT** on top (IoC is useless through the digraphic
+pairing, so one engine config per candidate period and the n-gram score picks the true one — a wrong period
+regroups and decrypts to gibberish). The period is recovered by `digrafid_estimate_periods` — the mean
+per-lane **Index of Coincidence** over the 2P lanes (each (digraph-position-in-group, first/second-letter
+role)) peaks at the true period (and at its multiples, which lose on the n-gram score), exactly like
+Bifid's columnar-IoC estimator; top-`-nperiods` (default 5) annealed, `-period` pins one, `-maxperiod`
+bounds the scan. The 54-cell coupled state with no leakage needs **more text than a single 5x5 square**:
+like the other square types it effectively **needs `-logprob`**, and recovery is reliable from **~800+
+letters** off a **sharp cliff** below that (~700; see `tests/test_digrafid_solver.c`, which prints it).
+**Cribs are not used** (the fractionation couples a crib to its whole group → weak gradient, as in
+Bifid/Trifid). Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on
+it. Generate test ciphers with `tools/digrafid_gen.c` (`make digrafid_gen`; args are a plaintext, a
+horizontal keyword, a vertical keyword, and a period).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -1007,7 +1062,10 @@ short restarts and modest climbs suffice), and Seriated Playfair
 (`SHAPE_ANNEAL`, **`6x400000` per swept seriation period P**, `inittemp 0.08`, `backtrack 0.30` — Playfair's
 own proven square-anneal budget, since each period is a full single-grid anneal with no per-column
 decoupling; the 400000-climb cooling schedule is what reliably reaches the optimum, and the budget is
-*per P* so the blind sweep multiplies it).
+*per P* so the blind sweep multiplies it), and Digrafid
+(`SHAPE_ANNEAL`, **`6x400000` per swept period P**, `inittemp 0.08`, `backtrack 0.30` — the 54-cell
+two-grid SA break (~Two-Square scale, but no transparency leakage) per period; ~2M climbs reliably reach
+the optimum from ~800 letters, and the budget is *per P* so the blind sweep multiplies it).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

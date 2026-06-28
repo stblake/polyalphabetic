@@ -540,6 +540,15 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 24, .s_n_hill_climbs = 300000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Digrafid: two keyed 27-symbol grids (54-cell state) annealed per swept period. The
+    // 6x400000 cooling schedule reliably reaches the optimum from ~700 letters (tuned
+    // against test_digrafid_solver); the budget is per period, so a blind sweep multiplies it.
+    { .cipher_type = DIGRAFID, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 6, .a_n_hill_climbs = 400000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 30, .s_n_hill_climbs = 400000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
     { .cipher_type = HILL, .default_shape = SHAPE_ANNEAL,
       .a_n_restarts = 250, .a_n_hill_climbs = 8000,
       .a_init_temp = 0.10, .a_min_temp = 0.001, .a_cooling_rate = 0.0,

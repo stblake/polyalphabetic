@@ -75,6 +75,21 @@ void init_alphabet_adfgvx(void) {
     g_alpha = pos;                                        // 36
 }
 
+// Digrafid 27-symbol alphabet: the full A..Z (0..25) plus DIGRAFID_EXTRA_CHAR ('#') at
+// index 26, so each 3x9 / 9x3 grid has exactly 27 cells. The '#' is registered in
+// g_char_to_idx (so it decodes from the ciphertext, unlike a sentinel) and given a
+// negligible monogram weight -- the grid attack is a bijection and uses no monogram
+// penalty, and '#' never occurs in the A..Z plaintext the n-gram score sees.
+void init_alphabet_digrafid(void) {
+    init_alphabet(NULL);                                  // A..Z -> 0..25, g_alpha = 26
+    int pos = g_alpha;                                    // == DEFAULT_ALPHABET_SIZE (26)
+    g_idx_to_char_arr[pos] = DIGRAFID_EXTRA_CHAR;
+    g_idx_to_char_arr[pos + 1] = '\0';
+    g_char_to_idx[(unsigned char) DIGRAFID_EXTRA_CHAR] = pos;
+    g_monograms[pos] = 1e-6;                              // negligible (unused by Digrafid)
+    g_alpha = pos + 1;                                    // 27
+}
+
 int gcd(int a, int b) {
     while (b) { a %= b; int t = a; a = b; b = t; }
     return a;

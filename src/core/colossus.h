@@ -79,6 +79,7 @@
 #define SLIDEFAIR_VAR      60  // Slidefair, Variant slide (bottom = col - k)
 #define SLIDEFAIR_BEAU     61  // Slidefair, Beaufort slide (bottom = k - col)
 #define SERIATED_PLAYFAIR  62  // Seriated Playfair: digraphic Playfair over vertical pairs of a two-row seriated layout (period swept)
+#define DIGRAFID           63  // Digrafid: digraphic fractionation over two keyed 27-symbol alphabets (period swept)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -133,6 +134,18 @@ enum { NIH_ADD_CARRY = 0,    // integer add with carry (ACA standard): cipher 22
 #define TRIFID_MAX_SIDE 4       // largest cube side the side-generic primitive supports
 #define TRIFID_MAX_CELLS 64     // TRIFID_MAX_SIDE^3 (headroom for primitive stress tests)
 #define TRIFID_EXTRA_CHAR '+'   // the 27th symbol completing A..Z into a 27-cell cube
+
+// Digrafid: a digraphic fractionation cipher over TWO independently keyed 27-symbol
+// alphabets (A..Z + '#'). The horizontal alphabet is a 3x9 grid, the vertical a 9x3 grid;
+// each grid is a permutation of 0..26. The two grids are packed back-to-back in the key
+// lane (H = key[0..26], V = key[27..53]), so the search state is DIGRAFID_STATE cells.
+#define DIGRAFID_GRID       27   // cells per grid == the 27-symbol alphabet
+#define DIGRAFID_STATE      54   // both grids packed back-to-back (2 * DIGRAFID_GRID)
+#define DIGRAFID_HROWS      3    // horizontal alphabet: 3 rows x 9 cols (cell = hr*9 + hc)
+#define DIGRAFID_HCOLS      9
+#define DIGRAFID_VROWS      9    // vertical alphabet: 9 rows x 3 cols (cell = vr*3 + vc)
+#define DIGRAFID_VCOLS      3
+#define DIGRAFID_EXTRA_CHAR '#'  // the 27th symbol completing A..Z into a 27-cell alphabet
 
 #define PHILLIPS_SIDE 5         // Phillips grid side (the classic 5x5)
 #define PHILLIPS_GRID 25        // Phillips grid size (PHILLIPS_SIDE * PHILLIPS_SIDE)
@@ -878,6 +891,21 @@ void trifid_decrypt(const int cipher[], int len, const int cube[], int side, int
 void trifid_cube_from_keyword(const int keyword[], int kwlen, int cube[], int n);
 
 
+// Digrafid cipher (digrafid.c). A digraphic fractionation cipher over two keyed 27-symbol
+// alphabets: the horizontal grid H (3x9, cell = hr*9 + hc) and the vertical grid V (9x3,
+// cell = vr*3 + vc), each a permutation of 0..26. A plaintext digraph (a,b) -> a 3-digit
+// number (top = a's column 0..8, bot = b's row 0..8, mid = a's row*3 + b's col, 0..8).
+// The digraphs of each PERIOD-long group have their 3-digit numbers stacked as 3 rows,
+// read row-major into a 3*g stream, re-split into consecutive triples, and mapped back
+// through the tableau to the output digraphs (Trifid-style fractionation over digraphs).
+// The solver needs only digrafid_decrypt(); encrypt/grid_from_keyword serve the test-data
+// generator and the unit tests. digrafid_grid_from_keyword places the keyed sequence
+// row-major (column_major == 0, for H) or column-major (!= 0, for V) into a rows x cols grid.
+void digrafid_encrypt(const int plain[], int len, const int gridH[], const int gridV[], int period, int out[]);
+void digrafid_decrypt(const int cipher[], int len, const int gridH[], const int gridV[], int period, int out[]);
+void digrafid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int rows, int cols, int column_major);
+
+
 // Hill cipher (hill.c). A polygraphic substitution: a block of k plaintext letters
 // (a column vector p) is enciphered c = K*p mod 26 with a k x k key matrix K (row-major
 // in mat[]); deciphering is p = K^-1*c mod 26, which exists iff gcd(det K, 26) == 1. The
@@ -991,6 +1019,11 @@ void init_alphabet_trifid(void);
 // them a negligible English monogram weight (the square attack uses no monogram penalty,
 // and the A..Z n-gram table never indexes a digit). ADFGX uses init_alphabet("J") (25).
 void init_alphabet_adfgvx(void);
+// Build the 27-symbol Digrafid alphabet: A..Z (0..25) plus DIGRAFID_EXTRA_CHAR ('#') at
+// index 26, so each 3x9 / 9x3 grid has exactly 27 cells. Like init_alphabet_trifid this
+// registers the non-letter in g_char_to_idx (so '#' decodes from the ciphertext) and gives
+// it a negligible English monogram weight (the grid attack uses no monogram penalty).
+void init_alphabet_digrafid(void);
 
 static inline int index_to_char(int idx) {
     return (idx >= 0) ? (unsigned char) g_idx_to_char_arr[idx] : (-(idx + 1));

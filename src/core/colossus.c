@@ -233,6 +233,7 @@
 #include "progkey_solver.h"
 #include "slidefair_solver.h"
 #include "seriated_playfair_solver.h"
+#include "digrafid_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -807,6 +808,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Slidefair cipher (periodic digraphic %s: rectangle over a shift slide).\n\n",
             cfg.cipher_type == SLIDEFAIR_VAR ? "Variant"
             : cfg.cipher_type == SLIDEFAIR_BEAU ? "Beaufort" : "Vigenere");
+    } else if (cfg.cipher_type == DIGRAFID) {
+        printf("\nAttacking a Digrafid cipher (digraphic fractionation over two keyed 27-symbol alphabets).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -897,6 +900,16 @@ int main(int argc, char **argv) {
         init_alphabet_trifid();
         printf("-type trifid: alphabet forced to %d symbols (A..Z + '%c'): %s\n",
             g_alpha, TRIFID_EXTRA_CHAR, g_idx_to_char_arr);
+    }
+
+    // Digrafid runs on a 27-symbol alphabet (A..Z + '#') over two grids (3x9 and 9x3):
+    // force that alphabet here -- before load_ngrams, so the n-gram table is built over the
+    // same 27 symbols (base-27 packing) and the ciphertext '#' decodes -- unless the user
+    // already changed it.
+    if (cfg.cipher_type == DIGRAFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet_digrafid();
+        printf("-type digrafid: alphabet forced to %d symbols (A..Z + '%c'): %s\n",
+            g_alpha, DIGRAFID_EXTRA_CHAR, g_idx_to_char_arr);
     }
 
     // ADFGX runs on the same 5x5 (25-letter, J->I) square as Playfair/Bifid; ADFGVX on a
@@ -1199,6 +1212,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == TRIFID) {
         solve_trifid(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == DIGRAFID) {
+        solve_digrafid(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

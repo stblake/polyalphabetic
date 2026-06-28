@@ -201,6 +201,9 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "seriated-playfair") || str_eq(arg, "seriatedplayfair") ||
         str_eq(arg, "serpf") || str_eq(arg, "spf")) return SERIATED_PLAYFAIR;
 
+    // Digrafid (digraphic fractionation over two keyed 27-symbol alphabets; period swept).
+    if (str_eq(arg, "digrafid") || str_eq(arg, "df") || str_eq(arg, "dgf")) return DIGRAFID;
+
     // Progressive Key (periodic base cipher + per-group constant key drift). Check the
     // variant/beaufort aliases before the bare progkey so a substring never shadows them.
     if (str_eq(arg, "progkey-var") || str_eq(arg, "progkey-v") || str_eq(arg, "pkv"))
