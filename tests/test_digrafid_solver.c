@@ -6,22 +6,26 @@
 //  inspected. A fixed -seed makes each stochastic solve deterministic.
 //
 //  Digrafid is a digraphic fractionation cipher over TWO independently keyed 27-symbol
-//  alphabets (A..Z + '#'): a horizontal 3x9 grid and a vertical 9x3 grid. The search state
-//  is the pair of grids (54 cells) -- the same SA square break as Two-Square, but with NO
-//  transparency leakage and a fractionation period SWEPT on top (one engine config per
-//  candidate period; the n-gram score picks it). The 54-cell coupled state needs a few
-//  hundred letters more than a single 5x5 square: recovery is reliable from ~700 letters
-//  and falls off a sharp cliff below that. It effectively needs the log-probability fitness,
-//  so this suite enables g_ngram_logprob and loads quadgrams in that mode. The suite (also
-//  the basis for tuning the SearchDefaults schedule) checks (capability cases run at ~880
-//  letters -- comfortably above the ~700-800 cliff, where some keywords are still marginal):
+//  alphabets (A..Z + '#'): a horizontal 3x9 grid and a vertical 9x3 grid. ACA Digrafid grids
+//  are KEYED ALPHABETS (a keyword, duplicates dropped, then the rest of the alphabet
+//  ascending), so the solver searches that structured space -- the state is two keyed-alphabet
+//  SEQUENCES, each "keyword prefix of length kw + sorted tail", perturbed by structure-
+//  preserving keyword moves (digrafid_move_seq) rather than the old free 54-cell square break.
+//  The keyed-alphabet prior collapses the keyspace by orders of magnitude, so recovery no
+//  longer needs ~700-800 letters (the free-permutation cliff) -- it tracks the keyword and
+//  recovers reliably from ~300 letters, the way an ACA solver does. A fractionation period is
+//  SWEPT on top (one engine config per candidate period; the n-gram score picks it). It still
+//  effectively needs the log-probability fitness, so this suite enables g_ngram_logprob and
+//  loads quadgrams in that mode. The suite (also the basis for tuning the SearchDefaults
+//  48x150000 / inittemp-0.30 schedule) checks:
 //    1. registry validation (apply_cipher_defaults) + a non-registry type left untouched;
-//    2. the PERIOD ESTIMATOR in isolation (true period in the top-K per-lane-IoC candidates);
-//    3. a capability floor (recovery %) across keywords, period pinned;
-//    4. a length cliff (recovery vs length), period pinned;
-//    5. a multi-keyword sweep (mean/worst recovery), period pinned;
-//    6. a BLIND period solve (P estimated over a bounded range) -- the reported P must match;
-//    7. per-scheme calibration: the same cipher under -method anneal / shotgun / pso.
+//    2. the keyed-alphabet move INVARIANT (digrafid_move_seq keeps a permutation + sorted tail);
+//    3. the PERIOD ESTIMATOR in isolation (true period in the top-K per-lane-IoC candidates);
+//    4. a capability floor (recovery %) across keywords at ~420 chars -- BELOW the old cliff;
+//    5. a length cliff (recovery vs length) showing the ~300-char floor (vs the old ~700);
+//    6. a multi-keyword sweep (mean/worst recovery), period pinned;
+//    7. a BLIND period solve (P estimated over a bounded range) -- the reported P must match;
+//    8. per-scheme calibration: the same cipher under -method anneal / shotgun / pso.
 //
 //  Run from the source directory so the n-gram table is found in the cwd.
 //
@@ -135,14 +139,14 @@ static void test_registry(void) {
     ColossusConfig cfg;
     init_config(&cfg); cfg.cipher_type = DIGRAFID; cfg.method = METHOD_DEFAULT;
     CHECK(apply_cipher_defaults(&cfg, false), "digrafid registry: no entry applied");
-    CHECK(cfg.n_restarts == 6 && cfg.n_hill_climbs == 400000,
+    CHECK(cfg.n_restarts == 48 && cfg.n_hill_climbs == 150000,
         "digrafid anneal defaults wrong: %dx%d", cfg.n_restarts, cfg.n_hill_climbs);
-    CHECK(cfg.init_temp > 0.0799 && cfg.init_temp < 0.0801,
+    CHECK(cfg.init_temp > 0.2999 && cfg.init_temp < 0.3001,
         "digrafid anneal inittemp wrong: %.4f", cfg.init_temp);
 
     init_config(&cfg); cfg.cipher_type = DIGRAFID; cfg.method = METHOD_SHOTGUN;
     CHECK(apply_cipher_defaults(&cfg, false), "digrafid registry (shotgun): no entry");
-    CHECK(cfg.n_restarts == 30 && cfg.n_hill_climbs == 400000,
+    CHECK(cfg.n_restarts == 200 && cfg.n_hill_climbs == 150000,
         "digrafid shotgun defaults wrong: %dx%d", cfg.n_restarts, cfg.n_hill_climbs);
 
     // Regression safety: a type with no registry entry is left untouched.
@@ -153,7 +157,43 @@ static void test_registry(void) {
         "non-registry type was modified by apply_cipher_defaults");
 }
 
-// --- 2. period estimator (in isolation) ---------------------------------------
+// --- 2. keyed-alphabet move invariant -----------------------------------------
+//
+// The whole keyed-alphabet search rests on digrafid_move_seq preserving the invariant
+// "seq is a permutation of 0..26 AND seq[kw..26] is strictly ascending" (and kw stays in
+// [DIGRAFID_KW_MIN .. DIGRAFID_KW_MAX]). Stress it: from many random keyed seeds, apply a
+// long chain of moves and assert the invariant holds at every step.
+
+static void test_move_invariant(void) {
+    int bad_perm = 0, bad_tail = 0, bad_kw = 0;
+    seed_rand(0xA11CEu);
+    for (int trial = 0; trial < 400; trial++) {
+        int seq[DIGRAFID_GRID];
+        int kw = rand_int(3, 14);                       // DIGRAFID_KW_MIN..MAX
+        random_keyword(seq, DIGRAFID_GRID, kw);
+        for (int step = 0; step < 500; step++) {
+            digrafid_move_seq(seq, DIGRAFID_GRID, &kw);
+            // permutation of 0..26?
+            int seen[DIGRAFID_GRID] = {0};
+            for (int i = 0; i < DIGRAFID_GRID; i++) {
+                if (seq[i] < 0 || seq[i] >= DIGRAFID_GRID || seen[seq[i]]) { bad_perm++; break; }
+                seen[seq[i]] = 1;
+            }
+            // tail strictly ascending past kw?
+            for (int i = kw; i + 1 < DIGRAFID_GRID; i++)
+                if (seq[i] >= seq[i + 1]) { bad_tail++; break; }
+            // kw in range?
+            if (kw < 3 || kw > 13) bad_kw++;
+        }
+    }
+    printf("[move invariant] 400 chains x 500 moves: perm-violations=%d tail-violations=%d kw-violations=%d\n",
+        bad_perm, bad_tail, bad_kw);
+    CHECK(bad_perm == 0, "digrafid_move_seq broke the permutation %d times", bad_perm);
+    CHECK(bad_tail == 0, "digrafid_move_seq broke the sorted tail %d times", bad_tail);
+    CHECK(bad_kw == 0, "digrafid_move_seq drove kw out of [3,13] %d times", bad_kw);
+}
+
+// --- 3. period estimator (in isolation) ---------------------------------------
 
 static void test_period_estimator(void) {
     int periods[] = {4, 5, 6, 7};
@@ -185,14 +225,18 @@ static void test_period_estimator(void) {
         trials - hits, trials);
 }
 
-// --- 3. capability floor (period pinned) --------------------------------------
+// --- 4. capability floor (period pinned) --------------------------------------
+//
+// Run at ~420 chars -- comfortably BELOW the old free-permutation cliff (~700-800), where the
+// keyed-alphabet search is the whole reason a solve is possible. Two keyword pairs spanning
+// short (CIPHER=6) and long (BERLINCLOCK=11, near DIGRAFID_KW_MAX) keywords.
 
 static void test_capability_floor(void) {
     const char *kwH[] = { "CIPHER",  "KRYPTOS" };
     const char *kwV[] = { "MACHINE", "BERLINCLOCK" };
     int periods[] =     { 5,         7 };
-    int plen = 880;
-    printf("\n[capability floor @ ~%d chars, period pinned, 6x400000]\n", plen);
+    int plen = 420;
+    printf("\n[capability floor @ ~%d chars (below the old ~700 cliff), period pinned]\n", plen);
     for (int k = 0; k < 2; k++) {
         static int prepared[MAX_CIPHER_LENGTH]; static char cs[MAX_CIPHER_LENGTH];
         int n = plant(kwH[k], kwV[k], periods[k], plen, prepared, cs);
@@ -205,30 +249,35 @@ static void test_capability_floor(void) {
     }
 }
 
-// --- 4. length cliff (period pinned) ------------------------------------------
+// --- 5. length cliff (period pinned) ------------------------------------------
+//
+// The headline of the keyed-alphabet rewrite: the cliff moved from ~700 (free permutation) to
+// ~300. Show recovery climbing across 240 -> 320 -> 480 and assert a clean solve at 320+.
 
 static void test_length_cliff(void) {
-    int lens[] = { 400, 600, 880 };
-    printf("\n[length cliff: keyword CIPHER/MACHINE, P=5, registry anneal]\n");
-    double frac_longest = 0.0;
+    int lens[] = { 240, 320, 480 };
+    printf("\n[length cliff: keyword CIPHER/MACHINE, P=5, registry anneal -- floor ~300, was ~700]\n");
+    double frac320 = 0.0, frac480 = 0.0;
     for (int li = 0; li < 3; li++) {
         static int prepared[MAX_CIPHER_LENGTH]; static char cs[MAX_CIPHER_LENGTH];
         int n = plant("CIPHER", "MACHINE", 5, lens[li], prepared, cs);
         double secs;
         double frac = solve_and_frac(cs, prepared, n, 5, 0, 0, METHOD_DEFAULT, 0x5EEDu + li, NULL, &secs);
         printf("  len~%-4d (%d) : %.1f%%  [%.1fs]\n", lens[li], n, 100.0 * frac, secs);
-        if (li == 2) frac_longest = frac;
+        if (li == 1) frac320 = frac;
+        if (li == 2) frac480 = frac;
     }
-    CHECK(frac_longest >= 0.95, "digrafid 880ch (cliff sweep) recovered only %.3f", frac_longest);
+    CHECK(frac480 >= 0.95, "digrafid 480ch recovered only %.3f", frac480);
+    CHECK(frac320 >= 0.95, "digrafid 320ch (just above the new cliff) recovered only %.3f", frac320);
 }
 
-// --- 5. multi-keyword sweep (period pinned) -----------------------------------
+// --- 6. multi-keyword sweep (period pinned) -----------------------------------
 
 static void test_multi_keyword(void) {
     const char *kwH[] = { "ZEBRA",      "MONARCHY", "PORTABLE" };
     const char *kwV[] = { "PALMERSTON", "SHADOW",   "GADGETRY" };
     int periods[] =     { 5,            6,          8 };
-    int plen = 880, nk = 3;
+    int plen = 480, nk = 3;
     double sum = 0, worst = 1.0;
     printf("\n[multi-keyword sweep @ ~%d chars, period pinned]\n", plen);
     for (int k = 0; k < nk; k++) {
@@ -242,10 +291,10 @@ static void test_multi_keyword(void) {
     CHECK(sum / nk > 0.90, "multi-keyword mean too low: %.1f%%", 100.0 * sum / nk);
 }
 
-// --- 6. blind period solve (period estimated over a bounded range) ------------
+// --- 7. blind period solve (period estimated over a bounded range) ------------
 
 static void test_blind_period(void) {
-    int P = 5, plen = 880;
+    int P = 5, plen = 480;
     static int prepared[MAX_CIPHER_LENGTH]; static char cs[MAX_CIPHER_LENGTH];
     int n = plant("CIPHER", "MACHINE", P, plen, prepared, cs);
     double secs; int pout;
@@ -258,10 +307,10 @@ static void test_blind_period(void) {
     CHECK(frac > 0.90, "blind-P recovery only %.1f%%", 100.0 * frac);
 }
 
-// --- 7. per-scheme calibration (anneal / shotgun / pso) -----------------------
+// --- 8. per-scheme calibration (anneal / shotgun / pso) -----------------------
 
 static void test_per_scheme(void) {
-    int P = 5, plen = 880;
+    int P = 5, plen = 360;
     static int prepared[MAX_CIPHER_LENGTH]; static char cs[MAX_CIPHER_LENGTH];
     int n = plant("CIPHER", "MACHINE", P, plen, prepared, cs);
     struct { int method; const char *name; } M[] = {
@@ -290,6 +339,7 @@ int main(void) {
     }
 
     test_registry();
+    test_move_invariant();
     test_period_estimator();
     test_capability_floor();
     test_length_cliff();

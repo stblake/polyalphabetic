@@ -121,8 +121,9 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   alphabets (A..Z + #) -- a horizontal 3x9 grid + a vertical 9x3 grid. A
                                      #   plaintext digraph -> a 3-digit number (top=col in H, bot=row in V, mid from
                                      #   the 3x3 intersection); each PERIOD-long group's numbers are stacked + Trifid-
-                                     #   fractionated, then mapped back to ciphertext digraphs. State = the two grids
-                                     #   (54 cells, like Two-Square); attack = the Two-Square SA square break with the
+                                     #   fractionated, then mapped back to ciphertext digraphs. The two grids are KEYED
+                                     #   ALPHABETS (keyword + ascending tail), searched AS SUCH (anneal two short keywords,
+                                     #   not free 54-cell permutations) -- drops the blind cliff from ~700 to ~300 letters;
                                      #   period SWEPT (one config per P; n-gram score picks it). Reuses bifid.c's
                                      #   build-inverse. Needs -logprob; no cribs.
 
@@ -359,12 +360,14 @@ avoid the rare-letter X ambiguity that pins an unlucky grid at ~92%); a length c
 ~250 chars); a multi-keyword sweep (mean/worst); a BLIND period solve (P swept over a bounded range, the
 reported P asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. The
 basis the `SearchDefaults` `6x400000` schedule is tuned against), and
-`tests/test_digrafid_solver.c` (Digrafid: registry validation + a non-registry type; the PERIOD ESTIMATOR
-in isolation (true period in the top-K per-lane IoC across periods × lengths); a capability floor across
-keywords (period pinned, ~880 chars, `-logprob`); a length cliff (sharp — fails ≤600, ~100% by 880); a
-multi-keyword sweep (mean/worst); a BLIND period solve (period estimated over a bounded scan, the reported
-P asserted == the true one); and a per-scheme pass under `-method` anneal / shotgun / pso. The basis the
-`SearchDefaults` `6x400000` schedule is tuned against).
+`tests/test_digrafid_solver.c` (Digrafid: registry validation + a non-registry type; the keyed-alphabet move
+INVARIANT (`digrafid_move_seq` keeps a permutation + sorted tail over 400×500 random move chains); the PERIOD
+ESTIMATOR in isolation (true period in the top-K per-lane IoC across periods × lengths); a capability floor
+across keywords (period pinned, **~420 chars — BELOW the old free-permutation cliff**, `-logprob`); a length
+cliff showing the **new ~300-char floor** (~9% at 240, ~100% by 320, vs the old ~700); a multi-keyword sweep
+(mean/worst); a BLIND period solve (period estimated over a bounded scan, the reported P asserted == the true
+one); and a per-scheme pass under `-method` anneal / shotgun / pso. The basis the `SearchDefaults`
+`48x150000` / `inittemp 0.30` keyed-alphabet schedule is tuned against).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
@@ -399,7 +402,7 @@ trimming). The manifest tags each case `fast` or `slow`:
 `--slow` the 30 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
 three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
-solves, the ~1s Bazeries solve, the ~3s Seriated Playfair solve, and the ~20s Digrafid solve), no flag runs both.
+solves, the ~1s Bazeries solve, the ~3s Seriated Playfair solve, and the ~26s Digrafid solve), no flag runs both.
 Add a case by appending a
 `tier|name|type|cipher|args` line and running `./run_tests.sh --generate <name>`
 once the recovered text is verified correct.
@@ -996,20 +999,31 @@ group of `g` digraphs the `g` triples are stacked as 3 rows (tops/mids/bots), re
 tableau to one ciphertext digraph — exactly the Trifid reshape, but over digraphs. The primitive
 (`digrafid.c`, hand-verified cell-for-cell against the ACA worked example — keywords `KEYWORD`/`VERTICAL`,
 `THISISTHEFORESTPRI` → period 3 `HJMXWSWJADWGFCSPYI`, period 4 `HJTKVHYUFFWDSQYPRI`) **reuses** `bifid.c`'s
-`bifid_build_inverse` and is O(len). **The key design point:** the whole key is the **pair of grids**
-(two permutations of 0..26 packed back-to-back in `key`, `H = key[0..26]`, `V = key[27..53]` — **54 cells**,
-like Two/Four-Square), so the attack is the **same SA square break as Two-Square** (cell-swap-dominant
-moves + row/column swaps + reflections honouring each grid's 3×9 / 9×3 shape, a move perturbing one grid;
-bijection, **no anti-collapse penalty**, `score_adjust` stays 0) — but with **NO transparency leakage**
-(unlike Two-Square) and a **fractionation period SWEPT** on top (IoC is useless through the digraphic
-pairing, so one engine config per candidate period and the n-gram score picks the true one — a wrong period
-regroups and decrypts to gibberish). The period is recovered by `digrafid_estimate_periods` — the mean
-per-lane **Index of Coincidence** over the 2P lanes (each (digraph-position-in-group, first/second-letter
-role)) peaks at the true period (and at its multiples, which lose on the n-gram score), exactly like
-Bifid's columnar-IoC estimator; top-`-nperiods` (default 5) annealed, `-period` pins one, `-maxperiod`
-bounds the scan. The 54-cell coupled state with no leakage needs **more text than a single 5x5 square**:
-like the other square types it effectively **needs `-logprob`**, and recovery is reliable from **~800+
-letters** off a **sharp cliff** below that (~700; see `tests/test_digrafid_solver.c`, which prints it).
+`bifid_build_inverse` and is O(len). **The key design point: the two grids are KEYED ALPHABETS, and the
+solver searches them AS SUCH** — not as free 54-cell permutations. An ACA Digrafid grid is a keyword
+(duplicates dropped) followed by the rest of the alphabet ascending (exactly what `digrafid_grid_from_keyword`
+builds), so the state is **two keyed-alphabet SEQUENCES** (`H = key[0..26]`, `V = key[27..53]`), each kept as
+**"keyword prefix of length `kw` + sorted tail"** (the keyword lengths live in `st->aux[0..1]`). The move
+(`digrafid_move_seq`, the same keyed-alphabet structure the Quagmire solver uses via `random_keyword`/
+`perturbate_keyword`, but re-weighted for the coarser fractionation landscape) perturbs ONE sequence: ~4% a
+keyword-length change (re-canonicalising the tail with `digrafid_canonicalize`), ~48% a keyword↔tail swap
+(coarse set search, re-sorts the tail), ~48% an in-keyword swap (smooth reorder); the grids are rebuilt from
+the sequences at decrypt (`digrafid_grid_from_keyword` with the whole sequence = a pure sequence→grid map,
+H row-major / V column-major). Every keyed alphabet is a bijection, so there is **no anti-collapse penalty**
+(`score_adjust` stays 0). **Why this matters:** collapsing each grid from a free 27! permutation to a short
+keyword shrinks the keyspace by orders of magnitude and makes the sorted tail a strong prior, so recovery no
+longer needs ~700–800 letters (the old free-permutation square break's cliff) — it **tracks the keyword and
+recovers reliably from ~300 letters** (the way an ACA solver does; on the ACA index corpus this flips the
+shorter puzzles from unsolvable to solved). A keyword longer than `DIGRAFID_KW_MAX` (13), or a non-keyed/
+fully-shuffled grid, is not representable — but every ACA Digrafid, and the generator, uses a keyed alphabet.
+A **fractionation period is SWEPT** on top (IoC is useless through the digraphic pairing, so one engine config
+per candidate period and the n-gram score picks the true one — a wrong period regroups → gibberish). The
+period is recovered by `digrafid_estimate_periods` — the mean per-lane **Index of Coincidence** over the 2P
+lanes (each (digraph-position-in-group, first/second-letter role)) peaks at the true period (and at its
+multiples, which lose on the n-gram score), exactly like Bifid's columnar-IoC estimator; top-`-nperiods`
+(default 5) annealed, `-period` pins one, `-maxperiod` bounds the scan. Like the other square types it
+effectively **needs `-logprob`**; **RESTARTS are the lever** (each samples/refines a keyword length, and the
+coarse keyword moves want a **warm temperature**, so the schedule is many restarts at `inittemp 0.30`).
 **Cribs are not used** (the fractionation couples a crib to its whole group → weak gradient, as in
 Bifid/Trifid). Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on
 it. Generate test ciphers with `tools/digrafid_gen.c` (`make digrafid_gen`; args are a plaintext, a
@@ -1063,9 +1077,10 @@ short restarts and modest climbs suffice), and Seriated Playfair
 own proven square-anneal budget, since each period is a full single-grid anneal with no per-column
 decoupling; the 400000-climb cooling schedule is what reliably reaches the optimum, and the budget is
 *per P* so the blind sweep multiplies it), and Digrafid
-(`SHAPE_ANNEAL`, **`6x400000` per swept period P**, `inittemp 0.08`, `backtrack 0.30` — the 54-cell
-two-grid SA break (~Two-Square scale, but no transparency leakage) per period; ~2M climbs reliably reach
-the optimum from ~800 letters, and the budget is *per P* so the blind sweep multiplies it).
+(`SHAPE_ANNEAL`, **`48x150000` per swept period P**, **`inittemp 0.30`**, `backtrack 0.30` — the two-grid
+KEYED-ALPHABET search (not the free 54-cell square break) per period; the coarse keyword moves want a warm
+temperature and short ciphers want many basins tried, so it is MANY warm restarts, which recovers from ~300
+letters — vs the old free-permutation ~700-800 cliff — and the budget is *per P* so the blind sweep multiplies it).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

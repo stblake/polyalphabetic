@@ -156,10 +156,11 @@ fast | slidefair_beau_decl | slidefair-beau | slidefair_beau_decl.txt | -period 
 # sweep is exercised by tests/test_seriated_playfair_solver.c. Alphabet forced to 25 (J->I).
 slow | seriated_playfair_decl | seriated-playfair | seriated_playfair_decl.txt | -logprob -period 7 -nrestarts 3 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # Digrafid (digraphic fractionation over two keyed 27-symbol alphabets A..Z + '#'; horizontal 3x9 +
-# vertical 9x3 grids, the period swept). A 54-cell two-grid SA break per period, so it needs -logprob;
-# period pinned here to keep the case fast -- the blind P sweep is exercised by
-# tests/test_digrafid_solver.c. Alphabet forced to 27 (A..Z + '#').
-slow | digrafid_pride | digrafid | digrafid_pride.txt | -logprob -period 5 -nrestarts 6 -nhillclimbs 400000 -inittemp 0.08 -backtrackprob 0.3
+# vertical 9x3 grids, the period swept). The two grids are KEYED ALPHABETS (keyword + ascending tail),
+# searched as such (not free 54-cell permutations), so it needs -logprob; period pinned here to keep
+# the case fast -- the blind P sweep is exercised by tests/test_digrafid_solver.c. Alphabet forced to
+# 27 (A..Z + '#').
+slow | digrafid_pride | digrafid | digrafid_pride.txt | -logprob -period 5 -nrestarts 16 -nhillclimbs 200000 -inittemp 0.30 -backtrackprob 0.3
 # Progressive Key (periodic Vigenere/Variant/Beaufort + per-group constant key drift). The climbed
 # state is the P per-column base shifts (monogram-warm-started); period + progression pinned here to
 # keep the cases fast -- the blind P and blind progression sweeps are exercised by

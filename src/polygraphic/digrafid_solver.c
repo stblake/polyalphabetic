@@ -9,14 +9,30 @@
 //
 // Digrafid is a digraphic fractionation cipher over TWO independently keyed 27-symbol
 // alphabets (A..Z + '#'): a horizontal grid H (3x9) and a vertical grid V (9x3). Breaking
-// it is two coupled problems: recover the period and recover both grids. The grid search
-// is the same SA square break Playfair/Two-Square use -- the state is the pair of grids,
-// two permutations of 0..26 packed back-to-back in st->key (H = key[0..26], V =
-// key[27..53]) -- annealed with n-gram scoring, each move perturbing ONE grid (chosen
-// uniformly) with a cell swap (dominant) plus row/column swaps and reflections honouring
-// that grid's shape (3x9 vs 9x3). No anti-collapse penalty is needed (every grid is a
-// bijection, so the whole digraph map is), so score_adjust stays 0 and it rides the
-// generic state_score; like the other square types it effectively needs -logprob.
+// it is two coupled problems: recover the period and recover both grids.
+//
+// KEY-STRUCTURED SEARCH (not the full 27!^2 free permutation). ACA Digrafid grids are KEYED
+// ALPHABETS -- a keyword (duplicates dropped) followed by the rest of the alphabet ascending
+// -- exactly as the generator builds them (digrafid_grid_from_keyword). So instead of
+// annealing two free 54-cell permutations (the Two-Square square break, which needs ~700-800
+// letters of n-gram signal to pin a grid statistically), we search the SAME space the cipher
+// is keyed in: the state is two keyed-alphabet SEQUENCES (H = key[0..26], V = key[27..53]),
+// each maintained as "keyword prefix of length kw + ascending tail" by the SAME core moves
+// the Quagmire solver uses -- random_keyword() seeds them and perturbate_keyword() perturbs
+// them (a 20% in-keyword swap / 80% keyword<->tail swap that re-inserts the displaced letter
+// into the tail in sorted order, so the keyed-alphabet invariant always holds). Each move
+// perturbs ONE sequence (chosen uniformly); the grids are rebuilt from the sequences at
+// decrypt (H row-major, V column-major). The keyword lengths kwH, kwV live in st->aux[0..1]
+// and are sampled per restart from [DIGRAFID_KW_MIN .. DIGRAFID_KW_MAX] -- RESTARTS are the
+// lever that covers the keyword-length range (the n-gram score across restarts/periods picks
+// the winner), the same way Bazeries sweeps its digit count and the period is swept here.
+// Collapsing each grid from a free permutation to a short keyword shrinks the keyspace by
+// orders of magnitude and makes the structured tail a strong prior, so recovery no longer
+// needs ~800 letters -- it tracks the keyword, the way an ACA solver does. No anti-collapse
+// penalty is needed (every keyed alphabet is a bijection, so the whole digraph map is), so
+// score_adjust stays 0 and it rides the generic state_score; it still effectively needs
+// -logprob. (A keyword longer than DIGRAFID_KW_MAX, or a non-keyed/fully-shuffled grid, is
+// not representable -- but every ACA Digrafid, and the generator, uses a keyed alphabet.)
 //
 // The period is recovered by an index-of-coincidence test (digrafid_estimate_periods):
 // the ciphertext is laid out in 2P lanes -- one per (digraph-position-in-group, first/
@@ -26,6 +42,15 @@
 // the n-gram score picks the winner. -period pins a single period.
 
 #define DIGRAFID_MAX_PERIODS 64
+
+// Keyword-length search range for each keyed alphabet. A keyed alphabet of true keyword
+// length L is representable iff kw >= L (a too-short kw cannot place the keyword tail in
+// sorted order), and a tighter kw (closer to L) is a stronger prior / smaller space. The
+// range covers realistic ACA keyword lengths (the test corpus tops out at BERLINCLOCK = 11)
+// while keeping a tail of >= DIGRAFID_GRID - DIGRAFID_KW_MAX = 14 cells in fixed ascending
+// order -- a genuine structural constraint, never the free permutation (kw == DIGRAFID_GRID).
+#define DIGRAFID_KW_MIN 3
+#define DIGRAFID_KW_MAX 13
 
 typedef struct {
     int grid_size;                       // cells per grid (== g_alpha == 27)
@@ -106,81 +131,99 @@ static int digrafid_enumerate(const SolverCtx *ctx, SolverConfig *out, int cap) 
     return n;
 }
 
-// Seed: two independent uniformly-random grids (a Fisher-Yates shuffle per grid).
+// Build the two grids from the two keyed-alphabet SEQUENCES carried in the state. seqH/seqV
+// are full DIGRAFID_GRID-length keyed sequences (keyword prefix + ascending tail); H is
+// filled row-major, V column-major. Passing the whole sequence as the "keyword" makes
+// digrafid_grid_from_keyword a pure sequence->grid placement (every cell present, no tail
+// appended), so this is exactly the grid the generator built from the same keyed alphabet.
+static void digrafid_build_grids(const int *seqH, const int *seqV, int *gridH, int *gridV) {
+    digrafid_grid_from_keyword(seqH, DIGRAFID_GRID, gridH, DIGRAFID_HROWS, DIGRAFID_HCOLS, 0);
+    digrafid_grid_from_keyword(seqV, DIGRAFID_GRID, gridV, DIGRAFID_VROWS, DIGRAFID_VCOLS, 1);
+}
+
+// Re-establish the keyed-alphabet invariant after the keyword/tail boundary kw moves: keep
+// the prefix seq[0..kw-1] as the keyword (any order), then refill seq[kw..n-1] with the
+// remaining symbols in ascending order. (n = 27, so the O(n^2) refill is negligible.)
+void digrafid_canonicalize(int *seq, int n, int kw) {
+    char used[DIGRAFID_GRID];
+    for (int i = 0; i < n; i++) used[i] = 0;
+    for (int i = 0; i < kw; i++) used[seq[i]] = 1;
+    int m = kw;
+    for (int s = 0; s < n && m < n; s++) if (!used[s]) seq[m++] = s;
+}
+
+// One structure-preserving move on a single keyed alphabet `seq` of n cells whose keyword
+// prefix has length *kw. The keyed-alphabet invariant (sorted tail past *kw) always holds on
+// exit. Three move classes, tuned for the Digrafid fractionation landscape (coarser than a
+// monoalphabetic substitution, so the smooth in-keyword reorder carries more of the fine
+// convergence than Quagmire's 20/80 split):
+//   ~4%  : change the keyword length by +-1 (re-canonicalising the tail) -- lets ONE restart
+//          find the true keyword length instead of relying on the seed to hit it;
+//   ~48% : swap a keyword letter with a tail letter and re-sort the tail (COARSE set search --
+//          brings new letters into / out of the keyword; reshuffles part of the tail);
+//   ~48% : swap two keyword letters (SMOOTH: reorders the keyword, 2 cells, no tail shift) --
+//          the fine move that locks the exact order once the keyword set is right.
+void digrafid_move_seq(int *seq, int n, int *kw) {
+    double r = frand();
+    if (r < 0.04) {                                   // grow / shrink the keyword
+        int k = *kw;
+        if (k <= DIGRAFID_KW_MIN) k++;
+        else if (k >= DIGRAFID_KW_MAX) k--;
+        else k += (frand() < 0.5) ? 1 : -1;
+        *kw = k;
+        digrafid_canonicalize(seq, n, k);
+    } else if (r < 0.52) {                            // keyword <-> tail (coarse set search)
+        int i = rand_int(0, *kw), j = rand_int(*kw, n);
+        int t = seq[i]; seq[i] = seq[j]; seq[j] = t;
+        digrafid_canonicalize(seq, n, *kw);           // keep the tail sorted
+    } else {                                          // in-keyword reorder (smooth)
+        int i = rand_int(0, *kw), j = rand_int(0, *kw);
+        int t = seq[i]; seq[i] = seq[j]; seq[j] = t;
+    }
+}
+
+// Seed: two independent random keyed alphabets. random_keyword lays a random keyword of
+// length kw (distinct symbols) then the rest of the alphabet ascending; kw is sampled per
+// restart from [DIGRAFID_KW_MIN .. DIGRAFID_KW_MAX] and stashed in st->aux. The keyword length
+// is then ALSO perturbed within the restart (digrafid_move_seq), so the seed only sets a
+// starting length -- restarts + the in-climb length move together cover the range.
 static void digrafid_seed(const SolverCtx *ctx, const SolverConfig *cc, SolverState *st) {
     (void) cc;
     const DigrafidScratch *d = (const DigrafidScratch *) ctx->model_scratch;
     int g = d->grid_size;
     for (int s = 0; s < 2; s++) {
-        int *blk = st->key + s * g;
-        for (int i = 0; i < g; i++) blk[i] = i;
-        for (int i = g - 1; i > 0; i--) {
-            int j = rand_int(0, i + 1);
-            int t = blk[i]; blk[i] = blk[j]; blk[j] = t;
-        }
+        int kw = rand_int(DIGRAFID_KW_MIN, DIGRAFID_KW_MAX + 1);   // [MIN .. MAX]
+        random_keyword(st->key + s * g, g, kw);
+        st->aux[s] = kw;
     }
     st->key_len = 2 * g;
 }
 
-// Apply one Playfair-style move to a single rows x cols grid `blk` (n = rows*cols cells,
-// cell = r*cols + c): 80% swap two cells; 8% swap two rows; 8% swap two columns; 2% reverse
-// (rotate 180); 1% flip rows; 1% flip columns. The larger moves jump the basins a single
-// cell swap cannot escape; the shape (3x9 vs 9x3) is honoured so row/col swaps stay valid.
-static void digrafid_perturb_block(int *blk, int rows, int cols, int n) {
-    double r = frand();
-    if (r < 0.80) {                              // swap two cells
-        int a = rand_int(0, n), b = rand_int(0, n);
-        int t = blk[a]; blk[a] = blk[b]; blk[b] = t;
-    } else if (r < 0.88) {                       // swap two rows
-        int r1 = rand_int(0, rows), r2 = rand_int(0, rows);
-        for (int c = 0; c < cols; c++) {
-            int t = blk[r1 * cols + c]; blk[r1 * cols + c] = blk[r2 * cols + c]; blk[r2 * cols + c] = t;
-        }
-    } else if (r < 0.96) {                       // swap two columns
-        int c1 = rand_int(0, cols), c2 = rand_int(0, cols);
-        for (int rr = 0; rr < rows; rr++) {
-            int t = blk[rr * cols + c1]; blk[rr * cols + c1] = blk[rr * cols + c2]; blk[rr * cols + c2] = t;
-        }
-    } else if (r < 0.98) {                       // reverse the whole grid (rotate 180)
-        for (int i = 0, j = n - 1; i < j; i++, j--) {
-            int t = blk[i]; blk[i] = blk[j]; blk[j] = t;
-        }
-    } else if (r < 0.99) {                       // flip rows top<->bottom
-        for (int r1 = 0, r2 = rows - 1; r1 < r2; r1++, r2--)
-            for (int c = 0; c < cols; c++) {
-                int t = blk[r1 * cols + c]; blk[r1 * cols + c] = blk[r2 * cols + c]; blk[r2 * cols + c] = t;
-            }
-    } else {                                     // flip columns left<->right
-        for (int c1 = 0, c2 = cols - 1; c1 < c2; c1++, c2--)
-            for (int rr = 0; rr < rows; rr++) {
-                int t = blk[rr * cols + c1]; blk[rr * cols + c1] = blk[rr * cols + c2]; blk[rr * cols + c2] = t;
-            }
-    }
-}
-
-// Neighbour move: perturb ONE of the two grids, chosen uniformly, honouring its shape.
+// Neighbour move: perturb ONE of the two keyed alphabets, chosen uniformly, keeping its
+// keyword length in st->aux up to date.
 static void digrafid_perturb(const SolverCtx *ctx, const SolverConfig *cc,
                              SolverState *st, bool *force_primary) {
     const DigrafidScratch *d = (const DigrafidScratch *) ctx->model_scratch;
     (void) cc; (void) force_primary;
     int g = d->grid_size;
-    if (rand_int(0, 2) == 0)
-        digrafid_perturb_block(st->key, DIGRAFID_HROWS, DIGRAFID_HCOLS, g);     // H: 3x9
-    else
-        digrafid_perturb_block(st->key + g, DIGRAFID_VROWS, DIGRAFID_VCOLS, g); // V: 9x3
+    int s = rand_int(0, 2);
+    digrafid_move_seq(st->key + s * g, g, &st->aux[s]);
 }
 
 static void digrafid_copy(const SolverConfig *cc, const SolverState *src, SolverState *dst) {
     (void) cc;
-    // Both grids (DIGRAFID_STATE cells); the period config does not carry the state length.
+    // Both keyed-alphabet sequences (DIGRAFID_STATE cells) plus the two keyword lengths.
     for (int i = 0; i < DIGRAFID_STATE; i++) dst->key[i] = src->key[i];
+    dst->aux[0] = src->aux[0];   // kwH
+    dst->aux[1] = src->aux[1];   // kwV
 }
 
 static void digrafid_decrypt_hook(const SolverCtx *ctx, const SolverConfig *cc,
                                   SolverState *st, int *out, double *score_adjust) {
     const DigrafidScratch *d = (const DigrafidScratch *) ctx->model_scratch;
-    digrafid_decrypt(ctx->cipher, ctx->cipher_len, st->key, st->key + d->grid_size,
-                     cc->period, out);
+    int gridH[DIGRAFID_GRID], gridV[DIGRAFID_GRID];
+    digrafid_build_grids(st->key, st->key + d->grid_size, gridH, gridV);
+    digrafid_decrypt(ctx->cipher, ctx->cipher_len, gridH, gridV, cc->period, out);
     *score_adjust = 0.0;
 }
 
@@ -196,10 +239,12 @@ static void digrafid_print_grid(const int grid[], int rows, int cols) {
 static void digrafid_report_verbose(const SolverCtx *ctx, const SolverConfig *cc,
         const SolverState *st, double score, int *decrypted, const EngineStats *stats) {
     const DigrafidScratch *d = (const DigrafidScratch *) ctx->model_scratch;
+    int gridH[DIGRAFID_GRID], gridV[DIGRAFID_GRID];
+    digrafid_build_grids(st->key, st->key + d->grid_size, gridH, gridV);
     printf("\n  period %d, horizontal grid (3x9):\n", cc->period);
-    digrafid_print_grid(st->key, DIGRAFID_HROWS, DIGRAFID_HCOLS);
+    digrafid_print_grid(gridH, DIGRAFID_HROWS, DIGRAFID_HCOLS);
     printf("  vertical grid (9x3):\n");
-    digrafid_print_grid(st->key + d->grid_size, DIGRAFID_VROWS, DIGRAFID_VCOLS);
+    digrafid_print_grid(gridV, DIGRAFID_VROWS, DIGRAFID_VCOLS);
     report_transposition_verbose(ctx, score, decrypted, stats, "digrafid");
 }
 
@@ -217,9 +262,12 @@ static void digrafid_report(const SolverCtx *ctx, const SolverConfig *cc,
         n_words_found = find_dictionary_words(plaintext_string, ctx->shared->dict,
             ctx->shared->n_dict_words, ctx->shared->max_dict_word_len);
 
-    // The two recovered grids, read row-major (H first, then V).
+    // The two recovered grids, read row-major (H first, then V), rebuilt from the keyed-
+    // alphabet sequences carried in the state.
+    int gridH[DIGRAFID_GRID], gridV[DIGRAFID_GRID];
+    digrafid_build_grids(st->key, st->key + n, gridH, gridV);
     char hstr[DIGRAFID_GRID + 1], vstr[DIGRAFID_GRID + 1];
-    for (int i = 0; i < n; i++) { hstr[i] = index_to_char(st->key[i]); vstr[i] = index_to_char(st->key[n + i]); }
+    for (int i = 0; i < n; i++) { hstr[i] = index_to_char(gridH[i]); vstr[i] = index_to_char(gridV[i]); }
     hstr[n] = '\0'; vstr[n] = '\0';
 
     printf("\nResult Score: %.2f | Words: %d | period=%d | H=%s | V=%s\n",
