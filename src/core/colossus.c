@@ -234,6 +234,7 @@
 #include "slidefair_solver.h"
 #include "seriated_playfair_solver.h"
 #include "digrafid_solver.h"
+#include "cm_bifid_solver.h"
 
 void init_config(ColossusConfig *cfg) {
     // Set Defaults
@@ -810,6 +811,8 @@ int main(int argc, char **argv) {
             : cfg.cipher_type == SLIDEFAIR_BEAU ? "Beaufort" : "Vigenere");
     } else if (cfg.cipher_type == DIGRAFID) {
         printf("\nAttacking a Digrafid cipher (digraphic fractionation over two keyed 27-symbol alphabets).\n\n");
+    } else if (cfg.cipher_type == CM_BIFID) {
+        printf("\nAttacking a CM Bifid cipher (Bifid fractionation over two keyed Polybius squares).\n\n");
     } else {
         printf("\n\nERROR: Unknown cipher type %d.\n\n", cfg.cipher_type);
         return 0;
@@ -871,6 +874,14 @@ int main(int argc, char **argv) {
     if (cfg.cipher_type == BIFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type bifid: alphabet forced to %d letters (J->I): %s\n",
+            g_alpha, g_idx_to_char_arr);
+    }
+
+    // CM Bifid runs on the same 5x5 (25-letter, J->I) grid as Bifid (two such squares).
+    // Force it here -- before load_ngrams -- unless the user already shrank the alphabet.
+    if (cfg.cipher_type == CM_BIFID && g_alpha == DEFAULT_ALPHABET_SIZE) {
+        init_alphabet("J");
+        printf("-type cm-bifid: alphabet forced to %d letters (J->I): %s\n",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -1218,6 +1229,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == DIGRAFID) {
         solve_digrafid(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == CM_BIFID) {
+        solve_cm_bifid(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

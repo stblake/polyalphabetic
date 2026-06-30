@@ -80,6 +80,7 @@
 #define SLIDEFAIR_BEAU     61  // Slidefair, Beaufort slide (bottom = k - col)
 #define SERIATED_PLAYFAIR  62  // Seriated Playfair: digraphic Playfair over vertical pairs of a two-row seriated layout (period swept)
 #define DIGRAFID           63  // Digrafid: digraphic fractionation over two keyed 27-symbol alphabets (period swept)
+#define CM_BIFID           64  // CM Bifid (Conjugated Matrix Bifid): Bifid fractionation over two keyed Polybius squares (period swept)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -785,6 +786,15 @@ void bifid_build_inverse(const int grid[], int pos[], int n);
 void bifid_encrypt(const int plain[], int len, const int grid[], int side, int period, int out[]);
 void bifid_decrypt(const int cipher[], int len, const int grid[], int side, int period, int out[]);
 void bifid_grid_from_keyword(const int keyword[], int kwlen, int grid[], int n);
+
+// CM Bifid (Conjugated Matrix Bifid) cipher (cm_bifid.c). Plain Bifid with TWO keyed
+// squares: fractionate plaintext into coords via sq1, then map the re-paired coordinate
+// stream to ciphertext letters via a different sq2 (decrypt mirrors: expand via sq2,
+// recombine via sq1). sq1 == sq2 reduces to Bifid. Side-generic; reuses bifid_build_inverse.
+void cm_bifid_encrypt(const int plain[], int len, const int sq1[], const int sq2[],
+                      int side, int period, int out[]);
+void cm_bifid_decrypt(const int cipher[], int len, const int sq1[], const int sq2[],
+                      int side, int period, int out[]);
 
 
 // Nihilist Substitution cipher (nihilist_sub.c). A periodic ADDITIVE cipher over a keyed

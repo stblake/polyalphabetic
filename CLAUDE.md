@@ -126,6 +126,14 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   not free 54-cell permutations) -- drops the blind cliff from ~700 to ~300 letters;
                                      #   period SWEPT (one config per P; n-gram score picks it). Reuses bifid.c's
                                      #   build-inverse. Needs -logprob; no cribs.
+  cm_bifid.c cm_bifid_solver.c/.h    # CM Bifid (Conjugated Matrix Bifid): plain Bifid, but the
+                                     #   coordinate-pair -> letter recombination uses a SECOND keyed 5x5 square
+                                     #   (sq1 fractionates, sq2 recombines; sq1==sq2 reduces to Bifid). JOINT two-
+                                     #   square anneal (state = both squares packed back-to-back, perturb one per
+                                     #   move) -- no decoupling reward, like Four-Square; period SWEPT via Bifid's
+                                     #   estimator (reused, square-agnostic). ODD periods recover (~480 letters);
+                                     #   EVEN periods are degenerate ciphertext-only (rows/cols never share an output
+                                     #   pair -> transpose-like square ambiguity). Reuses bifid.c. Needs -logprob; no cribs.
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -151,6 +159,7 @@ tools/portax_gen.c           # standalone Portax generator (make portax_gen)
 tools/slidefair_gen.c        # standalone Slidefair generator (make slidefair_gen)
 tools/seriated_playfair_gen.c # standalone Seriated Playfair generator (make seriated_playfair_gen)
 tools/digrafid_gen.c         # standalone Digrafid generator (make digrafid_gen)
+tools/cm_bifid_gen.c         # standalone CM Bifid generator (make cm_bifid_gen)
 tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
@@ -286,7 +295,13 @@ from keywords `KEYWORD` (H, 3x9) / `VERTICAL` (V, 9x3), `THISISTHEFORESTPRI` →
 and period 4 `HJTKVHYUFFWDSQYPRI` (the period-4 case a ragged final group of one digraph) — the two grids
 asserted cell-for-cell, the `P=1` identity, an odd-length lone-trailing-letter passthrough, and
 decrypt/encrypt round-trips over random independent grids × even lengths × periods incl. ragged blocks and
-`P>digraph count`).
+`P>digraph count`), and
+`tests/test_cm_bifid.c` (the CM Bifid primitives: the ACA worked-example known-answer vector — squares
+`EXTRAKLMPOHWZQDGVUSIFCBYN` (pt) / `NCDRSOBFQUVAGPWEYHMXLTIKZ` (CT), `ODDPERIODSAREPOPULAR` period 7 →
+`FANXZEXFENUKKRBYNKAK` — the **`sq1==sq2` ⇒ equals `bifid_encrypt`/`bifid_decrypt`** invariant over random
+squares/lengths/periods (anchors the new primitive to the proven Bifid one), decrypt/encrypt round-trips over
+random INDEPENDENT square pairs × lengths × periods incl. ragged final blocks and `P>len`, a period-1
+monoalphabetic-map check (`x → sq2[pos1(x)]`, identity when `sq1==sq2`), and a 6x6 side-generic round-trip).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -367,13 +382,24 @@ across keywords (period pinned, **~420 chars — BELOW the old free-permutation 
 cliff showing the **new ~300-char floor** (~9% at 240, ~100% by 320, vs the old ~700); a multi-keyword sweep
 (mean/worst); a BLIND period solve (period estimated over a bounded scan, the reported P asserted == the true
 one); and a per-scheme pass under `-method` anneal / shotgun / pso. The basis the `SearchDefaults`
-`48x150000` / `inittemp 0.30` keyed-alphabet schedule is tuned against).
+`48x150000` / `inittemp 0.30` keyed-alphabet schedule is tuned against), and
+`tests/test_cm_bifid_solver.c` (CM Bifid: registry validation + a non-registry type; the PERIOD ESTIMATOR in
+isolation (Bifid's columnar-IoC, reused unchanged — true period in the top-5 for BOTH parities, estimation
+being parity-independent); a capability floor at ~520 chars (odd period 7, `-logprob`) shown alongside the
+**ODD-vs-EVEN contrast** on the same cipher (P=7 ~100% vs P=6 ~noise-floor — the documented even-period square
+ambiguity, printed not asserted since it is fragile-not-impossible); a length cliff (~400 odd-period cliff,
+reliable from ~480); a multi-keyword sweep over ODD periods (mean/worst); a BLIND period solve (P estimated
+over a bounded scan 2..9, the reported P asserted == the true one); and a per-scheme pass under `-method`
+anneal / shotgun / pso. The basis the `SearchDefaults` `8x400000` two-square schedule is tuned against — and
+the source of the ODD-PERIOD finding: with EVEN P the rows-then-cols re-pairing splits into pure-row / pure-col
+output pairs, so a fractionation row and column never share a pair, leaving a transpose-like square ambiguity
+no budget escapes; ODD P mixes a row/col at the boundary pair and recovers cleanly).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-64 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+65 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -386,8 +412,9 @@ Bazeries cipher (`bazeries_decl`, digit count pinned), a Portax cipher (`portax_
 pinned), the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
 `progkey_beau_decl`, period + progression pinned), and the three Slidefair bases (`slidefair_decl` /
 `slidefair_var_decl` / `slidefair_beau_decl`, period pinned), a Seriated Playfair cipher
-(`seriated_playfair_decl`, period pinned, `-logprob`), and a Digrafid cipher
-(`digrafid_pride`, period pinned, `-logprob`)) that each
+(`seriated_playfair_decl`, period pinned, `-logprob`), a Digrafid cipher
+(`digrafid_pride`, period pinned, `-logprob`), and a CM Bifid cipher
+(`cm_bifid_pride`, ODD period 7 pinned, `-logprob`)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -436,7 +463,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `progkey`/`pk`/`56`, `progkey-var`/`pkv`/`57`, `progkey-beau`/`pkb`/`58`,
 `slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`,
 `seriated-playfair`/`serpf`/`spf`/`62`,
-`digrafid`/`df`/`dgf`/`63`
+`digrafid`/`df`/`dgf`/`63`,
+`cm-bifid`/`cmbifid`/`cmb`/`64`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -1029,6 +1057,39 @@ Bifid/Trifid). Because the model implements `seed`/`perturb`/`copy`, `-method an
 it. Generate test ciphers with `tools/digrafid_gen.c` (`make digrafid_gen`; args are a plaintext, a
 horizontal keyword, a vertical keyword, and a period).
 
+The **CM Bifid** type (`cm-bifid`/`cmbifid`/`cmb`/`64`; `solve_cm_bifid()`, `CM_BIFID_MODEL`, `SHAPE_ANNEAL`)
+is the ACA **"Conjugated Matrix Bifid"** — plain Bifid (Delastelle fractionation, block size = period) but the
+two coordinate lookups use **TWO different keyed 5x5 squares**: square 1 fractionates each plaintext letter
+into its (row, col) coords, and after the standard rows-then-cols reshape and consecutive re-pairing each
+coordinate **pair** is mapped to a ciphertext letter through a **second** square (decrypt mirrors: expand the
+cipher letters via sq2's inverse, recombine via sq1). When `sq1 == sq2` it is **exactly Bifid** (a property the
+unit tests pin). Runs on the same 25-letter (J→I) grid as Playfair/Bifid (`init_alphabet("J")` before
+`load_ngrams`); the primitive (`cm_bifid.c`, hand-verified cell-for-cell against the ACA worked example —
+squares `EXTRAKLMPOHWZQDGVUSIFCBYN` (pt) / `NCDRSOBFQUVAGPWEYHMXLTIKZ` (CT), `ODDPERIODSAREPOPULAR` period 7 →
+`FANXZEXFENUKKRBYNKAK`) **reuses** `bifid.c`'s `bifid_build_inverse` and is side-generic (a 6x6/36-cell pair
+works once a 36-letter alphabet is active). **The key design point: there is NO square-independent decoupling
+reward** (both squares are entangled in the n-gram fitness — unlike ADFGVX's transposition-only IoC or
+Nihilist-sub's additive-only validity), so the attack is the proven **JOINT two-square anneal** (cf.
+Two/Four-Square): the state is the pair of squares packed back-to-back in the `key` lane (sq1 = `key[0..24]`,
+sq2 = `key[25..49]`), each move perturbing **one** square (chosen uniformly) with the Bifid/Playfair move set
+(cell-swap-dominant + row/column swaps + reflections), `score_adjust` stays 0 (every square is a bijection), and
+like every square type it effectively **needs `-logprob`**. The **period is recovered exactly as Bifid's** —
+`bifid_estimate_periods` is square-AGNOSTIC (square 2 only relabels the coordinate pairs and columnar IoC is
+relabel-invariant), so it is **reused unchanged** and the period is SWEPT (top-`-nperiods` annealed, `-period`
+pins, `-maxperiod` bounds; the n-gram score picks the winner). **The headline property is ODD-vs-EVEN period:**
+with an **EVEN** period the rows-then-cols re-paired stream splits cleanly — the first P/2 output pairs are
+pure-ROW coordinates and the last P/2 pure-COLUMN — so a fractionation row and column **never share an output
+pair**, leaving a transpose-like square ambiguity that makes the squares **degenerate ciphertext-only** (a
+different square pair decrypts to equally-English text); recovery of the planted key then collapses to the
+noise floor (~5%) **no budget or text length escapes it**. With an **ODD** period the boundary pair **mixes** a
+row and a column, breaking the symmetry, and recovery is clean — reliable from **~480 letters** (a ~400 cliff;
+the long per-restart climb is the critical lever, so the schedule is `8x400000`, not many short restarts). This
+parity effect is the analog of Playfair's rare-letter-X ceiling: an inherent property, not a solver weakness.
+**Cribs are not used** (the fractionation couples a crib to its whole group → weak gradient, as in
+Bifid/Trifid). Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on
+it. Generate test ciphers with `tools/cm_bifid_gen.c` (`make cm_bifid_gen`; args are a plaintext, a square-1
+keyword, a square-2 keyword, and a period).
+
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /
 transposition reward-score scale; a type whose score lives on a very different scale
@@ -1080,7 +1141,13 @@ decoupling; the 400000-climb cooling schedule is what reliably reaches the optim
 (`SHAPE_ANNEAL`, **`48x150000` per swept period P**, **`inittemp 0.30`**, `backtrack 0.30` — the two-grid
 KEYED-ALPHABET search (not the free 54-cell square break) per period; the coarse keyword moves want a warm
 temperature and short ciphers want many basins tried, so it is MANY warm restarts, which recovers from ~300
-letters — vs the old free-permutation ~700-800 cliff — and the budget is *per P* so the blind sweep multiplies it).
+letters — vs the old free-permutation ~700-800 cliff — and the budget is *per P* so the blind sweep multiplies it),
+and CM Bifid
+(`SHAPE_ANNEAL`, **`8x400000` per swept period P**, `inittemp 0.08`, `backtrack 0.30` — the JOINT two-square
+anneal (no decoupling reward) per period; the long per-restart climb is the critical lever (more restarts with
+shorter climbs does WORSE near the cliff), so it is a few LONG climbs, which recovers from ~480 letters at an ODD
+period — EVEN periods are a documented ciphertext-only degeneracy no budget escapes — and the budget is *per P*
+so the blind sweep multiplies it).
 This is the mechanism for moving the magic
 per-type budgets out of the run scripts and into the binary; add tuned entries for other
 types incrementally. The registry is validated end-to-end in `tests/test_playfair_solver.c`.

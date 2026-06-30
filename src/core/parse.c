@@ -204,6 +204,9 @@ int parse_cipher_type(const char *arg) {
     // Digrafid (digraphic fractionation over two keyed 27-symbol alphabets; period swept).
     if (str_eq(arg, "digrafid") || str_eq(arg, "df") || str_eq(arg, "dgf")) return DIGRAFID;
 
+    // CM Bifid (Conjugated Matrix Bifid: Bifid fractionation over two keyed squares; period swept).
+    if (str_eq(arg, "cm-bifid") || str_eq(arg, "cmbifid") || str_eq(arg, "cmb")) return CM_BIFID;
+
     // Progressive Key (periodic base cipher + per-group constant key drift). Check the
     // variant/beaufort aliases before the bare progkey so a substring never shadows them.
     if (str_eq(arg, "progkey-var") || str_eq(arg, "progkey-v") || str_eq(arg, "pkv"))

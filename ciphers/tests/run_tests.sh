@@ -161,6 +161,11 @@ slow | seriated_playfair_decl | seriated-playfair | seriated_playfair_decl.txt |
 # the case fast -- the blind P sweep is exercised by tests/test_digrafid_solver.c. Alphabet forced to
 # 27 (A..Z + '#').
 slow | digrafid_pride | digrafid | digrafid_pride.txt | -logprob -period 5 -nrestarts 16 -nhillclimbs 200000 -inittemp 0.30 -backtrackprob 0.3
+# CM Bifid (Conjugated Matrix Bifid): Bifid fractionation over TWO keyed 5x5 squares (sq1 fractionates,
+# sq2 recombines). JOINT two-square anneal with no decoupling reward, so it needs -logprob; ODD period 7
+# pinned here (even periods are a documented ciphertext-only degeneracy) and a lean budget to keep the case
+# fast -- the blind P sweep + odd/even contrast are exercised by tests/test_cm_bifid_solver.c. Alphabet 25 (J->I).
+slow | cm_bifid_pride | cm-bifid | cm_bifid_pride.txt | -logprob -period 7 -nrestarts 4 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # Progressive Key (periodic Vigenere/Variant/Beaufort + per-group constant key drift). The climbed
 # state is the P per-column base shifts (monogram-warm-started); period + progression pinned here to
 # keep the cases fast -- the blind P and blind progression sweeps are exercised by

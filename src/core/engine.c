@@ -555,6 +555,23 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 200, .s_n_hill_climbs = 150000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // CM Bifid: Bifid fractionation over TWO keyed 5x5 squares (50 cells, double Bifid's 25),
+    // searched as a JOINT two-square anneal (no square-independent decoupling reward exists --
+    // both squares are entangled in the n-gram fitness; see cm_bifid_solver.c), so it inherits
+    // Two-Square's larger/rougher two-square landscape but, like Bifid, has the period SWEPT --
+    // the budget is PER period, so a blind sweep multiplies it. The long per-restart climb is the
+    // critical lever (more restarts with shorter climbs does WORSE near the cliff), hence
+    // 8x400000 not many-short-restarts. Recovers reliably from ~480 letters at an ODD period
+    // (~400 cliff); EVEN periods are a documented ciphertext-only DEGENERACY -- the rows-then-cols
+    // re-pairing splits into pure-row / pure-col output pairs, leaving a transpose-like square
+    // ambiguity no budget escapes (~noise floor), so the schedule is tuned/asserted on odd P.
+    // Tuned against test_cm_bifid_solver.
+    { .cipher_type = CM_BIFID, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 8, .a_n_hill_climbs = 400000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 20, .s_n_hill_climbs = 300000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
     { .cipher_type = HILL, .default_shape = SHAPE_ANNEAL,
       .a_n_restarts = 250, .a_n_hill_climbs = 8000,
       .a_init_temp = 0.10, .a_min_temp = 0.001, .a_cooling_rate = 0.0,

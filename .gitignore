@@ -48,6 +48,15 @@ tools/progkey_gen
 tests/test_slidefair
 tests/test_slidefair_solver
 tools/slidefair_gen
+tests/test_seriated_playfair
+tests/test_seriated_playfair_solver
+tools/seriated_playfair_gen
+tests/test_digrafid
+tests/test_digrafid_solver
+tools/digrafid_gen
+tests/test_cm_bifid
+tests/test_cm_bifid_solver
+tools/cm_bifid_gen
 *.o
 __pycache__/
 *.pyc
