@@ -115,6 +115,8 @@ slow | phillips_rc_pride | phillips-rc | phillips_rc_pride.txt | -logprob -nrest
 slow | twosquare_pride    | twosquare    | twosquare_pride.txt    | -logprob -nrestarts 4 -nhillclimbs 250000 -inittemp 0.08 -backtrackprob 0.3
 slow | twosquare_v_pride  | twosquare-v  | twosquare_v_pride.txt  | -logprob -nrestarts 4 -nhillclimbs 250000 -inittemp 0.08 -backtrackprob 0.3
 slow | foursquare_pride   | foursquare   | foursquare_pride.txt   | -logprob -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
+# --- Tri-Square (digraphic over three keyed 5x5 squares; digraph -> trigraph; 25-letter, J->I) ---
+slow | trisquare_pride    | trisquare    | trisquare_pride.txt    | -logprob -nrestarts 6 -nhillclimbs 300000 -inittemp 0.08 -backtrackprob 0.3
 # --- ADFGX (keyed-square fractionation + keyed columnar; 25-letter alphabet, J->I) ---
 slow | adfgx_decl | adfgx | adfgx_decl.txt | -logprob -mincols 6 -maxcols 6 -nrestarts 8 -nhillclimbs 200000 -inittemp 0.08 -backtrackprob 0.3
 # --- Nihilist Substitution (periodic additive over a keyed 5x5 square; numeric ciphertext) ---

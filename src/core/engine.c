@@ -627,6 +627,20 @@ static const SearchDefaults g_search_defaults[] = {
       .a_backtracking_probability = 0.30,
       .s_n_restarts = 40, .s_n_hill_climbs = 600000,
       .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
+    // Tri-Square: the same digraphic square-anneal, but the state is THREE independent 5x5
+    // squares (75 cells, the largest square state of the family) with no square-independent
+    // decoupling reward -- jointly annealed, one config (no period to estimate). Despite the
+    // bigger state it recovers MORE easily than Four-Square: the polyphonic c0/c2 cipher
+    // letters spread the full alphabet across every position, giving the n-gram gradient sharp
+    // signal, so it is reliable from ~500 plaintext letters (~750 cipher) at a modest budget
+    // (a 300-400 cliff). This carries headroom over the proven-sufficient 8x400000. Same
+    // small-scale temperature (mean log-probability) and backtracking as the square family.
+    { .cipher_type = TRI_SQUARE, .default_shape = SHAPE_ANNEAL,
+      .a_n_restarts = 12, .a_n_hill_climbs = 500000,
+      .a_init_temp = 0.08, .a_min_temp = 0.001, .a_cooling_rate = 0.0,
+      .a_backtracking_probability = 0.30,
+      .s_n_restarts = 40, .s_n_hill_climbs = 400000,
+      .s_slip_probability = 0.0005, .s_backtracking_probability = 0.20 },
     // ADFGX / ADFGVX: a COUPLED search -- a keyed Polybius square AND a keyed columnar
     // column order, jointly annealed (per swept column count K). The square anneal is
     // Bifid's; the column-order moves ride a structural IoC reward (independent of the

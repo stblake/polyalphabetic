@@ -57,6 +57,9 @@ tools/digrafid_gen
 tests/test_cm_bifid
 tests/test_cm_bifid_solver
 tools/cm_bifid_gen
+tests/test_trisquare
+tests/test_trisquare_solver
+tools/trisquare_gen
 *.o
 __pycache__/
 *.pyc

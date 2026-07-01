@@ -222,6 +222,7 @@
 #include "phillips_solver.h"
 #include "twosquare_solver.h"
 #include "foursquare_solver.h"
+#include "trisquare_solver.h"
 #include "trifid_solver.h"
 #include "hill_solver.h"
 #include "adfgvx_solver.h"
@@ -777,6 +778,8 @@ int main(int argc, char **argv) {
         printf("\nAttacking a Two-Square cipher (digraphic substitution over two keyed 5x5 squares).\n\n");
     } else if (cfg.cipher_type == FOUR_SQUARE) {
         printf("\nAttacking a Four-Square cipher (digraphic substitution over four 5x5 squares).\n\n");
+    } else if (cfg.cipher_type == TRI_SQUARE) {
+        printf("\nAttacking a Tri-Square cipher (digraphic substitution over three keyed 5x5 squares; digraph -> trigraph).\n\n");
     } else if (cfg.cipher_type == ADFGX) {
         printf("\nAttacking an ADFGX cipher (5x5 keyed-square fractionation + keyed columnar transposition).\n\n");
     } else if (cfg.cipher_type == ADFGVX) {
@@ -894,13 +897,15 @@ int main(int argc, char **argv) {
             g_alpha, g_idx_to_char_arr);
     }
 
-    // Two-Square and Four-Square run on the same 5x5 (25-letter, J->I) squares as Playfair.
-    // Force it here -- before load_ngrams -- unless the user already shrank the alphabet.
+    // Two-Square, Four-Square and Tri-Square run on the same 5x5 (25-letter, J->I) squares as
+    // Playfair. Force it here -- before load_ngrams -- unless the user already shrank the alphabet.
     if ((cfg.cipher_type == TWO_SQUARE || cfg.cipher_type == TWO_SQUARE_V ||
-         cfg.cipher_type == FOUR_SQUARE) && g_alpha == DEFAULT_ALPHABET_SIZE) {
+         cfg.cipher_type == FOUR_SQUARE || cfg.cipher_type == TRI_SQUARE) &&
+        g_alpha == DEFAULT_ALPHABET_SIZE) {
         init_alphabet("J");
         printf("-type %s: alphabet forced to %d letters (J->I): %s\n",
-            (cfg.cipher_type == FOUR_SQUARE) ? "foursquare" : "twosquare",
+            (cfg.cipher_type == FOUR_SQUARE) ? "foursquare" :
+            (cfg.cipher_type == TRI_SQUARE)  ? "trisquare" : "twosquare",
             g_alpha, g_idx_to_char_arr);
     }
 
@@ -1260,6 +1265,12 @@ void solve_cipher(char *ciphertext_str, char *cribtext_str, ColossusConfig *cfg,
 
     if (cfg->cipher_type == FOUR_SQUARE) {
         solve_foursquare(ciphertext_str, cribtext_str, cfg, shared,
+            cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
+        return ;
+    }
+
+    if (cfg->cipher_type == TRI_SQUARE) {
+        solve_trisquare(ciphertext_str, cribtext_str, cfg, shared,
             cipher_indices, cipher_len, crib_indices, crib_positions, n_cribs, result);
         return ;
     }

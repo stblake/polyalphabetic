@@ -134,6 +134,17 @@ src/polygraphic/      # square/cube/matrix ciphers — each: primitive + a Ciphe
                                      #   estimator (reused, square-agnostic). ODD periods recover (~480 letters);
                                      #   EVEN periods are degenerate ciphertext-only (rows/cols never share an output
                                      #   pair -> transpose-like square ambiguity). Reuses bifid.c. Needs -logprob; no cribs.
+  trisquare.c trisquare_solver.c/.h  # Tri-Square: digraphic substitution over THREE independent
+                                     #   keyed 5x5 squares. A plaintext digraph (p1 in sq1, p2 in sq2) -> a ciphertext
+                                     #   TRIGRAPH (3:2 expansion): c0 = any letter in p1's COLUMN of sq1, c1 =
+                                     #   sq3[row(p1)][col(p2)], c2 = any letter in p2's ROW of sq2. Encryption is
+                                     #   POLYPHONIC (c0/c2 random members); decryption is exact for any choice. JOINT
+                                     #   three-square anneal (state = the 3 squares packed back-to-back, perturb one per
+                                     #   move) -- no decoupling reward, like Four-Square/CM-Bifid. NO period. The 3:2
+                                     #   length change is handled like ADFGVX (cipher in scratch, plaintext length n=2M
+                                     #   passed to the engine). Reuses bifid_build_inverse. Needs -logprob; no cribs;
+                                     #   recovers from ~500 plaintext letters (the polyphonic letters spread the full
+                                     #   alphabet over every position, so it is EASIER than Four-Square despite 75 cells).
 
 src/substitution/     # monoalphabetic / homophonic substitution solvers
   indep_solver.c/.h homophonic_solver.c/.h   # each: a CipherModel + solve_<type>()
@@ -160,6 +171,7 @@ tools/slidefair_gen.c        # standalone Slidefair generator (make slidefair_ge
 tools/seriated_playfair_gen.c # standalone Seriated Playfair generator (make seriated_playfair_gen)
 tools/digrafid_gen.c         # standalone Digrafid generator (make digrafid_gen)
 tools/cm_bifid_gen.c         # standalone CM Bifid generator (make cm_bifid_gen)
+tools/trisquare_gen.c        # standalone Tri-Square generator (make trisquare_gen)
 tools/progkey_gen.c          # standalone Progressive Key generator (make progkey_gen)
 english_quadgrams.txt        # n-gram table (quadgrams); english_quintgrams.txt (5-grams) optional, with -logprob
 OxfordEnglishWords.txt       # default dictionary (auto-loaded if present in cwd)
@@ -301,7 +313,15 @@ decrypt/encrypt round-trips over random independent grids × even lengths × per
 `FANXZEXFENUKKRBYNKAK` — the **`sq1==sq2` ⇒ equals `bifid_encrypt`/`bifid_decrypt`** invariant over random
 squares/lengths/periods (anchors the new primitive to the proven Bifid one), decrypt/encrypt round-trips over
 random INDEPENDENT square pairs × lengths × periods incl. ragged final blocks and `P>len`, a period-1
-monoalphabetic-map check (`x → sq2[pos1(x)]`, identity when `sq1==sq2`), and a 6x6 side-generic round-trip).
+monoalphabetic-map check (`x → sq2[pos1(x)]`, identity when `sq1==sq2`), and a 6x6 side-generic round-trip), and
+`tests/test_trisquare.c` (the Tri-Square primitives: the ACA worked-example known-answer vector pinned as a
+DECRYPT-only test — squares `NSFMUOAGPWVBHQXECIRYLDKTZ` / `READINGBCFHKLMOPQSTUVWXYZ` / `PASTINOQRMLYZUEKXWVBHGFDC`,
+`RHLQXR…AAABFZ` → `THREEKEYSQUARESUSEDX` (the ACA CT's polyphonic clerk choices are not reproduced, but
+decryption is deterministic) — the decrypt/encrypt round-trip over random independent square triples × lengths
+(incl. odd, lone-trailing passthrough) and a side-generic 6x6, a cipher-length check (`3*(len/2)+len%2`), and the
+**POLYPHONIC-INVARIANCE** structural test: for a digraph it enumerates all 25 `(c0,c2)` column/row alternatives
+and asserts every one decrypts to the SAME digraph — the Tri-Square analogue of the Two-Square transparency /
+Four-Square identity-algebra structural check).
 `make testopt` additionally runs the in-process solver regressions
 `tests/test_solver.c` (polyalphabetic), `tests/test_playfair_solver.c` (Playfair:
 validates the per-type schedule registry, asserts an 800-char capability floor, and
@@ -393,13 +413,21 @@ over a bounded scan 2..9, the reported P asserted == the true one); and a per-sc
 anneal / shotgun / pso. The basis the `SearchDefaults` `8x400000` two-square schedule is tuned against — and
 the source of the ODD-PERIOD finding: with EVEN P the rows-then-cols re-pairing splits into pure-row / pure-col
 output pairs, so a fractionation row and column never share a pair, leaving a transpose-like square ambiguity
-no budget escapes; ODD P mixes a row/col at the boundary pair and recovers cleanly).
+no budget escapes; ODD P mixes a row/col at the boundary pair and recovers cleanly), and
+`tests/test_trisquare_solver.c` (Tri-Square: registry validation + a non-registry type; a capability floor at
+~900 plaintext solved through the **registry default** (`12x500000`) with a first-of-pair/second-of-pair
+recovery breakdown (even positions decrypt through sq1, odd through sq2 — both must clear 0.99); a length cliff
+(`8x400000`, lengths 400/600/900/1300 — the ~500-char floor visible, only the longest asserted); and a
+multi-keyword sweep (mean/worst). The polyphonic c0/c2 letters spread the full alphabet over every position, so
+recovery is EASIER than Four-Square despite the 75-cell state (reliable from ~500 letters, a 300-400 cliff) — the
+basis the `SearchDefaults` `12x500000` three-square schedule is tuned against; because plant()'s encode is
+polyphonic (RNG-driven) it seeds the RNG for a reproducible cipher).
 `ciphers/tests/` additionally holds
 end-to-end cases (ciphertext + `*_solution.txt`, plus `*_solve.sh` runners — e.g. the
 `transcol_*_solve.sh` columnar recovery tests and `playfair_solve.sh`) you can run by hand.
 
 `ciphers/tests/run_tests.sh` is the **accuracy regression suite**: a manifest of
-65 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
+66 end-to-end cases (Vigenère, Gronsfeld, Beaufort, Porta, Quagmire I–IV, autokey, the ACA
 `q*_p1xx` puzzles, pure-transposition types, a homophonic substitution, a Playfair
 cipher, a Bifid cipher, a Trifid cipher, a Hill cipher, the three Phillips
 variants — Row / Column / Row-Column — a Two-Square (horizontal + vertical), a
@@ -413,8 +441,9 @@ pinned), the three Progressive Key bases (`progkey_decl` / `progkey_var_decl` /
 `progkey_beau_decl`, period + progression pinned), and the three Slidefair bases (`slidefair_decl` /
 `slidefair_var_decl` / `slidefair_beau_decl`, period pinned), a Seriated Playfair cipher
 (`seriated_playfair_decl`, period pinned, `-logprob`), a Digrafid cipher
-(`digrafid_pride`, period pinned, `-logprob`), and a CM Bifid cipher
-(`cm_bifid_pride`, ODD period 7 pinned, `-logprob`)) that each
+(`digrafid_pride`, period pinned, `-logprob`), a CM Bifid cipher
+(`cm_bifid_pride`, ODD period 7 pinned, `-logprob`), and a Tri-Square cipher
+(`trisquare_pride`, three keyed squares, `-logprob`)) that each
 solve to ~100% with a **fixed `-seed`** and quadgrams. It runs the solver, pulls the
 recovered plaintext from the last field of the `>>>` CSV line, compares it
 character-for-character to a sibling `<name>.solution` (bare A–Z plaintext), and prints
@@ -426,8 +455,8 @@ still lands on the solution at the seed, so the full run is ~2 min (was ~45 befo
 trimming). The manifest tags each case `fast` or `slow`:
 `./run_tests.sh --fast` runs the 31-case fast tier in ~50s (use while iterating; incl. the three
 ~0s Progressive Key bases and the three ~0s Slidefair bases),
-`--slow` the 30 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
-three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the
+`--slow` the 31 heavier ciphers (incl. the ~24s Playfair, ~6s Bifid, ~18s Trifid, the
+three ~13s Phillips solves, the two ~10s Two-Square solves, the ~17s Four-Square, the ~20s Tri-Square, the
 ~10s ADFGX, the four ~6–8s Nihilist Substitution solves, the three ~1s Nicodemus
 solves, the ~1s Bazeries solve, the ~3s Seriated Playfair solve, and the ~26s Digrafid solve), no flag runs both.
 Add a case by appending a
@@ -464,7 +493,8 @@ Required flags: `-type`, a cipher source (`-cipher <file>` or `-batch <file>`),
 `slidefair`/`sf`/`59`, `slidefair-var`/`sfv`/`60`, `slidefair-beau`/`sfb`/`61`,
 `seriated-playfair`/`serpf`/`spf`/`62`,
 `digrafid`/`df`/`dgf`/`63`,
-`cm-bifid`/`cmbifid`/`cmb`/`64`
+`cm-bifid`/`cmbifid`/`cmb`/`64`,
+`trisquare`/`tri-square`/`3square`/`3sq`/`trisq`/`65`
 (full list in `parse.c`; codes in `colossus.h`). Output is a human-readable block followed by a
 `>>> ...` one-line CSV summary that batch runs grep/sort.
 
@@ -1089,6 +1119,41 @@ parity effect is the analog of Playfair's rare-letter-X ceiling: an inherent pro
 Bifid/Trifid). Because the model implements `seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on
 it. Generate test ciphers with `tools/cm_bifid_gen.c` (`make cm_bifid_gen`; args are a plaintext, a square-1
 keyword, a square-2 keyword, and a period).
+
+The **Tri-Square** type (`trisquare`/`tri-square`/`3square`/`3sq`/`trisq`/`65`; `solve_trisquare()`,
+`TRISQUARE_MODEL`, `SHAPE_ANNEAL`) is the ACA **"Tri-Square"** — a digraphic substitution over **THREE
+independent keyed 5x5 squares** (25 letters, J→I, same alphabet as Playfair/Two/Four-Square, so
+`init_alphabet("J")` is forced before `load_ngrams`). Plaintext is taken in pairs: p1 is located in square 1
+at (r1,c1), p2 in square 2 at (r2,c2), and the digraph enciphers to a ciphertext **TRIGRAPH** (a **3:2 length
+expansion**, so an N-letter plaintext yields 3N/2 ciphertext letters): `c0` = **any** letter in p1's **column**
+in sq1, `c1` = `sq3[r1][c2]` (the deterministic middle letter), `c2` = **any** letter in p2's **row** in sq2.
+The first and third letters are **polyphonic** on encode (the ACA lets the clerk pick any of the 5 column/row
+members — the primitive `trisquare.c` picks a **random** representative under the RNG, faithful to the ACA and
+far better-conditioned for the solver than any fixed canonical choice, which would starve the gradient by
+concentrating c0/c2 into a size-5 subset); **decryption is exact for any choice** (a square maps any column
+member back to its column, any row member back to its row — `col1 = pos1[c0]%side`, `(row1,col2) = pos3[c1]`,
+`row2 = pos2[c2]/side`, then `p1 = sq1[row1][col1]`, `p2 = sq2[row2][col2]`). The primitive is hand-verified
+cell-for-cell against the ACA worked example (squares `NSFMUOAGPWVBHQXECIRYLDKTZ` / `READINGBCFHKLMOPQSTUVWXYZ`
+/ `PASTINOQRMLYZUEKXWVBHGFDC`, `RHLQXR…AAABFZ` → `THREEKEYSQUARESUSEDX`) and **reuses** `bifid_build_inverse`;
+it is side-generic (a 6x6/36-cell triple works once a 36-letter alphabet is active). **The search state is the
+three squares packed back-to-back** in `st->key` (sq1 = `key[0..24]`, sq2 = `key[25..49]`, sq3 = `key[50..74]` —
+75 cells, the **largest square state of the family**); there is **no square-independent decoupling reward**
+(every square is a bijection, so any triple decrypts to a permuted-but-valid stream and only JOINT correctness
+yields English n-grams), so the attack is the proven **joint multi-square anneal** (cf. Four-Square / CM-Bifid) —
+each move perturbs **one** of the three squares (chosen uniformly) with the classic Playfair move set (cell-swap
+dominant + row/column swaps + reflections, no cyclic rotation), `score_adjust` stays 0, one engine config (no
+period to estimate), effectively **needs `-logprob`**. **The 3:2 length change is handled exactly like ADFGVX:**
+the raw trigraph stream lives in the scratch, the solver passes the **plaintext/scoring length `n = 2M`** (not
+`3M`) to `make_solver_ctx`, and the decrypt hook emits `n` plaintext symbols the engine n-gram-scores. Cribs are
+not used (positions are over the trigraph stream and the encode is polyphonic). The squares are recoverable only
+up to the cipher's structural symmetries (sq1's columns / sq2's rows are unconstrained by the c0/c2 redundancy),
+but the recovered **plaintext is unique**. **Counter-intuitively it recovers MORE easily than Four-Square**
+despite the bigger state: the polyphonic c0/c2 letters spread the full alphabet over every ciphertext position,
+giving the n-gram gradient sharp signal, so it is **reliable from ~500 plaintext letters (~750 cipher)** with a
+**300-400 cliff** — comfortably covering the ACA "100-125 groups" range. Because the model implements
+`seed`/`perturb`/`copy`, `-method anneal|shotgun|pso` all run on it. Generate test ciphers with
+`tools/trisquare_gen.c` (`make trisquare_gen`; args are a plaintext and three keywords; the generator seeds the
+RNG so the polyphonic ciphertext is reproducible).
 
 **Per-cipher-type search schedules (`SearchDefaults`, `apply_cipher_defaults`).** The
 `init_config()` globals (`inittemp 0.10`, `1x1000`, ...) suit the polyalphabetic /

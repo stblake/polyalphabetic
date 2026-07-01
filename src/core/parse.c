@@ -154,6 +154,11 @@ int parse_cipher_type(const char *arg) {
     if (str_eq(arg, "foursquare") || str_eq(arg, "four-square") || str_eq(arg, "4square") ||
         str_eq(arg, "4sq") || str_eq(arg, "fs")) return FOUR_SQUARE;
 
+    // Tri-Square (three keyed 5x5 squares; digraph -> trigraph). 'ts' is taken by Two-Square,
+    // so use 'trisq'/'3sq'.
+    if (str_eq(arg, "trisquare") || str_eq(arg, "tri-square") || str_eq(arg, "3square") ||
+        str_eq(arg, "3sq") || str_eq(arg, "trisq")) return TRI_SQUARE;
+
     // ADFGVX / ADFGX (keyed-square fractionation + keyed columnar transposition)
     if (str_eq(arg, "adfgvx") || str_eq(arg, "adfg")) return ADFGVX;
     if (str_eq(arg, "adfgx")) return ADFGX;

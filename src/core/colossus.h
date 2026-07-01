@@ -81,6 +81,7 @@
 #define SERIATED_PLAYFAIR  62  // Seriated Playfair: digraphic Playfair over vertical pairs of a two-row seriated layout (period swept)
 #define DIGRAFID           63  // Digrafid: digraphic fractionation over two keyed 27-symbol alphabets (period swept)
 #define CM_BIFID           64  // CM Bifid (Conjugated Matrix Bifid): Bifid fractionation over two keyed Polybius squares (period swept)
+#define TRI_SQUARE         65  // Tri-Square: digraphic substitution over three keyed 5x5 squares (digraph -> trigraph)
 
 #define GRONSFELD_DIGITS 10     // Gronsfeld key digits are 0..9 (the shift domain, vs 26)
 
@@ -882,6 +883,21 @@ void foursquare_encrypt(const int plain[], int len, const int ur[], const int ll
                         int side, int out[]);
 void foursquare_decrypt(const int cipher[], int len, const int ur[], const int ll[],
                         int side, int out[]);
+
+
+// Tri-Square cipher (trisquare.c). A digraphic substitution over THREE independent keyed
+// side x side squares (each a permutation of 0..n-1). A plaintext digraph (p1 in sq1 at
+// (r1,c1), p2 in sq2 at (r2,c2)) becomes a ciphertext TRIGRAPH (a 3:2 expansion):
+//   c0 = any letter in p1's COLUMN in sq1 (decodes to c1);  c1 = sq3[r1][c2] (deterministic);
+//   c2 = any letter in p2's ROW in sq2 (decodes to r2). Encryption is polyphonic; decryption
+// is exact for any clerk choice. trisquare_encrypt picks a canonical representative (top of
+// column / left of row); a lone trailing letter passes through. The solver needs only
+// trisquare_decrypt(); encrypt + the shared playfair_grid_from_keyword serve the generator
+// and the unit tests. Side-generic; reuses bifid_build_inverse. Both return the length written.
+int trisquare_encrypt(const int plain[], int len, const int sq1[], const int sq2[],
+                      const int sq3[], int side, int out[]);
+int trisquare_decrypt(const int cipher[], int len3, const int sq1[], const int sq2[],
+                      const int sq3[], int side, int out[]);
 
 
 // Trifid cipher (trifid.c). The 3D generalization of Bifid: side-generic over a
